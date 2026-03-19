@@ -168,11 +168,11 @@ function SectionTitle({ eyebrow, title, subtitle }: { eyebrow: string; title: st
       viewport={{ once: true, amount: 0.35 }}
       variants={reveal}
       transition={{ duration: 0.55 }}
-      className="mx-auto mb-12 max-w-3xl text-center"
+      className="mx-auto mb-10 max-w-3xl text-center md:mb-12"
     >
-      <p className="mb-3 text-sm font-semibold uppercase tracking-[0.2em] text-cyan-700">{eyebrow}</p>
-      <h2 className="text-3xl font-extrabold tracking-tight text-slate-900 md:text-4xl">{title}</h2>
-      {subtitle ? <p className="mt-4 text-lg leading-relaxed text-slate-600">{subtitle}</p> : null}
+      <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-700 sm:text-sm sm:tracking-[0.2em]">{eyebrow}</p>
+      <h2 className="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl md:text-4xl">{title}</h2>
+      {subtitle ? <p className="mt-4 text-base leading-relaxed text-slate-600 sm:text-lg">{subtitle}</p> : null}
     </motion.div>
   );
 }
@@ -185,23 +185,24 @@ function GlassCard({ title, description, index }: CardItem & { index: number }) 
       viewport={{ once: true, amount: 0.35 }}
       variants={reveal}
       transition={{ duration: 0.45, delay: index * 0.04 }}
-      className="rounded-3xl border border-white/70 bg-white/85 p-6 shadow-soft backdrop-blur"
+      className="rounded-3xl border border-white/70 bg-white/85 p-5 shadow-soft backdrop-blur sm:p-6"
     >
-      <h3 className="text-xl font-bold text-slate-900">{title}</h3>
-      <p className="mt-3 leading-relaxed text-slate-600">{description}</p>
+      <h3 className="text-lg font-bold text-slate-900 sm:text-xl">{title}</h3>
+      <p className="mt-3 text-sm leading-relaxed text-slate-600 sm:text-base">{description}</p>
     </motion.div>
   );
 }
 
 export default function App() {
   const [openFaq, setOpenFaq] = useState(0);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const currentYear = useMemo(() => new Date().getFullYear(), []);
 
   return (
     <div className="min-h-screen bg-hero-gradient text-slate-900">
       <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-slate-50/85 backdrop-blur-xl">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 md:px-8">
-          <a href="#top" className="text-lg font-extrabold tracking-tight text-slate-900">ClientsFlow</a>
+          <a href="#top" className="text-base font-extrabold tracking-tight text-slate-900 sm:text-lg">ClientsFlow</a>
           <nav className="hidden items-center gap-8 md:flex">
             {navLinks.map((link) => (
               <a key={link.href} href={link.href} className="text-sm font-semibold text-slate-600 transition hover:text-slate-900">
@@ -211,35 +212,74 @@ export default function App() {
           </nav>
           <a
             href="#final-cta"
-            className="rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
+            className="hidden rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 sm:inline-flex"
           >
             Book a Demo
           </a>
+          <button
+            type="button"
+            aria-label="Открыть меню"
+            onClick={() => setIsMobileMenuOpen((prev) => !prev)}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-700 md:hidden"
+          >
+            <span className="text-xl leading-none">{isMobileMenuOpen ? "×" : "≡"}</span>
+          </button>
         </div>
+        <AnimatePresence initial={false}>
+          {isMobileMenuOpen ? (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-hidden border-t border-slate-200 bg-white md:hidden"
+            >
+              <div className="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-3">
+                {navLinks.map((link) => (
+                  <a
+                    key={link.href}
+                    href={link.href}
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                  >
+                    {link.label}
+                  </a>
+                ))}
+                <a
+                  href="#final-cta"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="mt-2 inline-flex justify-center rounded-full bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white"
+                >
+                  Book a Demo
+                </a>
+              </div>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
       </header>
 
       <main id="top">
-        <section className="mx-auto grid max-w-6xl items-center gap-10 px-4 pb-20 pt-14 md:px-8 lg:grid-cols-2 lg:pt-20">
+        <section className="mx-auto grid max-w-6xl items-center gap-8 px-4 pb-16 pt-10 md:px-8 md:pb-20 md:pt-14 lg:grid-cols-2 lg:gap-10 lg:pt-20">
           <motion.div initial="hidden" animate="visible" variants={reveal} transition={{ duration: 0.6 }}>
-            <p className="mb-5 inline-flex rounded-full border border-cyan-200 bg-cyan-100/70 px-4 py-1 text-xs font-bold uppercase tracking-[0.16em] text-cyan-800">
+            <p className="mb-4 inline-flex rounded-full border border-cyan-200 bg-cyan-100/70 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-cyan-800 sm:mb-5 sm:px-4 sm:text-xs sm:tracking-[0.16em]">
               AI клиентские операции под ключ
             </p>
-            <h1 className="text-4xl font-extrabold leading-tight tracking-tight text-slate-950 md:text-6xl">
+            <h1 className="text-3xl font-extrabold leading-tight tracking-tight text-slate-950 sm:text-5xl md:text-6xl">
               Перестаньте терять лиды. Автоматизируйте клиентские коммуникации с AI.
             </h1>
-            <p className="mt-6 max-w-xl text-lg leading-relaxed text-slate-600">
+            <p className="mt-5 max-w-xl text-base leading-relaxed text-slate-600 sm:mt-6 sm:text-lg">
               ClientsFlow создает для бизнеса систему, которая отвечает мгновенно, квалифицирует обращения и доводит клиента до записи или сделки.
             </p>
-            <div className="mt-8 flex flex-wrap gap-4">
+            <div className="mt-7 flex flex-col gap-3 sm:mt-8 sm:flex-row sm:flex-wrap sm:gap-4">
               <a
                 href="#final-cta"
-                className="rounded-full bg-slate-900 px-7 py-3 text-sm font-bold text-white shadow-lg transition hover:-translate-y-0.5 hover:bg-slate-700"
+                className="inline-flex justify-center rounded-full bg-slate-900 px-7 py-3 text-sm font-bold text-white shadow-lg transition hover:-translate-y-0.5 hover:bg-slate-700"
               >
                 Book a Demo
               </a>
               <a
                 href="#how-it-works"
-                className="rounded-full border border-slate-300 bg-white px-7 py-3 text-sm font-bold text-slate-800 transition hover:-translate-y-0.5 hover:border-slate-500"
+                className="inline-flex justify-center rounded-full border border-slate-300 bg-white px-7 py-3 text-sm font-bold text-slate-800 transition hover:-translate-y-0.5 hover:border-slate-500"
               >
                 See How It Works
               </a>
@@ -250,22 +290,22 @@ export default function App() {
             initial={{ opacity: 0, x: 30 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.7, delay: 0.15 }}
-            className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-glow"
+            className="rounded-[1.6rem] border border-slate-200 bg-white p-4 shadow-glow sm:rounded-[2rem] sm:p-6"
           >
             <div className="mb-5 flex items-center justify-between">
-              <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-slate-500">AI Operations Panel</h3>
+              <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500 sm:text-sm">AI Operations Panel</h3>
               <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">Активно</span>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-2 gap-2 sm:gap-3">
               {[
                 { state: "Новый лид", value: "18" },
                 { state: "Квалифицирован", value: "11" },
                 { state: "Ожидает записи", value: "7" },
                 { state: "Эскалация менеджеру", value: "3" }
               ].map((item) => (
-                <div key={item.state} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">{item.state}</p>
-                  <p className="mt-2 text-2xl font-extrabold text-slate-900">{item.value}</p>
+                <div key={item.state} className="rounded-2xl border border-slate-200 bg-slate-50 p-3 sm:p-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500 sm:text-xs sm:tracking-[0.1em]">{item.state}</p>
+                  <p className="mt-2 text-xl font-extrabold text-slate-900 sm:text-2xl">{item.value}</p>
                 </div>
               ))}
             </div>
@@ -295,7 +335,7 @@ export default function App() {
           </div>
         </section>
 
-        <section className="mx-auto max-w-6xl px-4 py-20 md:px-8">
+        <section className="mx-auto max-w-6xl px-4 py-16 md:px-8 md:py-20">
           <SectionTitle
             eyebrow="Проблема"
             title="Большинство лидов теряется не из-за рекламы, а из-за скорости ответа"
@@ -308,7 +348,7 @@ export default function App() {
           </div>
         </section>
 
-        <section className="bg-white/85 py-20">
+        <section className="bg-white/85 py-16 md:py-20">
           <div className="mx-auto max-w-6xl px-4 md:px-8">
             <SectionTitle
               eyebrow="Решение"
@@ -323,7 +363,7 @@ export default function App() {
           </div>
         </section>
 
-        <section id="how-it-works" className="mx-auto max-w-6xl px-4 py-20 md:px-8">
+        <section id="how-it-works" className="mx-auto max-w-6xl px-4 py-16 md:px-8 md:py-20">
           <SectionTitle eyebrow="Процесс" title="Как мы запускаем систему в вашем бизнесе" />
           <div className="grid gap-4 md:grid-cols-4">
             {workSteps.map((step, index) => (
@@ -343,7 +383,7 @@ export default function App() {
           </div>
         </section>
 
-        <section id="features" className="bg-white/85 py-20">
+        <section id="features" className="bg-white/85 py-16 md:py-20">
           <div className="mx-auto max-w-6xl px-4 md:px-8">
             <SectionTitle
               eyebrow="Возможности"
@@ -357,7 +397,7 @@ export default function App() {
           </div>
         </section>
 
-        <section className="mx-auto max-w-6xl px-4 py-20 md:px-8">
+        <section className="mx-auto max-w-6xl px-4 py-16 md:px-8 md:py-20">
           <SectionTitle
             eyebrow="Система"
             title="Визуальный контроль работы AI-воронки"
@@ -369,10 +409,10 @@ export default function App() {
             viewport={{ once: true, amount: 0.25 }}
             variants={reveal}
             transition={{ duration: 0.6 }}
-            className="rounded-[2rem] border border-slate-200 bg-white p-7 shadow-soft"
+            className="rounded-[1.6rem] border border-slate-200 bg-white p-4 shadow-soft sm:rounded-[2rem] sm:p-7"
           >
             <div className="grid gap-4 lg:grid-cols-3">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
                 <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Поток лидов</p>
                 <div className="mt-4 space-y-3">
                   {["Новый лид", "Квалифицирован", "Ожидает записи", "Закрыт в продажу"].map((status) => (
@@ -382,7 +422,7 @@ export default function App() {
                   ))}
                 </div>
               </div>
-              <div className="rounded-2xl border border-cyan-200 bg-cyan-50 p-5">
+              <div className="rounded-2xl border border-cyan-200 bg-cyan-50 p-4 sm:p-5">
                 <p className="text-xs font-bold uppercase tracking-[0.12em] text-cyan-700">Workflow Logic</p>
                 <div className="mt-4 space-y-2 text-sm text-slate-700">
                   <p>Если запрос срочный {"->"} приоритетный маршрут</p>
@@ -391,9 +431,9 @@ export default function App() {
                   <p>Если сложный случай {"->"} менеджеру</p>
                 </div>
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-900 p-5 text-white">
+              <div className="rounded-2xl border border-slate-200 bg-slate-900 p-4 text-white sm:p-5">
                 <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-300">Оперативные метрики</p>
-                <div className="mt-4 grid grid-cols-2 gap-3">
+                <div className="mt-4 grid grid-cols-2 gap-2 sm:gap-3">
                   {[
                     ["Средний ответ", "6 сек"],
                     ["Лиды за день", "+42"],
@@ -411,7 +451,7 @@ export default function App() {
           </motion.div>
         </section>
 
-        <section id="industries" className="bg-white/85 py-20">
+        <section id="industries" className="bg-white/85 py-16 md:py-20">
           <div className="mx-auto max-w-6xl px-4 md:px-8">
             <SectionTitle
               eyebrow="Сферы"
@@ -426,7 +466,7 @@ export default function App() {
           </div>
         </section>
 
-        <section className="mx-auto grid max-w-6xl gap-8 px-4 py-20 md:px-8 lg:grid-cols-2">
+        <section className="mx-auto grid max-w-6xl gap-8 px-4 py-16 md:px-8 md:py-20 lg:grid-cols-2">
           <div>
             <SectionTitle
               eyebrow="Результат"
@@ -452,7 +492,7 @@ export default function App() {
           </motion.div>
         </section>
 
-        <section className="bg-white/85 py-20">
+        <section className="bg-white/85 py-16 md:py-20">
           <div className="mx-auto max-w-6xl px-4 md:px-8">
             <SectionTitle
               eyebrow="Почему ClientsFlow"
@@ -466,7 +506,7 @@ export default function App() {
           </div>
         </section>
 
-        <section id="faq" className="mx-auto max-w-4xl px-4 py-20 md:px-8">
+        <section id="faq" className="mx-auto max-w-4xl px-4 py-16 md:px-8 md:py-20">
           <SectionTitle eyebrow="FAQ" title="Частые вопросы перед запуском" />
           <div className="space-y-3">
             {faqItems.map((item, index) => {
@@ -478,7 +518,7 @@ export default function App() {
                     className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left"
                     onClick={() => setOpenFaq(isOpen ? -1 : index)}
                   >
-                    <span className="font-semibold text-slate-900">{item.question}</span>
+                    <span className="pr-2 text-sm font-semibold text-slate-900 sm:text-base">{item.question}</span>
                     <span className="text-xl font-bold text-cyan-700">{isOpen ? "−" : "+"}</span>
                   </button>
                   <AnimatePresence initial={false}>
@@ -500,20 +540,20 @@ export default function App() {
           </div>
         </section>
 
-        <section id="final-cta" className="mx-auto max-w-6xl px-4 pb-24 md:px-8">
+        <section id="final-cta" className="mx-auto max-w-6xl px-4 pb-20 md:px-8 md:pb-24">
           <motion.div
             initial="hidden"
             whileInView="visible"
             viewport={{ once: true, amount: 0.4 }}
             variants={reveal}
             transition={{ duration: 0.55 }}
-            className="rounded-[2.2rem] border border-slate-200 bg-slate-900 px-6 py-14 text-center text-white shadow-soft md:px-12"
+            className="rounded-[1.8rem] border border-slate-200 bg-slate-900 px-5 py-10 text-center text-white shadow-soft sm:rounded-[2.2rem] sm:px-6 sm:py-14 md:px-12"
           >
             <p className="text-sm font-semibold uppercase tracking-[0.16em] text-cyan-300">Готовый следующий шаг</p>
-            <h2 className="mt-3 text-3xl font-extrabold tracking-tight md:text-5xl">
+            <h2 className="mt-3 text-2xl font-extrabold tracking-tight sm:text-3xl md:text-5xl">
               Пусть бизнес отвечает мгновенно, даже когда вы заняты
             </h2>
-            <p className="mx-auto mt-5 max-w-2xl text-lg text-slate-300">
+            <p className="mx-auto mt-5 max-w-2xl text-base text-slate-300 sm:text-lg">
               Получите персональную AI-систему клиентских коммуникаций, которая помогает не терять входящие обращения и доводить лиды до записи.
             </p>
             <a
