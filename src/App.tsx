@@ -13,6 +13,11 @@ type ChatMessage = {
   imageUrl?: string;
 };
 
+type ApiChatMessage = {
+  role: "user" | "assistant";
+  content: string | Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }>;
+};
+
 const AUTH_KEY = "clientsflow_demo_auth_v1";
 
 const navLinks = [
@@ -156,6 +161,7 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
   const [isTyping, setIsTyping] = useState(false);
   const [openFaq, setOpenFaq] = useState<string | null>(faqItems[0].q);
   const [showCabinetCta, setShowCabinetCta] = useState(false);
+  const [chatMode, setChatMode] = useState<"openrouter" | "mock">("openrouter");
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   const interactionCount = useMemo(
@@ -203,30 +209,84 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
     return "Понял задачу. Для вашего сценария мы настраиваем ответы, квалификацию, follow-up и маршрут клиента до записи в одной системе.";
   };
 
-  const sendUserMessage = (text: string, kind: ChatMessage["kind"] = "text", imageUrl?: string) => {
+  const toApiMessages = (list: ChatMessage[]): ApiChatMessage[] =>
+    list
+      .filter((msg) => msg.role === "assistant" || msg.role === "user")
+      .map((msg) => {
+        if (msg.kind === "image" && msg.imageUrl) {
+          return {
+            role: msg.role,
+            content: [
+              { type: "text", text: msg.text || "Пользователь загрузил изображение." },
+              { type: "image_url", image_url: { url: msg.imageUrl } }
+            ]
+          };
+        }
+        return { role: msg.role, content: msg.text };
+      });
+
+  const sendUserMessage = async (text: string, kind: ChatMessage["kind"] = "text", imageUrl?: string) => {
     if (!text.trim() && kind === "text") return;
 
     const userMessage: ChatMessage = { id: uid(), role: "user", text, kind, imageUrl };
-    setMessages((prev) => [...prev, userMessage]);
+    const nextMessages = [...messages, userMessage];
+    setMessages(nextMessages);
     setInput("");
     setIsTyping(true);
-
-    window.setTimeout(() => {
+    try {
+      const response = await fetch("/api/openrouter/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: toApiMessages(nextMessages),
+          interactionCount: nextMessages.filter((item) => item.role === "user").length
+        })
+      });
+      if (!response.ok) {
+        throw new Error(`API status ${response.status}`);
+      }
+      const data = (await response.json()) as { reply?: string; mode?: "openrouter" | "mock" };
+      setChatMode(data.mode === "openrouter" ? "openrouter" : "mock");
       const assistantMessage: ChatMessage = {
         id: uid(),
         role: "assistant",
-        text: kind === "image" ? "Вижу изображение. По контексту похоже на клиентский запрос по услуге. Могу сформировать корректный ответ и сразу предложить следующий шаг воронки." : kind === "voice" ? "Голосовое получено. Краткая выжимка: клиент интересуется стоимостью и ближайшей записью. Предлагаю ответить с диапазоном цены и двумя слотами на выбор." : buildReply(text),
+        text:
+          data.reply?.trim() ||
+          (kind === "image"
+            ? "Вижу изображение. По контексту похоже на клиентский запрос по услуге. Могу сформировать корректный ответ и сразу предложить следующий шаг воронки."
+            : kind === "voice"
+              ? "Голосовое получено. Краткая выжимка: клиент интересуется стоимостью и ближайшей записью. Предлагаю ответить с диапазоном цены и двумя слотами на выбор."
+              : buildReply(text)),
         kind: "text"
       };
       setMessages((prev) => [...prev, assistantMessage]);
+    } catch {
+      setChatMode("mock");
+      const assistantMessage: ChatMessage = {
+        id: uid(),
+        role: "assistant",
+        text:
+          kind === "image"
+            ? "Вижу изображение. По контексту похоже на клиентский запрос по услуге. Могу сформировать корректный ответ и сразу предложить следующий шаг воронки."
+            : kind === "voice"
+              ? "Голосовое получено. Краткая выжимка: клиент интересуется стоимостью и ближайшей записью. Предлагаю ответить с диапазоном цены и двумя слотами на выбор."
+              : buildReply(text),
+        kind: "text"
+      };
+      setMessages((prev) => [...prev, assistantMessage]);
+    } finally {
       setIsTyping(false);
-    }, 900);
+    }
   };
 
   const onImagePick = (file?: File) => {
     if (!file) return;
-    const url = URL.createObjectURL(file);
-    sendUserMessage("Загрузил изображение", "image", url);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const url = typeof reader.result === "string" ? reader.result : "";
+      sendUserMessage("Загрузил изображение", "image", url);
+    };
+    reader.readAsDataURL(file);
   };
 
   return (
@@ -286,7 +346,7 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
               <div className="mb-3 flex items-center justify-between">
                 <div>
                   <p className="text-sm font-bold text-slate-900">Интерактивный демо-ассистент</p>
-                  <p className="text-xs text-slate-500">Demo mode</p>
+                  <p className="text-xs text-slate-500">{chatMode === "openrouter" ? "Live AI mode" : "Fallback demo mode"}</p>
                 </div>
                 <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-[11px] font-semibold text-cyan-700">Сообщения • Голосовые • Фото</span>
               </div>
