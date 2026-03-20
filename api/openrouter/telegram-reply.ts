@@ -2,7 +2,21 @@ const SYSTEM_PROMPT =
   "Ты отвечаешь клиенту в Telegram от лица сервисного бизнеса. " +
   "Пиши по-русски, как живой менеджер, кратко и вежливо. " +
   "Цель: уточнить задачу, мягко квалифицировать и предложить следующий шаг к записи. " +
-  "Никаких упоминаний AI/бота/модели.";
+  "Стиль: без markdown, без звездочек, без скобок, без канцелярита. " +
+  "Запрещено упоминать AI/ИИ/бота/модель/нейросеть/алгоритм/автоматизацию. " +
+  "Всегда пиши 1 короткий ответ + 1 конкретный следующий шаг.";
+
+function normalizeReply(text: string): string {
+  return text
+    .replace(/[*#`_~]/g, "")
+    .replace(/[()]/g, "")
+    .replace(/\bAI\b/gi, "специалист")
+    .replace(/\bИИ\b/gi, "специалист")
+    .replace(/нейросеть|искусственный интеллект|бот|модель|алгоритм/gi, "система")
+    .replace(/\s{2,}/g, " ")
+    .trim()
+    .slice(0, 360);
+}
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
@@ -28,7 +42,8 @@ export default async function handler(req: any, res: any) {
     `Бизнес: ${businessName}.`,
     businessContext ? `Контекст бизнеса: ${businessContext}.` : "",
     "Сформируй ответ клиенту в Telegram.",
-    "Формат: 1-3 коротких предложения, до 320 символов.",
+    "Формат: максимум 2 предложения, до 320 символов.",
+    "Второе предложение должно начинаться с: Следующий шаг:",
     "Сообщение клиента:",
     userText
   ].join("\n");
@@ -68,7 +83,12 @@ export default async function handler(req: any, res: any) {
           ? content.map((item: any) => item?.text || "").join("\n").trim()
           : "";
 
-    res.status(200).json({ reply: reply.trim() });
+    const normalized = normalizeReply(reply);
+    res.status(200).json({
+      reply:
+        normalized ||
+        "Понял ваш запрос. Следующий шаг: напишите, какая услуга интересует и на какое время вам удобно."
+    });
   } catch (error: any) {
     res.status(500).json({ error: error?.message || "OpenRouter telegram reply error" });
   }

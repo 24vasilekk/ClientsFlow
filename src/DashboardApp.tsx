@@ -2076,6 +2076,21 @@ export default function App() {
     ].join("; ");
   }
 
+  function buildTelegramFallbackReply(input: string, profile: TelegramProfile | undefined): string {
+    const text = input.toLowerCase();
+    const service = profile?.answers.mainService || "услуга";
+    if (text.includes("цена") || text.includes("стоим")) {
+      return `Стоимость зависит от задачи и формата. Следующий шаг: напишите, какая именно ${service} нужна и на когда планируете запись.`;
+    }
+    if (text.includes("запис") || text.includes("когда можно")) {
+      return "Подберем удобный слот без лишней переписки. Следующий шаг: напишите удобный день и время, и я предложу ближайшие окна.";
+    }
+    if (text.includes("адрес") || text.includes("где вы")) {
+      return "Сориентирую по адресу и формату визита. Следующий шаг: напишите ваш район, чтобы предложить самый удобный вариант.";
+    }
+    return `Спасибо за обращение, помогу по вашей задаче. Следующий шаг: уточните, какая ${service} нужна и на какое время вам удобно.`;
+  }
+
   async function syncTelegramBotEvents(): Promise<void> {
     if (!serviceConnection.botToken.trim()) {
       triggerNotice("Укажите Bot Token для Telegram.");
@@ -2178,7 +2193,10 @@ export default function App() {
                 })
               });
               const replyData = (await replyResp.json()) as { reply?: string };
-              replyText = (replyData.reply || "").trim();
+              replyText = replyResp.ok ? (replyData.reply || "").trim() : "";
+              if (!replyText) {
+                replyText = buildTelegramFallbackReply(incomingText, currentProfile);
+              }
             }
 
             if (replyText) {
