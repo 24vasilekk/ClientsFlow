@@ -195,11 +195,13 @@ function openRouterMiddleware() {
         messages = Array.isArray(body.messages) ? body.messages : [];
         if (isTelegramReplyRoute && typeof body.text === "string") {
           const businessName = typeof body.businessName === "string" ? body.businessName : "ClientsFlow";
+          const businessContext = typeof body.businessContext === "string" ? body.businessContext : "";
           messages = [
             {
               role: "user",
               content: [
                 `Бизнес: ${businessName}`,
+                businessContext ? `Контекст бизнеса: ${businessContext}` : "",
                 "Сформируй ответ клиенту в Telegram.",
                 "Формат: 1-3 коротких предложения, до 320 символов.",
                 "Сообщение клиента:",
@@ -210,7 +212,7 @@ function openRouterMiddleware() {
         }
       }
 
-      const model = process.env.OPENROUTER_MODEL || "google/gemini-2.5-pro";
+      const model = process.env.OPENROUTER_MODEL || "google/gemini-2.5-flash";
       const referer = process.env.OPENROUTER_SITE_URL || "http://localhost:5173";
 
       const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {

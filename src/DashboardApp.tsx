@@ -168,6 +168,18 @@ type ServiceConnection = {
   connectedAt: string | null;
 };
 
+type TelegramProfile = {
+  started: boolean;
+  completed: boolean;
+  step: number;
+  answers: {
+    businessType: string;
+    mainService: string;
+    city: string;
+    goal: string;
+  };
+};
+
 type PlanFeatureKey = "advancedAnalytics" | "aiRecommendations" | "sitesBuilder" | "lostRecovery";
 
 type PlanDefinition = {
@@ -975,6 +987,13 @@ const analyticsPalette = {
 const SERVICE_CONNECTION_KEY = "clientsflow_service_connection_v1";
 const SERVICE_EVENTS_KEY = "clientsflow_service_events_v1";
 const TELEGRAM_OFFSET_KEY = "clientsflow_telegram_offset_v1";
+const TELEGRAM_PROFILES_KEY = "clientsflow_telegram_profiles_v1";
+const TELEGRAM_ONBOARDING_QUESTIONS = [
+  "Чтобы настроить ответы под ваш бизнес, задам 4 коротких вопроса. Первый: в какой нише вы работаете?",
+  "Отлично. Какая у вас ключевая услуга или предложение?",
+  "В каком городе или регионе вы работаете?",
+  "Какая главная цель: больше лидов, больше записей или рост среднего чека?"
+];
 
 function loadServiceConnection(): ServiceConnection {
   if (typeof window === "undefined") {
@@ -1029,6 +1048,23 @@ function loadTelegramOffset(): number {
 function saveTelegramOffset(offset: number): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(TELEGRAM_OFFSET_KEY, String(offset));
+}
+
+function loadTelegramProfiles(): Record<string, TelegramProfile> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(TELEGRAM_PROFILES_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, TelegramProfile>;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveTelegramProfiles(profiles: Record<string, TelegramProfile>): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(TELEGRAM_PROFILES_KEY, JSON.stringify(profiles));
 }
 
 function parseServiceEvents(raw: unknown): ServiceEvent[] {
@@ -1167,6 +1203,7 @@ export default function App() {
   const [serviceEvents, setServiceEvents] = useState<ServiceEvent[]>(() => loadServiceEvents());
   const [serviceSyncLoading, setServiceSyncLoading] = useState(false);
   const [telegramOffset, setTelegramOffset] = useState<number>(() => loadTelegramOffset());
+  const [telegramProfiles, setTelegramProfiles] = useState<Record<string, TelegramProfile>>(() => loadTelegramProfiles());
 
   const hasLiveData = serviceEvents.length > 0;
 
@@ -1930,6 +1967,10 @@ export default function App() {
   }, [telegramOffset]);
 
   useEffect(() => {
+    saveTelegramProfiles(telegramProfiles);
+  }, [telegramProfiles]);
+
+  useEffect(() => {
     if (sitesFlowStatus !== "idle") return;
     setSitesGeneratedContent(buildFallbackSiteContent(selectedSitesTemplate, sitesAnswers));
   }, [sitesAnswers, sitesFlowStatus, selectedSitesTemplate]);
@@ -1994,6 +2035,47 @@ export default function App() {
     }
   }
 
+  function profileFromAnswer(previous: TelegramProfile | undefined, step: number, answer: string): TelegramProfile {
+    const base: TelegramProfile =
+      previous ??
+      ({
+        started: true,
+        completed: false,
+        step: 0,
+        answers: {
+          businessType: "",
+          mainService: "",
+          city: "",
+          goal: ""
+        }
+      } as TelegramProfile);
+
+    const next = {
+      ...base,
+      started: true,
+      answers: { ...base.answers }
+    };
+    if (step === 0) next.answers.businessType = answer;
+    if (step === 1) next.answers.mainService = answer;
+    if (step === 2) next.answers.city = answer;
+    if (step === 3) next.answers.goal = answer;
+    next.step = Math.min(step + 1, TELEGRAM_ONBOARDING_QUESTIONS.length);
+    if (next.step >= TELEGRAM_ONBOARDING_QUESTIONS.length) {
+      next.completed = true;
+    }
+    return next;
+  }
+
+  function buildTelegramBusinessContext(profile: TelegramProfile | undefined): string {
+    if (!profile?.completed) return "";
+    return [
+      `Ниша: ${profile.answers.businessType || "не указано"}`,
+      `Ключевая услуга: ${profile.answers.mainService || "не указано"}`,
+      `Город: ${profile.answers.city || "не указано"}`,
+      `Цель: ${profile.answers.goal || "не указано"}`
+    ].join("; ");
+  }
+
   async function syncTelegramBotEvents(): Promise<void> {
     if (!serviceConnection.botToken.trim()) {
       triggerNotice("Укажите Bot Token для Telegram.");
@@ -2028,6 +2110,7 @@ export default function App() {
       const updates = Array.isArray(updatesData.updates) ? updatesData.updates : [];
       let nextOffset = telegramOffset;
       const inboundEvents: ServiceEvent[] = [];
+      const profilesNext = { ...telegramProfiles };
 
       for (const update of updates) {
         if (update.update_id > nextOffset) nextOffset = update.update_id;
@@ -2058,16 +2141,46 @@ export default function App() {
 
         if (serviceConnection.autoReplyEnabled) {
           try {
-            const replyResp = await fetch("/api/openrouter/telegram-reply", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                text: message.text,
-                businessName: serviceConnection.serviceName || "Ваш сервис"
-              })
-            });
-            const replyData = (await replyResp.json()) as { reply?: string };
-            const replyText = (replyData.reply || "").trim();
+            const incomingText = message.text.trim();
+            const currentProfile = profilesNext[leadId];
+            let replyText = "";
+
+            if (!currentProfile || !currentProfile.started) {
+              profilesNext[leadId] = {
+                started: true,
+                completed: false,
+                step: 0,
+                answers: {
+                  businessType: "",
+                  mainService: "",
+                  city: "",
+                  goal: ""
+                }
+              };
+              replyText = TELEGRAM_ONBOARDING_QUESTIONS[0];
+            } else if (!currentProfile.completed) {
+              const updated = profileFromAnswer(currentProfile, currentProfile.step, incomingText);
+              profilesNext[leadId] = updated;
+              if (!updated.completed) {
+                replyText = TELEGRAM_ONBOARDING_QUESTIONS[updated.step];
+              } else {
+                replyText =
+                  "Отлично, профиль бизнеса зафиксирован. Теперь буду отвечать с учетом вашей ниши и целей. Напишите любой вопрос клиента для теста.";
+              }
+            } else {
+              const replyResp = await fetch("/api/openrouter/telegram-reply", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  text: incomingText,
+                  businessName: serviceConnection.serviceName || "Ваш сервис",
+                  businessContext: buildTelegramBusinessContext(currentProfile)
+                })
+              });
+              const replyData = (await replyResp.json()) as { reply?: string };
+              replyText = (replyData.reply || "").trim();
+            }
+
             if (replyText) {
               await fetch("/api/telegram/send-message", {
                 method: "POST",
@@ -2098,6 +2211,7 @@ export default function App() {
       }
 
       if (nextOffset > telegramOffset) setTelegramOffset(nextOffset);
+      setTelegramProfiles(profilesNext);
       if (inboundEvents.length > 0) {
         setServiceEvents((prev) => {
           const dedupe = new Set(prev.map((event) => event.id));
@@ -3748,6 +3862,7 @@ export default function App() {
                         placeholder="https://your-service.com/events"
                         className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
                       />
+                      <span className="mt-1 block text-[11px] text-slate-500">Нужен API URL, который возвращает JSON-события, а не ссылка на Telegram-канал.</span>
                     </label>
                     <label className="md:col-span-2">
                       <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">API Token (опционально)</span>

@@ -18,7 +18,7 @@ export default async function handler(req: any, res: any) {
 
   try {
     const messages = Array.isArray(req.body?.messages) ? req.body.messages : [];
-    const model = process.env.OPENROUTER_MODEL || "google/gemini-2.5-pro";
+    const model = process.env.OPENROUTER_MODEL || "google/gemini-2.5-flash";
     const referer = process.env.OPENROUTER_SITE_URL || "https://clients-flow-ten.vercel.app";
 
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {

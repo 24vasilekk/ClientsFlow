@@ -18,6 +18,7 @@ export default async function handler(req: any, res: any) {
 
   const userText = String(req.body?.text || "").trim();
   const businessName = String(req.body?.businessName || "ClientsFlow");
+  const businessContext = String(req.body?.businessContext || "").trim();
   if (!userText) {
     res.status(400).json({ error: "text is required" });
     return;
@@ -25,6 +26,7 @@ export default async function handler(req: any, res: any) {
 
   const prompt = [
     `Бизнес: ${businessName}.`,
+    businessContext ? `Контекст бизнеса: ${businessContext}.` : "",
     "Сформируй ответ клиенту в Telegram.",
     "Формат: 1-3 коротких предложения, до 320 символов.",
     "Сообщение клиента:",
@@ -32,7 +34,7 @@ export default async function handler(req: any, res: any) {
   ].join("\n");
 
   try {
-    const model = process.env.OPENROUTER_MODEL || "google/gemini-2.5-pro";
+    const model = process.env.OPENROUTER_MODEL || "google/gemini-2.5-flash";
     const referer = process.env.OPENROUTER_SITE_URL || "https://clients-flow-ten.vercel.app";
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
