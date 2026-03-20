@@ -674,9 +674,10 @@ function LoginPage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (email === "111" && password === "111") {
+      localStorage.setItem(AUTH_KEY, JSON.stringify({ isAuth: true, email }));
       localStorage.setItem(WORKBENCH_AUTH_KEY, JSON.stringify({ isAuth: true, email }));
       setError(null);
-      onNavigate("/workbench");
+      onNavigate("/dashboard");
       return;
     }
     setError("Неверный логин или пароль. Для рабочего входа используйте 111 / 111.");
@@ -746,6 +747,14 @@ function DashboardRoute({ onNavigate }: { onNavigate: (path: RoutePath) => void 
       return false;
     }
   }, []);
+  const isWorkbenchAuth = useMemo(() => {
+    try {
+      const raw = localStorage.getItem(WORKBENCH_AUTH_KEY);
+      return raw ? JSON.parse(raw).isAuth === true : false;
+    } catch {
+      return false;
+    }
+  }, []);
 
   if (!isAuth) {
     return (
@@ -771,7 +780,19 @@ function DashboardRoute({ onNavigate }: { onNavigate: (path: RoutePath) => void 
     );
   }
 
-  return <DashboardApp />;
+  return (
+    <div className="relative">
+      <DashboardApp />
+      {isWorkbenchAuth ? (
+        <button
+          onClick={() => onNavigate("/workbench")}
+          className="fixed bottom-4 right-4 z-50 rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-2 text-xs font-semibold text-cyan-800 shadow-sm"
+        >
+          Рабочий контур
+        </button>
+      ) : null}
+    </div>
+  );
 }
 
 function WorkbenchRoute({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
