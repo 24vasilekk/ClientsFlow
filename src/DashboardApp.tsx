@@ -1335,6 +1335,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
   const [businessBriefAnswer, setBusinessBriefAnswer] = useState("");
   const [businessBriefLoading, setBusinessBriefLoading] = useState(false);
   const [businessTuning, setBusinessTuning] = useState<BusinessTuningState>(() => loadBusinessTuning());
+  const [showFullTimeline, setShowFullTimeline] = useState(false);
 
   const hasLiveData = serviceEvents.length > 0;
 
@@ -1367,7 +1368,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
           потерян: 14,
           эскалация: 71
         };
-        const timeline: TimelineMessage[] = sorted.slice(-8).map((event) => ({
+        const timeline: TimelineMessage[] = sorted.map((event) => ({
           role: event.direction === "inbound" ? "client" : event.status === "эскалация" ? "manager" : "ai",
           text: event.text,
           time: new Date(event.timestamp).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })
@@ -2132,6 +2133,10 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
   }, [filteredConversations, selectedConversationId]);
 
   useEffect(() => {
+    setShowFullTimeline(false);
+  }, [selectedConversationId]);
+
+  useEffect(() => {
     if (standaloneSites && activeNav !== "ClientsFlow Sites") {
       setActiveNav("ClientsFlow Sites");
     }
@@ -2868,6 +2873,15 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                             <p className="mt-1 leading-relaxed">{msg.text}</p>
                           </div>
                         ))}
+                      </div>
+                      <div className="mt-2 flex items-center justify-between">
+                        <p className="text-xs text-slate-500">Сообщений в переписке: {selectedConversation.timeline.length}</p>
+                        <button
+                          onClick={() => setShowFullTimeline(true)}
+                          className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-slate-500"
+                        >
+                          Полная переписка
+                        </button>
                       </div>
 
                       <div className="mt-3 space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
@@ -4880,6 +4894,37 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
             )}
             </div>
           </main>
+
+          {showFullTimeline && selectedConversation ? (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/70 p-3">
+              <div className="flex h-[88vh] w-full max-w-3xl flex-col rounded-3xl border border-slate-200 bg-white shadow-2xl">
+                <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+                  <div>
+                    <p className="text-sm font-bold text-slate-900">{selectedConversation.client}</p>
+                    <p className="text-xs text-slate-500">
+                      {selectedConversation.channel} • Полная переписка • {selectedConversation.timeline.length} сообщений
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowFullTimeline(false)}
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700"
+                  >
+                    Закрыть
+                  </button>
+                </div>
+                <div className="flex-1 space-y-2 overflow-y-auto bg-slate-50 p-4">
+                  {selectedConversation.timeline.map((msg, idx) => (
+                    <div key={`full-${msg.time}-${idx}`} className={`rounded-xl px-3 py-2 text-sm ${roleBubbleClass(msg.role)}`}>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] opacity-70">
+                        {msg.role === "client" ? "Клиент" : msg.role === "ai" ? "AI" : "Менеджер"} • {msg.time}
+                      </p>
+                      <p className="mt-1 leading-relaxed">{msg.text}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/95 px-2 py-2 backdrop-blur lg:hidden">
             <div className="grid grid-cols-5 gap-1">

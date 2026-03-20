@@ -39,28 +39,39 @@ const promptChips = [
   "Хочу видеть аналитику по лидам"
 ];
 
-const integrations = ["Telegram", "WhatsApp", "Instagram", "Website Chat", "CRM", "Email"];
+const integrations = [
+  { name: "Telegram", note: "Входящие и follow-up", status: "Live" },
+  { name: "WhatsApp", note: "Быстрые ответы и запись", status: "Live" },
+  { name: "Instagram", note: "Direct и комментарии", status: "Beta" },
+  { name: "Website Chat", note: "Форма и онлайн-чат", status: "Live" },
+  { name: "CRM", note: "Передача квалифицированных лидов", status: "Sync" },
+  { name: "Email", note: "Уведомления и отчёты", status: "Live" }
+];
 
 const powerCards = [
   {
     title: "Всегда отвечает",
     text: "ClientsFlow даёт стабильный первый ответ за секунды, даже в пиковые часы и ночью.",
-    chip: "24/7"
+    chip: "24/7",
+    meta: "SLA ответа < 60 сек"
   },
   {
     title: "Доводит до действия",
     text: "Система не просто переписывается, а переводит клиента к записи, оплате или звонку.",
-    chip: "Action"
+    chip: "Action",
+    meta: "Чёткий следующий шаг"
   },
   {
     title: "Помнит контекст",
     text: "История диалога, намерение клиента и этап воронки сохраняются между касаниями.",
-    chip: "Context"
+    chip: "Context",
+    meta: "Единая карточка лида"
   },
   {
     title: "Работает в реальных процессах",
     text: "Квалификация, follow-up, эскалация менеджеру и отчётность в одном потоке.",
-    chip: "Ops"
+    chip: "Ops",
+    meta: "Готово для операционной работы"
   }
 ];
 
@@ -530,23 +541,39 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
 
         <section id="integrations" className="mx-auto max-w-[1240px] px-4 py-16 sm:px-6">
           <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">ClientsFlow работает там, где уже приходят ваши обращения</h2>
-          <p className="mt-3 max-w-3xl text-slate-600">Подключайте привычные каналы и управляйте всей клиентской коммуникацией в одной операционной системе.</p>
-          <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-            {integrations.map((item) => (
-              <div key={item} className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-center text-sm font-semibold text-slate-700 shadow-sm">
-                {item}
-              </div>
-            ))}
+          <p className="mt-3 max-w-3xl text-slate-600">Каналы подключаются в одну операционную ленту: от первого сообщения до записи, оплаты и повторного касания.</p>
+          <div className="mt-8 rounded-3xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {integrations.map((item) => (
+                <div key={item.name} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-base font-bold text-slate-900">{item.name}</p>
+                    <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] text-cyan-700">
+                      {item.status}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-sm text-slate-600">{item.note}</p>
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-xs font-semibold text-cyan-900">
+              Все каналы сводятся в единый поток обработки: входящий лид, квалификация, запись, аналитика.
+            </div>
           </div>
         </section>
 
         <section id="features" className="border-y border-slate-200 bg-white/60">
           <div className="mx-auto max-w-[1240px] px-4 py-16 sm:px-6">
             <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Сильные стороны платформы</h2>
+            <p className="mt-3 max-w-3xl text-slate-600">Продукт создан под реальную операционную работу: короткий отклик, структурный контекст и управляемая воронка до результата.</p>
             <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               {powerCards.map((card) => (
                 <motion.div whileHover={{ y: -2 }} key={card.title} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                  <span className="inline-flex rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.1em] text-cyan-700">{card.chip}</span>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="inline-flex rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.1em] text-cyan-700">{card.chip}</span>
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">{card.meta}</span>
+                  </div>
+                  <div className="mt-4 h-12 rounded-2xl border border-slate-200 bg-[radial-gradient(100%_90%_at_20%_20%,rgba(125,211,252,0.25),transparent_65%),#f8fafc]" />
                   <h3 className="mt-4 text-xl font-bold tracking-tight text-slate-900">{card.title}</h3>
                   <p className="mt-2 text-sm leading-relaxed text-slate-600">{card.text}</p>
                 </motion.div>
