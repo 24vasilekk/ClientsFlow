@@ -1028,7 +1028,6 @@ const TELEGRAM_ONBOARDING_QUESTIONS = [
   "Какая главная цель: больше лидов, больше записей или рост среднего чека?"
 ];
 const TELEGRAM_MAX_AUTO_REPLIES_PER_SYNC = 6;
-const TELEGRAM_AUTO_REPLY_MAX_AGE_SECONDS = 180;
 const BUSINESS_BRIEF_MIN_QUESTIONS = 10;
 const BUSINESS_BRIEF_FALLBACK_QUESTIONS = [
   "Какую услугу вы продаете чаще всего и в каком среднем чеке?",
@@ -2389,12 +2388,19 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
       const inboundEvents: ServiceEvent[] = [];
       const profilesNext = { ...telegramProfiles };
       let autoRepliesCount = 0;
+      let replyErrorsCount = 0;
+      let reachedReplyCap = false;
 
       for (const update of updates) {
-        if (update.update_id > nextOffset) nextOffset = update.update_id;
+        if (serviceConnection.autoReplyEnabled && autoRepliesCount >= TELEGRAM_MAX_AUTO_REPLIES_PER_SYNC) {
+          reachedReplyCap = true;
+          break;
+        }
         const message = update.message;
-        if (!message?.text || !message.chat?.id) continue;
-        if (message.from?.is_bot) continue;
+        if (!message?.text || !message.chat?.id || message.from?.is_bot) {
+          if (update.update_id > nextOffset) nextOffset = update.update_id;
+          continue;
+        }
         const timestamp = new Date(message.date * 1000).toISOString();
         const leadId = `tg-${message.chat.id}`;
         const clientName =
@@ -2417,11 +2423,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
           bookingState: "не начата"
         });
 
-        const messageAgeSeconds = Math.floor(Date.now() / 1000) - message.date;
-        const canAutoReply =
-          serviceConnection.autoReplyEnabled &&
-          autoRepliesCount < TELEGRAM_MAX_AUTO_REPLIES_PER_SYNC &&
-          messageAgeSeconds <= TELEGRAM_AUTO_REPLY_MAX_AGE_SECONDS;
+        const canAutoReply = serviceConnection.autoReplyEnabled && autoRepliesCount < TELEGRAM_MAX_AUTO_REPLIES_PER_SYNC;
 
         if (canAutoReply) {
           try {
@@ -2483,7 +2485,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
             }
 
             if (replyText) {
-              await fetch("/api/telegram/send-message", {
+              const sendResp = await fetch("/api/telegram/send-message", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -2492,6 +2494,10 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                   text: replyText
                 })
               });
+              if (!sendResp.ok) {
+                const sendErr = (await sendResp.json().catch(() => ({}))) as { error?: string };
+                throw new Error(sendErr.error || `Telegram send status ${sendResp.status}`);
+              }
               inboundEvents.push({
                 id: `out-${update.update_id}`,
                 leadId,
@@ -2507,9 +2513,11 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
               autoRepliesCount += 1;
             }
           } catch {
+            replyErrorsCount += 1;
             // Keep sync resilient even if one reply fails.
           }
         }
+        if (update.update_id > nextOffset) nextOffset = update.update_id;
       }
 
       if (nextOffset > telegramOffset) setTelegramOffset(nextOffset);
@@ -2522,12 +2530,12 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
         });
       }
       setServiceConnection((prev) => ({ ...prev, connectedAt: new Date().toISOString() }));
-      const extraInfo =
-        serviceConnection.autoReplyEnabled && autoRepliesCount >= TELEGRAM_MAX_AUTO_REPLIES_PER_SYNC
-          ? ` Ответов за цикл: ${autoRepliesCount}, остальные обработаются при следующей синхронизации.`
-          : ` Ответов за цикл: ${autoRepliesCount}.`;
+      const extraInfo = reachedReplyCap
+        ? ` Ответов за цикл: ${autoRepliesCount}, остальные обработаются при следующей синхронизации.`
+        : ` Ответов за цикл: ${autoRepliesCount}.`;
+      const errorsInfo = replyErrorsCount > 0 ? ` Ошибок отправки: ${replyErrorsCount}.` : "";
       triggerNotice(
-        `Telegram синхронизирован. Новых событий: ${inboundEvents.length}.${extraInfo}` +
+        `Telegram синхронизирован. Новых событий: ${inboundEvents.length}.${extraInfo}${errorsInfo}` +
           (!businessBrief.started ? " Запустите AI-бриф бизнеса для точных ответов под вашу нишу." : "")
       );
     } catch (error: any) {
