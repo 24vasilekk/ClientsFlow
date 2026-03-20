@@ -143,6 +143,29 @@ type GeneratedSiteContent = {
   contactLine: string;
 };
 
+type ServiceEvent = {
+  id: string;
+  leadId: string;
+  clientName: string;
+  channel: Channel;
+  direction: "inbound" | "outbound";
+  text: string;
+  timestamp: string;
+  status?: LeadStatus;
+  stage?: LeadStage;
+  bookingState?: BookingState;
+  responseSeconds?: number;
+  revenue?: number;
+  lostReason?: string;
+};
+
+type ServiceConnection = {
+  serviceName: string;
+  endpoint: string;
+  token: string;
+  connectedAt: string | null;
+};
+
 type PlanFeatureKey = "advancedAnalytics" | "aiRecommendations" | "sitesBuilder" | "lostRecovery";
 
 type PlanDefinition = {
@@ -947,6 +970,89 @@ const analyticsPalette = {
   donutLost: "#cbd5e1"
 };
 
+const SERVICE_CONNECTION_KEY = "clientsflow_service_connection_v1";
+const SERVICE_EVENTS_KEY = "clientsflow_service_events_v1";
+
+function loadServiceConnection(): ServiceConnection {
+  if (typeof window === "undefined") {
+    return { serviceName: "", endpoint: "", token: "", connectedAt: null };
+  }
+  try {
+    const raw = localStorage.getItem(SERVICE_CONNECTION_KEY);
+    if (!raw) return { serviceName: "", endpoint: "", token: "", connectedAt: null };
+    const parsed = JSON.parse(raw) as Partial<ServiceConnection>;
+    return {
+      serviceName: parsed.serviceName ?? "",
+      endpoint: parsed.endpoint ?? "",
+      token: parsed.token ?? "",
+      connectedAt: parsed.connectedAt ?? null
+    };
+  } catch {
+    return { serviceName: "", endpoint: "", token: "", connectedAt: null };
+  }
+}
+
+function saveServiceConnection(connection: ServiceConnection): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(SERVICE_CONNECTION_KEY, JSON.stringify(connection));
+}
+
+function loadServiceEvents(): ServiceEvent[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(SERVICE_EVENTS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as ServiceEvent[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveServiceEvents(events: ServiceEvent[]): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(SERVICE_EVENTS_KEY, JSON.stringify(events));
+}
+
+function parseServiceEvents(raw: unknown): ServiceEvent[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item, index) => {
+      const e = item as Partial<ServiceEvent>;
+      const channel = e.channel;
+      const validChannel = channel === "Telegram" || channel === "WhatsApp" || channel === "Instagram" || channel === "Website";
+      if (!e.leadId || !e.clientName || !validChannel || !e.direction || !e.text || !e.timestamp) return null;
+      return {
+        id: e.id || `EV-${index}-${Math.random().toString(36).slice(2, 8)}`,
+        leadId: String(e.leadId),
+        clientName: String(e.clientName),
+        channel,
+        direction: e.direction === "outbound" ? "outbound" : "inbound",
+        text: String(e.text),
+        timestamp: String(e.timestamp),
+        status: e.status,
+        stage: e.stage,
+        bookingState: e.bookingState,
+        responseSeconds: typeof e.responseSeconds === "number" ? e.responseSeconds : undefined,
+        revenue: typeof e.revenue === "number" ? e.revenue : undefined,
+        lostReason: typeof e.lostReason === "string" ? e.lostReason : undefined
+      } as ServiceEvent;
+    })
+    .filter((event): event is ServiceEvent => Boolean(event));
+}
+
+function formatLastActivity(timestamp: string): { label: string; minutes: number } {
+  const ms = new Date(timestamp).getTime();
+  const diffMin = Math.max(0, Math.round((Date.now() - ms) / 60000));
+  if (diffMin < 1) return { label: "только что", minutes: 0 };
+  if (diffMin < 60) return { label: `${diffMin} мин назад`, minutes: diffMin };
+  const hours = Math.floor(diffMin / 60);
+  const minutes = diffMin % 60;
+  if (hours < 24) return { label: minutes > 0 ? `${hours} ч ${minutes} мин назад` : `${hours} ч назад`, minutes: diffMin };
+  const days = Math.floor(hours / 24);
+  return { label: `${days} дн назад`, minutes: diffMin };
+}
+
 function loadSubscription(): SubscriptionState {
   if (typeof window === "undefined") {
     return { planId: null, subscriptionStatus: "none", trialStartDate: null, onboardingCompleted: false };
@@ -999,10 +1105,11 @@ function buildLinePoints(values: number[]): string {
 }
 
 export default function App() {
+  const serviceImportRef = useRef<HTMLInputElement | null>(null);
   const [activeNav, setActiveNav] = useState<NavItem>("Обзор");
   const [statusFilter, setStatusFilter] = useState<LeadStatus | "все">("все");
   const [channelFilter, setChannelFilter] = useState<Channel | "все">("все");
-  const [selectedConversationId, setSelectedConversationId] = useState<string>(inboxConversations[0].id);
+  const [selectedConversationId, setSelectedConversationId] = useState<string>("");
   const [leadQuery, setLeadQuery] = useState("");
   const [leadStageFilter, setLeadStageFilter] = useState<LeadStage | "все">("все");
   const [leadChannelFilter, setLeadChannelFilter] = useState<Channel | "все">("все");
@@ -1039,17 +1146,145 @@ export default function App() {
   const [onboardingChannels, setOnboardingChannels] = useState<string[]>(["WhatsApp"]);
   const [onboardingGoals, setOnboardingGoals] = useState<string[]>(["быстрее отвечать"]);
   const [uiNotice, setUiNotice] = useState<string | null>(null);
+  const [serviceConnection, setServiceConnection] = useState<ServiceConnection>(() => loadServiceConnection());
+  const [serviceEvents, setServiceEvents] = useState<ServiceEvent[]>(() => loadServiceEvents());
+  const [serviceSyncLoading, setServiceSyncLoading] = useState(false);
+
+  const hasLiveData = serviceEvents.length > 0;
+
+  const liveConversations = useMemo<InboxConversation[]>(() => {
+    const grouped = serviceEvents.reduce<Record<string, ServiceEvent[]>>((acc, event) => {
+      if (!acc[event.leadId]) acc[event.leadId] = [];
+      acc[event.leadId].push(event);
+      return acc;
+    }, {});
+
+    return Object.entries(grouped)
+      .map(([leadId, events]) => {
+        const sorted = [...events].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+        const last = sorted[sorted.length - 1];
+        const lastActivity = formatLastActivity(last.timestamp);
+        const status: LeadStatus = last.status ?? "новый";
+        const scoreMap: Record<LeadStatus, number> = {
+          новый: 45,
+          квалифицирован: 74,
+          "ожидает записи": 67,
+          записан: 95,
+          потерян: 28,
+          эскалация: 82
+        };
+        const probabilityMap: Record<LeadStatus, number> = {
+          новый: 34,
+          квалифицирован: 68,
+          "ожидает записи": 62,
+          записан: 96,
+          потерян: 14,
+          эскалация: 71
+        };
+        const timeline: TimelineMessage[] = sorted.slice(-8).map((event) => ({
+          role: event.direction === "inbound" ? "client" : event.status === "эскалация" ? "manager" : "ai",
+          text: event.text,
+          time: new Date(event.timestamp).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })
+        }));
+        const suggestedAction =
+          status === "новый"
+            ? "Уточнить задачу и предложить следующий шаг."
+            : status === "квалифицирован"
+              ? "Перевести в запись с выбором времени."
+              : status === "ожидает записи"
+                ? "Подтвердить слот и закрыть запись."
+                : status === "потерян"
+                  ? "Запустить recovery-касание."
+                  : status === "эскалация"
+                    ? "Передать кейс менеджеру."
+                    : "Подготовить post-visit follow-up.";
+        return {
+          id: leadId,
+          client: last.clientName,
+          channel: last.channel,
+          status,
+          summary: last.text.slice(0, 180),
+          score: scoreMap[status],
+          purchaseProbability: probabilityMap[status],
+          suggestedAction,
+          lastActivity: lastActivity.label,
+          intent: sorted.find((item) => item.direction === "inbound")?.text.slice(0, 100) || "Входящее обращение",
+          extractedFields: [
+            { label: "Lead ID", value: leadId },
+            { label: "Канал", value: last.channel },
+            { label: "Сообщений", value: String(sorted.length) }
+          ],
+          notes: last.lostReason ? `Причина потери: ${last.lostReason}` : "Данные получены из подключенного сервиса.",
+          timeline
+        };
+      })
+      .sort((a, b) => {
+        const aMin = formatLastActivity(serviceEvents.find((event) => event.leadId === a.id)?.timestamp || new Date().toISOString()).minutes;
+        const bMin = formatLastActivity(serviceEvents.find((event) => event.leadId === b.id)?.timestamp || new Date().toISOString()).minutes;
+        return aMin - bMin;
+      });
+  }, [serviceEvents]);
+
+  const liveLeadRecords = useMemo<LeadRecord[]>(() => {
+    return liveConversations.map((conv) => {
+      const related = serviceEvents.filter((event) => event.leadId === conv.id);
+      const latest = related[related.length - 1];
+      const stage: LeadStage =
+        latest?.stage ??
+        (conv.status === "эскалация"
+          ? "передан менеджеру"
+          : conv.status === "квалифицирован"
+            ? "квалифицирован"
+            : conv.status === "ожидает записи"
+              ? "ожидает записи"
+              : conv.status === "записан"
+                ? "записан"
+                : conv.status === "потерян"
+                  ? "потерян"
+                  : "новый");
+      const activity = formatLastActivity(latest?.timestamp || new Date().toISOString());
+      const estimatedRevenue = Math.round(
+        related.reduce((sum, event) => sum + (event.revenue ?? 0), 0) || (conv.status === "записан" ? 5000 : conv.status === "квалифицирован" ? 3500 : 0)
+      );
+      const bookingState: BookingState =
+        latest?.bookingState ??
+        (stage === "записан" ? "подтверждена" : stage === "потерян" ? "отменена" : stage === "ожидает записи" ? "в процессе" : "не начата");
+      return {
+        id: conv.id,
+        name: conv.client,
+        business: serviceConnection.serviceName || "Подключенный сервис",
+        stage,
+        channel: conv.channel,
+        score: conv.score,
+        estimatedRevenue,
+        lastActivityLabel: activity.label,
+        lastActivityMinutes: activity.minutes,
+        bookingState,
+        tags: [`${conv.channel}`, `${conv.status}`],
+        owner: conv.status === "эскалация" ? "Менеджер" : "AI"
+      };
+    });
+  }, [liveConversations, serviceEvents, serviceConnection.serviceName]);
+
+  const incomingLeads = liveLeadRecords.length;
+  const qualifiedLeads = liveLeadRecords.filter((lead) => lead.stage === "квалифицирован" || lead.stage === "ожидает записи" || lead.stage === "записан" || lead.stage === "передан менеджеру").length;
+  const bookedLeads = liveLeadRecords.filter((lead) => lead.stage === "записан").length;
+  const lostLeads = liveLeadRecords.filter((lead) => lead.stage === "потерян").length;
+  const responseSamples = serviceEvents.map((event) => event.responseSeconds).filter((value): value is number => typeof value === "number" && value > 0);
+  const averageResponse = responseSamples.length > 0 ? Math.round(responseSamples.reduce((sum, value) => sum + value, 0) / responseSamples.length) : 0;
+  const worstResponse = responseSamples.length > 0 ? Math.max(...responseSamples) : 0;
+  const conversionPercent = incomingLeads > 0 ? Number(((bookedLeads / incomingLeads) * 100).toFixed(1)) : 0;
 
   const kpis = useMemo(
     () => [
-      { label: "Входящие лиды", value: "482", note: "+14% к прошлому периоду" },
-      { label: "Квалифицировано", value: "314", note: "65% от входящих" },
-      { label: "Записано", value: "176", note: "Конверсия в запись 36.5%" },
-      { label: "Потеряно", value: "57", note: "11.8% от входящих" },
-      { label: "Среднее время ответа", value: "19 сек", note: "Было 62 сек до запуска" },
-      { label: "Конверсия", value: "36.5%", note: "+8.2 п.п. за 30 дней" }
+      { label: "Входящие лиды", value: `${incomingLeads}`, note: hasLiveData ? "Данные из подключенного сервиса" : "Подключите сервис, чтобы увидеть статистику" },
+      { label: "Квалифицировано", value: `${qualifiedLeads}`, note: incomingLeads > 0 ? `${Math.round((qualifiedLeads / incomingLeads) * 100)}% от входящих` : "—" },
+      { label: "Записано", value: `${bookedLeads}`, note: incomingLeads > 0 ? `Конверсия в запись ${conversionPercent}%` : "—" },
+      { label: "Потеряно", value: `${lostLeads}`, note: incomingLeads > 0 ? `${Math.round((lostLeads / incomingLeads) * 100)}% от входящих` : "—" },
+      { label: "Среднее время ответа", value: averageResponse > 0 ? `${averageResponse} сек` : "—", note: averageResponse > 0 ? `Худшее значение ${worstResponse} сек` : "Нет данных responseSeconds" },
+      { label: "Конверсия", value: incomingLeads > 0 ? `${conversionPercent}%` : "—", note: hasLiveData ? "Считается по вашим событиям" : "Добавьте события, чтобы рассчитать конверсию" }
     ],
-    []
+    [incomingLeads, qualifiedLeads, bookedLeads, lostLeads, averageResponse, worstResponse, conversionPercent, hasLiveData]
   );
 
   const currentPlanLabel =
@@ -1081,16 +1316,139 @@ export default function App() {
     return currentPlanDefinition.gates[feature];
   };
 
-  const bookedLeadsValue = analyticsConversionData.find((item) => item.name === "Записано")?.value ?? 0;
-  const lostLeadsValue = analyticsConversionData.find((item) => item.name === "Потеряно")?.value ?? 0;
-  const conversionTotal = bookedLeadsValue + lostLeadsValue;
-  const conversionBookedPercent = conversionTotal > 0 ? Math.round((bookedLeadsValue / conversionTotal) * 100) : 0;
-  const conversionLostPercent = conversionTotal > 0 ? Math.round((lostLeadsValue / conversionTotal) * 100) : 0;
-  const averageResponse = Math.round(
-    analyticsResponseTrend.reduce((sum, point) => sum + point.seconds, 0) / analyticsResponseTrend.length
-  );
-  const worstResponse = Math.max(...analyticsResponseTrend.map((point) => point.seconds));
-  const lostRevenueSnapshot = lostRevenueByPeriod[lostRevenuePeriod];
+  const conversionTotal = bookedLeads + lostLeads;
+  const conversionBookedPercent = conversionTotal > 0 ? Math.round((bookedLeads / conversionTotal) * 100) : 0;
+  const conversionLostPercent = conversionTotal > 0 ? Math.round((lostLeads / conversionTotal) * 100) : 0;
+
+  const analyticsKpisLive = [
+    { label: "Всего входящих", value: `${incomingLeads}`, note: "По подключенному сервису" },
+    { label: "Квалифицировано", value: `${qualifiedLeads}`, note: incomingLeads > 0 ? `${Math.round((qualifiedLeads / incomingLeads) * 100)}% от входящих` : "—" },
+    { label: "Записано", value: `${bookedLeads}`, note: qualifiedLeads > 0 ? `${Math.round((bookedLeads / qualifiedLeads) * 100)}% от квалифицированных` : "—" },
+    { label: "Потеряно", value: `${lostLeads}`, note: incomingLeads > 0 ? `${Math.round((lostLeads / incomingLeads) * 100)}% от входящих` : "—" },
+    { label: "Среднее время ответа", value: averageResponse > 0 ? `${averageResponse} сек` : "—", note: averageResponse > 0 ? `Худшее ${worstResponse} сек` : "Нет данных" },
+    { label: "Общая конверсия", value: incomingLeads > 0 ? `${conversionPercent}%` : "—", note: "В запись от всех входящих" }
+  ];
+
+  const analyticsTrendDataLive = useMemo(() => {
+    const days = Array.from({ length: 10 }).map((_, index) => {
+      const date = new Date();
+      date.setDate(date.getDate() - (9 - index));
+      const key = date.toISOString().slice(0, 10);
+      const label = date.toLocaleDateString("ru-RU", { day: "2-digit", month: "short" });
+      const dayEvents = serviceEvents.filter((event) => event.timestamp.slice(0, 10) === key);
+      const incoming = dayEvents.filter((event) => event.direction === "inbound").length;
+      const booked = dayEvents.filter((event) => event.status === "записан" || event.stage === "записан").length;
+      return { day: label, incoming, booked };
+    });
+    return days;
+  }, [serviceEvents]);
+
+  const analyticsFunnelDataLive = [
+    { stage: "Входящие", value: incomingLeads },
+    { stage: "Ответ получен", value: liveLeadRecords.filter((lead) => serviceEvents.some((event) => event.leadId === lead.id && event.direction === "outbound")).length },
+    { stage: "Квалифицировано", value: qualifiedLeads },
+    { stage: "Доведено до записи", value: bookedLeads },
+    { stage: "Потеряно", value: lostLeads }
+  ];
+
+  const analyticsConversionDataLive = [
+    { name: "Записано", value: bookedLeads },
+    { name: "Потеряно", value: lostLeads }
+  ];
+
+  const analyticsChannelDataLive = useMemo(() => {
+    const channels: Channel[] = ["Telegram", "WhatsApp", "Instagram", "Website"];
+    return channels.map((channel) => {
+      const channelLeads = liveLeadRecords.filter((lead) => lead.channel === channel);
+      const incoming = channelLeads.length;
+      const qualified = channelLeads.filter((lead) => lead.stage === "квалифицирован" || lead.stage === "ожидает записи" || lead.stage === "записан" || lead.stage === "передан менеджеру").length;
+      const booked = channelLeads.filter((lead) => lead.stage === "записан").length;
+      const conversion = incoming > 0 ? Number(((booked / incoming) * 100).toFixed(1)) : 0;
+      return { channel, incoming, qualified, booked, conversion };
+    });
+  }, [liveLeadRecords]);
+
+  const analyticsResponseTrendLive = useMemo(() => {
+    const days = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+    return days.map((dayLabel, index) => {
+      const values = serviceEvents
+        .filter((event) => {
+          if (typeof event.responseSeconds !== "number") return false;
+          const jsDay = new Date(event.timestamp).getDay(); // 0..6 Sun..Sat
+          const mapped = jsDay === 0 ? 6 : jsDay - 1;
+          return mapped === index;
+        })
+        .map((event) => event.responseSeconds as number);
+      const avg = values.length > 0 ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length) : 0;
+      return { period: dayLabel, seconds: avg };
+    });
+  }, [serviceEvents]);
+
+  const analyticsInsightsLive = [
+    incomingLeads > 0
+      ? `В системе ${incomingLeads} активных лидов. Основной фокус: ускорить этап квалификации.`
+      : "Нет данных по лидам. Подключите сервис и загрузите события.",
+    lostLeads > 0
+      ? `Потеряно ${lostLeads} лидов. Запустите сценарий recovery для возврата части потока.`
+      : "Потерянные лиды пока не обнаружены в подключенных событиях.",
+    averageResponse > 0
+      ? `Среднее время ответа ${averageResponse} сек. Цель: удерживать ниже 60 секунд.`
+      : "Добавьте поле responseSeconds в событиях для расчёта SLA.",
+    `Наиболее конверсионный канал: ${
+      analyticsChannelDataLive.sort((a, b) => b.conversion - a.conversion)[0]?.channel || "—"
+    }.`
+  ];
+
+  const lostRevenueByPeriodLive: Record<"7d" | "30d", LostRevenueSnapshot> = {
+    "7d": (() => {
+      const from = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      const rangeEvents = serviceEvents.filter((event) => new Date(event.timestamp).getTime() >= from);
+      const lost = rangeEvents.filter((event) => event.status === "потерян" || event.stage === "потерян");
+      const lostLeadsCount = new Set(lost.map((item) => item.leadId)).size;
+      const estimated = lost.reduce((sum, item) => sum + (item.revenue ?? 0), 0);
+      return {
+        periodLabel: "7 дней",
+        lostLeads: lostLeadsCount,
+        estimatedRevenue: estimated,
+        topReason: lost[0]?.lostReason || "Основные потери фиксируются после первичного диалога.",
+        reasons: [
+          { reason: "После вопроса о стоимости", count: Math.round(lostLeadsCount * 0.45), revenue: Math.round(estimated * 0.45) },
+          { reason: "Нет follow-up", count: Math.round(lostLeadsCount * 0.3), revenue: Math.round(estimated * 0.3) },
+          { reason: "Долгий ответ", count: Math.max(0, lostLeadsCount - Math.round(lostLeadsCount * 0.75)), revenue: Math.round(estimated * 0.25) }
+        ],
+        actions: [
+          "Сократить задержку первого ответа и зафиксировать SLA.",
+          "Запустить повторное касание для лидов без ответа.",
+          "Переписать сценарий ответа на цену и сразу предлагать слот."
+        ]
+      };
+    })(),
+    "30d": (() => {
+      const from = Date.now() - 30 * 24 * 60 * 60 * 1000;
+      const rangeEvents = serviceEvents.filter((event) => new Date(event.timestamp).getTime() >= from);
+      const lost = rangeEvents.filter((event) => event.status === "потерян" || event.stage === "потерян");
+      const lostLeadsCount = new Set(lost.map((item) => item.leadId)).size;
+      const estimated = lost.reduce((sum, item) => sum + (item.revenue ?? 0), 0);
+      return {
+        periodLabel: "30 дней",
+        lostLeads: lostLeadsCount,
+        estimatedRevenue: estimated,
+        topReason: lost[0]?.lostReason || "Ключевая зона потерь: лиды без повторного контакта.",
+        reasons: [
+          { reason: "После вопроса о стоимости", count: Math.round(lostLeadsCount * 0.42), revenue: Math.round(estimated * 0.42) },
+          { reason: "Нет follow-up", count: Math.round(lostLeadsCount * 0.33), revenue: Math.round(estimated * 0.33) },
+          { reason: "Долгий ответ", count: Math.max(0, lostLeadsCount - Math.round(lostLeadsCount * 0.75)), revenue: Math.round(estimated * 0.25) }
+        ],
+        actions: [
+          "Пересобрать сценарии первичного ответа для быстрых квалификаций.",
+          "Автоматизировать recovery-цепочку для тихих лидов.",
+          "Внедрить ежедневный контроль потерь по каналам."
+        ]
+      };
+    })()
+  };
+
+  const lostRevenueSnapshot = lostRevenueByPeriodLive[lostRevenuePeriod];
   const selectedSitesTemplate = sitesTemplates.find((item) => item.id === sitesTemplateId) ?? sitesTemplates[0];
   const generatedSitesHeadline = sitesGeneratedContent.heroTitle;
   const generatedSitesSubheadline = sitesGeneratedContent.heroSubtitle;
@@ -1101,15 +1459,48 @@ export default function App() {
     boxShadow: "0 14px 30px rgba(2, 6, 23, 0.1)"
   };
 
-  const linePoints = useMemo(() => buildLinePoints(leadsOverTime), []);
+  const overviewLeadSeries = analyticsTrendDataLive.map((item) => item.incoming);
+  const linePoints = useMemo(
+    () => buildLinePoints(overviewLeadSeries.length >= 2 ? overviewLeadSeries : [0, 0]),
+    [overviewLeadSeries]
+  );
+  const overviewLeadDays = analyticsTrendDataLive.map((item) => item.day);
+  const overviewFunnel = [
+    { label: "Входящие обращения", value: incomingLeads, width: 100, color: "bg-cyan-500" },
+    {
+      label: "Квалифицировано",
+      value: qualifiedLeads,
+      width: incomingLeads > 0 ? Math.max(2, Math.round((qualifiedLeads / incomingLeads) * 100)) : 0,
+      color: "bg-sky-500"
+    },
+    {
+      label: "Дошли до записи",
+      value: bookedLeads,
+      width: incomingLeads > 0 ? Math.max(2, Math.round((bookedLeads / incomingLeads) * 100)) : 0,
+      color: "bg-indigo-500"
+    },
+    {
+      label: "Потеряно",
+      value: lostLeads,
+      width: incomingLeads > 0 ? Math.max(2, Math.round((lostLeads / incomingLeads) * 100)) : 0,
+      color: "bg-rose-500"
+    }
+  ];
+  const recentConversationsLive = liveConversations.slice(0, 3).map((item) => ({
+    client: item.client,
+    channel: item.channel,
+    status: item.status,
+    summary: item.summary,
+    time: item.lastActivity
+  }));
   const filteredConversations = useMemo(
     () =>
-      inboxConversations.filter((item) => {
+      liveConversations.filter((item) => {
         const passStatus = statusFilter === "все" || item.status === statusFilter;
         const passChannel = channelFilter === "все" || item.channel === channelFilter;
         return passStatus && passChannel;
       }),
-    [statusFilter, channelFilter]
+    [statusFilter, channelFilter, liveConversations]
   );
 
   const selectedConversation =
@@ -1119,34 +1510,34 @@ export default function App() {
     () =>
       allStatuses.reduce<Record<string, number>>((acc, status) => {
         acc[status] =
-          status === "все" ? inboxConversations.length : inboxConversations.filter((item) => item.status === status).length;
+          status === "все" ? liveConversations.length : liveConversations.filter((item) => item.status === status).length;
         return acc;
       }, {}),
-    []
+    [liveConversations]
   );
 
   const channelCounts = useMemo(
     () =>
       allChannels.reduce<Record<string, number>>((acc, channel) => {
         acc[channel] =
-          channel === "все" ? inboxConversations.length : inboxConversations.filter((item) => item.channel === channel).length;
+          channel === "все" ? liveConversations.length : liveConversations.filter((item) => item.channel === channel).length;
         return acc;
       }, {}),
-    []
+    [liveConversations]
   );
 
   const leadStageCounts = useMemo(
     () =>
       leadStages.reduce<Record<string, number>>((acc, stage) => {
-        acc[stage] = stage === "все" ? leadRecords.length : leadRecords.filter((item) => item.stage === stage).length;
+        acc[stage] = stage === "все" ? liveLeadRecords.length : liveLeadRecords.filter((item) => item.stage === stage).length;
         return acc;
       }, {}),
-    []
+    [liveLeadRecords]
   );
 
   const filteredLeads = useMemo(() => {
     const normalizedQuery = leadQuery.trim().toLowerCase();
-    return leadRecords
+    return liveLeadRecords
       .filter((lead) => {
         const passQuery =
           normalizedQuery.length === 0 ||
@@ -1175,7 +1566,7 @@ export default function App() {
         const cmp = a.lastActivityMinutes - b.lastActivityMinutes;
         return leadSortDirection === "asc" ? cmp : -cmp;
       });
-  }, [leadQuery, leadStageFilter, leadChannelFilter, leadBookingFilter, leadSortBy, leadSortDirection]);
+  }, [leadQuery, leadStageFilter, leadChannelFilter, leadBookingFilter, leadSortBy, leadSortDirection, liveLeadRecords]);
 
   const boardLeads = useMemo(
     () =>
@@ -1509,6 +1900,14 @@ export default function App() {
   }, [subscription]);
 
   useEffect(() => {
+    saveServiceConnection(serviceConnection);
+  }, [serviceConnection]);
+
+  useEffect(() => {
+    saveServiceEvents(serviceEvents);
+  }, [serviceEvents]);
+
+  useEffect(() => {
     if (sitesFlowStatus !== "idle") return;
     setSitesGeneratedContent(buildFallbackSiteContent(selectedSitesTemplate, sitesAnswers));
   }, [sitesAnswers, sitesFlowStatus, selectedSitesTemplate]);
@@ -1519,10 +1918,58 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [uiNotice]);
 
+  useEffect(() => {
+    if (filteredConversations.length === 0) {
+      setSelectedConversationId("");
+      return;
+    }
+    if (!filteredConversations.some((item) => item.id === selectedConversationId)) {
+      setSelectedConversationId(filteredConversations[0].id);
+    }
+  }, [filteredConversations, selectedConversationId]);
+
   const selectedCheckoutPlan = planDefinitions.find((plan) => plan.id === checkoutPlanId) ?? null;
+  const navNeedsLiveData = ["Обзор", "Диалоги", "Лиды", "Аналитика", "Потерянные", "AI рекомендации"].includes(activeNav);
 
   function triggerNotice(message: string): void {
     setUiNotice(message);
+  }
+
+  async function importServiceEvents(file?: File): Promise<void> {
+    if (!file) return;
+    const text = await file.text();
+    try {
+      const parsed = JSON.parse(text) as unknown;
+      const events = parseServiceEvents(parsed);
+      setServiceEvents(events);
+      setServiceConnection((prev) => ({ ...prev, connectedAt: new Date().toISOString() }));
+      triggerNotice(events.length > 0 ? `Импортировано событий: ${events.length}` : "Файл прочитан, но валидные события не найдены.");
+    } catch {
+      triggerNotice("Не удалось прочитать JSON. Проверьте формат файла.");
+    }
+  }
+
+  async function syncServiceEvents(): Promise<void> {
+    if (!serviceConnection.endpoint.trim()) {
+      triggerNotice("Укажите endpoint сервиса в настройках подключения.");
+      return;
+    }
+    setServiceSyncLoading(true);
+    try {
+      const response = await fetch(serviceConnection.endpoint, {
+        headers: serviceConnection.token ? { Authorization: `Bearer ${serviceConnection.token}` } : undefined
+      });
+      if (!response.ok) throw new Error("HTTP error");
+      const data = (await response.json()) as unknown;
+      const events = parseServiceEvents(data);
+      setServiceEvents(events);
+      setServiceConnection((prev) => ({ ...prev, connectedAt: new Date().toISOString() }));
+      triggerNotice(`Синхронизация завершена. Событий: ${events.length}`);
+    } catch {
+      triggerNotice("Синхронизация не удалась. Используйте импорт JSON или проверьте endpoint/CORS.");
+    } finally {
+      setServiceSyncLoading(false);
+    }
   }
 
   function handleFeatureGuard(feature: PlanFeatureKey): boolean {
@@ -1665,7 +2112,39 @@ export default function App() {
                 {uiNotice}
               </div>
             ) : null}
-            {activeNav === "Диалоги" ? (
+            {!hasLiveData && navNeedsLiveData ? (
+              <section className="rounded-3xl border border-cyan-200 bg-cyan-50 p-6 shadow-sm">
+                <p className="text-xs font-bold uppercase tracking-[0.12em] text-cyan-700">Источник данных не подключен</p>
+                <h2 className="mt-2 text-2xl font-extrabold tracking-tight text-slate-900">Статистика будет считаться только по вашему сервису</h2>
+                <p className="mt-2 max-w-3xl text-sm text-slate-700">
+                  Фейковые метрики отключены. Подключите endpoint или импортируйте JSON-события сообщений, чтобы построить живые показатели по лидам, ответам и конверсии.
+                </p>
+                <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                  <button
+                    onClick={() => handleNavChange("Настройки")}
+                    className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white"
+                  >
+                    Подключить сервис
+                  </button>
+                  <button
+                    onClick={() => serviceImportRef.current?.click()}
+                    className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"
+                  >
+                    Импортировать JSON
+                  </button>
+                </div>
+                <input
+                  ref={serviceImportRef}
+                  type="file"
+                  accept="application/json"
+                  className="hidden"
+                  onChange={(event) => {
+                    void importServiceEvents(event.target.files?.[0]);
+                    event.currentTarget.value = "";
+                  }}
+                />
+              </section>
+            ) : activeNav === "Диалоги" ? (
               <div className="grid gap-4 xl:grid-cols-[220px_1fr_360px]">
                 <aside className={`${mobileInboxView === "detail" ? "hidden xl:block" : "block"} rounded-3xl border border-slate-200 bg-white p-4 shadow-sm`}>
                   <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Этапы лидов</p>
@@ -2171,7 +2650,7 @@ export default function App() {
                   </section>
                 ) : null}
                 <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                  {analyticsKpis.map((kpi) => (
+                  {analyticsKpisLive.map((kpi) => (
                     <div key={kpi.label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                       <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">{kpi.label}</p>
                       <p className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900">{kpi.value}</p>
@@ -2188,7 +2667,7 @@ export default function App() {
                     </div>
                     <div className="h-64 sm:h-72">
                       <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={analyticsTrendData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                        <LineChart data={analyticsTrendDataLive} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                           <CartesianGrid stroke="#e2e8f0" strokeDasharray="4 4" />
                           <XAxis dataKey="day" tick={{ fill: "#64748b", fontSize: 12 }} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={28} />
                           <YAxis tick={{ fill: "#64748b", fontSize: 12 }} axisLine={false} tickLine={false} />
@@ -2226,7 +2705,7 @@ export default function App() {
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
                           <Pie
-                            data={analyticsConversionData}
+                            data={analyticsConversionDataLive}
                             dataKey="value"
                             nameKey="name"
                             cx="50%"
@@ -2236,7 +2715,7 @@ export default function App() {
                             paddingAngle={3}
                             animationDuration={1200}
                           >
-                            {analyticsConversionData.map((entry) => (
+                            {analyticsConversionDataLive.map((entry) => (
                               <Cell
                                 key={entry.name}
                                 fill={entry.name === "Записано" ? analyticsPalette.donutBooked : analyticsPalette.donutLost}
@@ -2266,7 +2745,7 @@ export default function App() {
                     <h3 className="mt-1 text-lg font-bold tracking-tight text-slate-900">Переход по этапам обработки</h3>
                     <div className="mt-3 h-64 sm:h-72">
                       <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={analyticsFunnelData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                        <BarChart data={analyticsFunnelDataLive} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                           <CartesianGrid stroke="#e2e8f0" strokeDasharray="4 4" />
                           <XAxis dataKey="stage" tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} interval={0} />
                           <YAxis tick={{ fill: "#64748b", fontSize: 12 }} axisLine={false} tickLine={false} />
@@ -2284,7 +2763,7 @@ export default function App() {
                       <p className="mt-1 text-sm text-slate-600">Худшее значение недели: {worstResponse} сек</p>
                       <div className="mt-3 h-24">
                         <ResponsiveContainer width="100%" height="100%">
-                          <LineChart data={analyticsResponseTrend}>
+                          <LineChart data={analyticsResponseTrendLive}>
                             <Line
                               type="monotone"
                               dataKey="seconds"
@@ -2358,7 +2837,7 @@ export default function App() {
                     <h3 className="mt-1 text-lg font-bold tracking-tight text-slate-900">Сравнение по Telegram, WhatsApp, Instagram и сайту</h3>
                     <div className="mt-3 h-64 sm:h-72">
                       <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={analyticsChannelData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                        <BarChart data={analyticsChannelDataLive} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                           <CartesianGrid stroke="#e2e8f0" strokeDasharray="4 4" />
                           <XAxis dataKey="channel" tick={{ fill: "#64748b", fontSize: 12 }} axisLine={false} tickLine={false} />
                           <YAxis tick={{ fill: "#64748b", fontSize: 12 }} axisLine={false} tickLine={false} />
@@ -2375,14 +2854,17 @@ export default function App() {
                     <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">AI Insights</p>
                     <h3 className="mt-1 text-lg font-bold tracking-tight text-slate-900">Рекомендации по росту конверсии</h3>
                     <div className="mt-3 space-y-2">
-                      {analyticsInsights.map((insight) => (
+                      {analyticsInsightsLive.map((insight) => (
                         <div key={insight} className="rounded-xl border border-cyan-100 bg-cyan-50 p-3 text-sm text-slate-700">
                           {insight}
                         </div>
                       ))}
                     </div>
                     <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
-                      Последнее обновление аналитики: сегодня, 10:42
+                      Последнее обновление аналитики:{" "}
+                      {serviceConnection.connectedAt
+                        ? new Date(serviceConnection.connectedAt).toLocaleString("ru-RU")
+                        : "нет синхронизации"}
                     </div>
                   </div>
                 </section>
@@ -2409,22 +2891,22 @@ export default function App() {
                   <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                     <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Активные рекомендации</p>
                     <p className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900">{aiRecommendationsFeed.length}</p>
-                    <p className="mt-1 text-sm text-slate-600">Критичных: 1, высокого приоритета: 2</p>
+                    <p className="mt-1 text-sm text-slate-600">Сформированы по вашим текущим данным</p>
                   </div>
                   <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                     <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Лиды для recovery</p>
-                    <p className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900">12</p>
-                    <p className="mt-1 text-sm text-slate-600">Требуют повторного касания сегодня</p>
+                    <p className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900">{lostLeads}</p>
+                    <p className="mt-1 text-sm text-slate-600">Требуют повторного касания</p>
                   </div>
                   <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                     <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Потенциал роста</p>
-                    <p className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900">+4.6 п.п.</p>
-                    <p className="mt-1 text-sm text-slate-600">Оценка прироста конверсии в запись</p>
+                    <p className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900">+{Math.max(1, Math.round(conversionPercent * 0.2))} п.п.</p>
+                    <p className="mt-1 text-sm text-slate-600">Оценка прироста конверсии</p>
                   </div>
                   <div className="rounded-2xl border border-cyan-200 bg-cyan-50 p-4 shadow-sm">
                     <p className="text-xs font-bold uppercase tracking-[0.12em] text-cyan-700">Потенциальный эффект</p>
-                    <p className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900">до 84 000 ₽</p>
-                    <p className="mt-1 text-sm text-slate-700">Дополнительная выручка в месяц</p>
+                    <p className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900">{formatRub(Math.round(lostRevenueSnapshot.estimatedRevenue * 0.35))}</p>
+                    <p className="mt-1 text-sm text-slate-700">Потенциальный возврат выручки</p>
                   </div>
                 </section>
 
@@ -3101,6 +3583,86 @@ export default function App() {
             ) : activeNav === "Настройки" ? (
               <div className="space-y-4">
                 <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Источник данных</p>
+                  <h2 className="mt-1 text-xl font-extrabold tracking-tight text-slate-900">Подключить свой сервис</h2>
+                  <p className="mt-2 text-sm text-slate-600">
+                    Личный кабинет считает метрики только по вашим событиям сообщений. Поддерживается синхронизация через endpoint и импорт JSON.
+                  </p>
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    <label>
+                      <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Название сервиса</span>
+                      <input
+                        value={serviceConnection.serviceName}
+                        onChange={(event) => setServiceConnection((prev) => ({ ...prev, serviceName: event.target.value }))}
+                        placeholder="Например: Telegram Sales Bot"
+                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
+                      />
+                    </label>
+                    <label>
+                      <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Endpoint событий</span>
+                      <input
+                        value={serviceConnection.endpoint}
+                        onChange={(event) => setServiceConnection((prev) => ({ ...prev, endpoint: event.target.value }))}
+                        placeholder="https://your-service.com/events"
+                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
+                      />
+                    </label>
+                    <label className="md:col-span-2">
+                      <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">API Token (опционально)</span>
+                      <input
+                        value={serviceConnection.token}
+                        onChange={(event) => setServiceConnection((prev) => ({ ...prev, token: event.target.value }))}
+                        placeholder="Bearer token"
+                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
+                      />
+                    </label>
+                  </div>
+                  <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                    <button
+                      onClick={() => void syncServiceEvents()}
+                      disabled={serviceSyncLoading}
+                      className="w-full rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60 sm:w-auto"
+                    >
+                      {serviceSyncLoading ? "Синхронизация..." : "Синхронизировать"}
+                    </button>
+                    <button
+                      onClick={() => serviceImportRef.current?.click()}
+                      className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 sm:w-auto"
+                    >
+                      Импорт JSON
+                    </button>
+                    <button
+                      onClick={() => {
+                        setServiceEvents([]);
+                        setServiceConnection((prev) => ({ ...prev, connectedAt: null }));
+                        triggerNotice("Данные сервиса очищены.");
+                      }}
+                      className="w-full rounded-xl border border-rose-300 bg-white px-4 py-2.5 text-sm font-semibold text-rose-700 sm:w-auto"
+                    >
+                      Очистить данные
+                    </button>
+                  </div>
+                  <input
+                    ref={serviceImportRef}
+                    type="file"
+                    accept="application/json"
+                    className="hidden"
+                    onChange={(event) => {
+                      void importServiceEvents(event.target.files?.[0]);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                  <div className="mt-3 rounded-2xl border border-cyan-200 bg-cyan-50 p-3 text-xs text-cyan-900">
+                    Событий в системе: <span className="font-bold">{serviceEvents.length}</span>
+                    {serviceConnection.connectedAt ? (
+                      <span> • Последняя синхронизация: {new Date(serviceConnection.connectedAt).toLocaleString("ru-RU")}</span>
+                    ) : (
+                      <span> • Синхронизация ещё не выполнялась</span>
+                    )}
+                  </div>
+                </section>
+
+                <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
                   <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Подписка</p>
                   <h2 className="mt-1 text-xl font-extrabold tracking-tight text-slate-900">Тариф и активация</h2>
                   <p className="mt-2 text-sm text-slate-600">
@@ -3348,7 +3910,7 @@ export default function App() {
                       />
                     </svg>
                     <div className="mt-2 hidden grid-cols-12 text-center text-xs text-slate-500 sm:grid">
-                      {leadDays.map((d) => (
+                      {overviewLeadDays.map((d) => (
                         <span key={d}>{d}</span>
                       ))}
                     </div>
@@ -3357,7 +3919,7 @@ export default function App() {
                   <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
                     <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Воронка лидов</p>
                     <div className="mt-4 space-y-4">
-                      {funnel.map((step) => (
+                      {overviewFunnel.map((step) => (
                         <div key={step.label}>
                           <div className="mb-1 flex items-center justify-between text-xs text-slate-600">
                             <span>{step.label}</span>
@@ -3384,7 +3946,7 @@ export default function App() {
                       </button>
                     </div>
                     <div className="mt-4 space-y-3">
-                      {recentConversations.map((c) => (
+                      {recentConversationsLive.map((c) => (
                         <div key={`${c.client}-${c.time}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                           <div className="flex items-center justify-between">
                             <p className="font-semibold text-slate-900">{c.client}</p>
