@@ -12,6 +12,10 @@ function openRouterMiddleware() {
     "Стиль: спокойно, профессионально, конкретно, без хайпа. " +
     "Фокус: лиды, запись, квалификация, follow-up, конверсия, аналитика. " +
     "Следующий шаг должен быть чётким действием.";
+  const sitesSystemPrompt =
+    "Ты senior UX-copywriter для премиального B2B SaaS. " +
+    "Пиши только по-русски, без hype, без клише. " +
+    "Верни строго JSON без markdown и без пояснений.";
 
   const pickNextStep = (context: string) => {
     const text = context.toLowerCase();
@@ -64,7 +68,9 @@ function openRouterMiddleware() {
   };
 
   const handler = async (req: any, res: any, next: () => void) => {
-    if (req.method !== "POST" || req.url !== "/api/openrouter/chat") {
+    const isChatRoute = req.method === "POST" && req.url === "/api/openrouter/chat";
+    const isSitesRoute = req.method === "POST" && req.url === "/api/openrouter/sites-copy";
+    if (!isChatRoute && !isSitesRoute) {
       next();
       return;
     }
@@ -95,12 +101,12 @@ function openRouterMiddleware() {
           Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
           "HTTP-Referer": referer,
-          "X-Title": "ClientsFlow MVP"
+          "X-Title": isSitesRoute ? "ClientsFlow Sites" : "ClientsFlow MVP"
         },
         body: JSON.stringify({
           model,
-          temperature: 0.35,
-          messages: [{ role: "system", content: systemPrompt }, ...messages]
+          temperature: isSitesRoute ? 0.4 : 0.35,
+          messages: [{ role: "system", content: isSitesRoute ? sitesSystemPrompt : systemPrompt }, ...messages]
         })
       });
 
@@ -113,8 +119,6 @@ function openRouterMiddleware() {
       }
 
       const content = data?.choices?.[0]?.message?.content;
-      const lastUserMessage = [...messages].reverse().find((item: any) => item?.role === "user");
-      const userContext = extractUserText(lastUserMessage?.content);
       const reply =
         typeof content === "string"
           ? content
@@ -124,7 +128,13 @@ function openRouterMiddleware() {
 
       res.statusCode = 200;
       res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ reply: formatSalesReply(reply, userContext), mode: "openrouter", model }));
+      if (isSitesRoute) {
+        res.end(JSON.stringify({ reply, mode: "openrouter", model }));
+      } else {
+        const lastUserMessage = [...messages].reverse().find((item: any) => item?.role === "user");
+        const userContext = extractUserText(lastUserMessage?.content);
+        res.end(JSON.stringify({ reply: formatSalesReply(reply, userContext), mode: "openrouter", model }));
+      }
     } catch (error: any) {
       res.statusCode = 500;
       res.setHeader("Content-Type", "application/json");

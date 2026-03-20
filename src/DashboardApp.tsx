@@ -106,6 +106,34 @@ type SitesTemplate = {
   description: string;
   suitableFor: string[];
   styleLabel: string;
+  previewTheme: {
+    gradientFrom: string;
+    gradientTo: string;
+    accent: string;
+    surface: string;
+  };
+  heroPattern: string;
+};
+
+type SitesQuestion = {
+  id: string;
+  label: string;
+  placeholder: string;
+  hint: string;
+};
+
+type GeneratedSiteContent = {
+  heroTitle: string;
+  heroSubtitle: string;
+  primaryCta: string;
+  secondaryCta: string;
+  valueProps: string[];
+  services: string[];
+  about: string;
+  processSteps: string[];
+  faq: Array<{ q: string; a: string }>;
+  finalCtaTitle: string;
+  finalCtaText: string;
 };
 
 type PlanFeatureKey = "advancedAnalytics" | "aiRecommendations" | "sitesBuilder" | "lostRecovery";
@@ -743,41 +771,130 @@ const aiImpactEstimation = [
 
 const sitesTemplates: SitesTemplate[] = [
   {
-    id: "beauty-premium",
-    name: "Beauty Premium",
-    description: "Чистый премиальный лендинг для салонов красоты и nail-студий.",
-    suitableFor: ["Салоны красоты", "Nail-студии"],
-    styleLabel: "Светлый / premium"
+    id: "clarity-one",
+    name: "Clarity One",
+    description: "Универсальный премиальный шаблон для сервисного бизнеса с акцентом на доверие и запись.",
+    suitableFor: ["Салоны", "Клиники", "Локальные сервисы", "Консультанты"],
+    styleLabel: "Светлый / деловой",
+    previewTheme: {
+      gradientFrom: "from-cyan-100/70",
+      gradientTo: "to-slate-100",
+      accent: "bg-cyan-600",
+      surface: "bg-white"
+    },
+    heroPattern: "Акцент на конверсии и прозрачной записи"
   },
   {
-    id: "barber-urban",
-    name: "Barber Urban",
-    description: "Акцент на услугах, мастерах и удобной онлайн-записи.",
-    suitableFor: ["Барбершопы", "Локальные студии"],
-    styleLabel: "Контрастный / bold"
+    id: "service-pro",
+    name: "Service Pro",
+    description: "Структура для компаний с большим потоком заявок и повторных обращений.",
+    suitableFor: ["Барбершопы", "Автосервисы", "Ремонт", "Локальный сервис"],
+    styleLabel: "Контрастный / операционный",
+    previewTheme: {
+      gradientFrom: "from-slate-200",
+      gradientTo: "to-cyan-100/70",
+      accent: "bg-slate-900",
+      surface: "bg-slate-50"
+    },
+    heroPattern: "Фокус на скорости ответа и маршруте клиента"
   },
   {
-    id: "clinic-trust",
-    name: "Clinic Trust",
-    description: "Доверительная подача, блоки квалификации и сценарии записи.",
-    suitableFor: ["Клиники", "Медицинский сервис"],
-    styleLabel: "Нейтральный / экспертный"
+    id: "trust-medical",
+    name: "Trust Medical",
+    description: "Спокойная экспертная подача для медицины, диагностики и персональных практик.",
+    suitableFor: ["Клиники", "Стоматология", "Психология", "Wellness"],
+    styleLabel: "Нейтральный / экспертный",
+    previewTheme: {
+      gradientFrom: "from-blue-100/80",
+      gradientTo: "to-white",
+      accent: "bg-blue-700",
+      surface: "bg-white"
+    },
+    heroPattern: "Акцент на компетентности и безопасной коммуникации"
   },
   {
-    id: "expert-focus",
-    name: "Expert Focus",
-    description: "Лаконичная структура для частных специалистов и консультантов.",
-    suitableFor: ["Эксперты", "Самозанятые"],
-    styleLabel: "Минималистичный"
+    id: "expert-signature",
+    name: "Expert Signature",
+    description: "Персональный стиль для экспертов, коучей и студий с высоким средним чеком.",
+    suitableFor: ["Эксперты", "Консультанты", "Онлайн-услуги", "Авторские студии"],
+    styleLabel: "Минималистичный / premium",
+    previewTheme: {
+      gradientFrom: "from-violet-100/60",
+      gradientTo: "to-rose-100/60",
+      accent: "bg-violet-700",
+      surface: "bg-white"
+    },
+    heroPattern: "Сильный личный бренд и точный оффер"
   }
 ];
 
 const sitesFlowSteps = [
   "Выбор шаблона",
-  "Заполнение данных бизнеса",
-  "AI-переписывание контента",
+  "Бриф из 10 вопросов",
+  "Генерация контента",
   "Публикация сайта"
 ];
+
+const sitesQuestions: SitesQuestion[] = [
+  { id: "businessType", label: "1. Чем вы занимаетесь?", placeholder: "Например: салон красоты / клиника / барбершоп", hint: "Это влияет на структуру услуг и блоки доверия." },
+  { id: "businessName", label: "2. Название бизнеса", placeholder: "Например: Studio Nova", hint: "Будет использовано в заголовке и в контактах." },
+  { id: "city", label: "3. Город или район", placeholder: "Например: Москва, Хамовники", hint: "Поможет сделать текст более локальным и релевантным." },
+  { id: "mainOffer", label: "4. Ключевая услуга", placeholder: "Например: окрашивание и восстановление волос", hint: "Станет центральным оффером на первом экране." },
+  { id: "audience", label: "5. Кто ваш основной клиент?", placeholder: "Например: женщины 25-40, которым важен аккуратный сервис", hint: "Помогает задать правильный тон и акценты." },
+  { id: "priceRange", label: "6. Диапазон чека", placeholder: "Например: от 3 500 до 7 000 ₽", hint: "Нужен для честного ценового позиционирования." },
+  { id: "advantages", label: "7. Ваши сильные стороны", placeholder: "Например: опыт мастеров, стерильность, быстрый ответ", hint: "Ляжет в блок преимуществ." },
+  { id: "channels", label: "8. Каналы связи", placeholder: "Например: WhatsApp, Telegram, Instagram, сайт", hint: "Будет отражено в контактах и CTA." },
+  { id: "goal", label: "9. Главная цель сайта", placeholder: "Например: больше записей на первичную консультацию", hint: "Определяет главное действие на сайте." },
+  { id: "tone", label: "10. Тон коммуникации", placeholder: "Например: спокойно, уверенно, премиально", hint: "Определяет стиль заголовков и формулировок." }
+];
+
+const defaultSitesAnswers: Record<string, string> = {
+  businessType: "Салон красоты",
+  businessName: "Studio Nova",
+  city: "Москва",
+  mainOffer: "Окрашивание и комплексный уход",
+  audience: "Женщины 25-40, которые ценят аккуратный сервис",
+  priceRange: "от 3 500 до 7 000 ₽",
+  advantages: "Опыт мастеров, прозрачные цены, ответ в течение 2 минут",
+  channels: "WhatsApp, Telegram, Instagram",
+  goal: "Больше записей на первую услугу",
+  tone: "Премиально и спокойно"
+};
+
+function buildFallbackSiteContent(
+  template: SitesTemplate,
+  answers: Record<string, string>
+): GeneratedSiteContent {
+  return {
+    heroTitle: `${answers.businessName} — ${answers.mainOffer.toLowerCase()} без лишних ожиданий`,
+    heroSubtitle: `${answers.businessType} в ${answers.city}. Помогаем клиенту быстро понять формат услуги и записаться в удобное время.`,
+    primaryCta: "Оставить заявку",
+    secondaryCta: "Посмотреть услуги",
+    valueProps: [
+      `Ответ по заявке в течение 2 минут через ${answers.channels}.`,
+      `Прозрачный диапазон стоимости: ${answers.priceRange}.`,
+      `Сервис под аудиторию: ${answers.audience}.`
+    ],
+    services: [
+      `${answers.mainOffer}`,
+      "Первичная консультация",
+      "Сопровождение до результата"
+    ],
+    about: `${answers.businessName} — это ${answers.businessType.toLowerCase()} с акцентом на сервис и понятную коммуникацию. Наши сильные стороны: ${answers.advantages}.`,
+    processSteps: [
+      "Оставляете заявку на сайте",
+      "Получаете быстрый ответ и уточнение задачи",
+      "Подтверждаете удобное время и приходите на услугу"
+    ],
+    faq: [
+      { q: "Как быстро вы отвечаете на заявку?", a: "Обычно в течение 2 минут в рабочие часы, в остальное время — с ранним приоритетом." },
+      { q: "Можно ли уточнить стоимость заранее?", a: `Да, сразу даем рабочий диапазон: ${answers.priceRange} и объясняем, от чего зависит финальная стоимость.` },
+      { q: "Как записаться?", a: "Оставьте заявку в форме или напишите в удобный канал связи — мы предложим ближайшие окна." }
+    ],
+    finalCtaTitle: `${template.name}: готово к публикации за 5 минут`,
+    finalCtaText: `Цель сайта: ${answers.goal}. Подключите форму и передавайте лиды прямо в ClientsFlow.`
+  };
+}
 
 const analyticsPalette = {
   incoming: "#0ea5e9",
@@ -855,14 +972,14 @@ export default function App() {
   const [lostRevenuePeriod, setLostRevenuePeriod] = useState<"7d" | "30d">("7d");
   const [aiActionMessage, setAiActionMessage] = useState<string | null>(null);
   const [sitesTemplateId, setSitesTemplateId] = useState<string>(sitesTemplates[0].id);
-  const [sitesBusinessType, setSitesBusinessType] = useState("Салон красоты");
-  const [sitesBusinessName, setSitesBusinessName] = useState("Studio Nova");
-  const [sitesCity, setSitesCity] = useState("Москва");
-  const [sitesMainOffer, setSitesMainOffer] = useState("Окрашивание и комплексный уход");
-  const [sitesTone, setSitesTone] = useState("Премиально и спокойно");
+  const [sitesAnswers, setSitesAnswers] = useState<Record<string, string>>(defaultSitesAnswers);
+  const [sitesGeneratedContent, setSitesGeneratedContent] = useState<GeneratedSiteContent>(() =>
+    buildFallbackSiteContent(sitesTemplates[0], defaultSitesAnswers)
+  );
   const [sitesFlowStatus, setSitesFlowStatus] = useState<"idle" | "generating" | "ready" | "published">("idle");
   const [sitesGenerationProgress, setSitesGenerationProgress] = useState(0);
   const [sitesActionMessage, setSitesActionMessage] = useState<string | null>(null);
+  const [sitesLastGenerationMode, setSitesLastGenerationMode] = useState<"ai" | "fallback" | null>(null);
   const [mobileInboxView, setMobileInboxView] = useState<"list" | "detail">("list");
   const [subscription, setSubscription] = useState<SubscriptionState>(() => loadSubscription());
   const [checkoutPlanId, setCheckoutPlanId] = useState<PlanDefinition["id"] | null>(null);
@@ -929,8 +1046,8 @@ export default function App() {
   const worstResponse = Math.max(...analyticsResponseTrend.map((point) => point.seconds));
   const lostRevenueSnapshot = lostRevenueByPeriod[lostRevenuePeriod];
   const selectedSitesTemplate = sitesTemplates.find((item) => item.id === sitesTemplateId) ?? sitesTemplates[0];
-  const generatedSitesHeadline = `${sitesBusinessName} — ${sitesMainOffer.toLowerCase()} с удобной онлайн-записью`;
-  const generatedSitesSubheadline = `${sitesBusinessType} в ${sitesCity}. Быстрый ответ на обращения, понятные цены и запись в 1 шаг.`;
+  const generatedSitesHeadline = sitesGeneratedContent.heroTitle;
+  const generatedSitesSubheadline = sitesGeneratedContent.heroSubtitle;
   const chartTooltipStyle = {
     borderRadius: "14px",
     border: "1px solid #e2e8f0",
@@ -1101,27 +1218,140 @@ export default function App() {
     setMobileInboxView("list");
   }
 
-  useEffect(() => {
-    if (sitesFlowStatus !== "generating") return;
+  function updateSitesAnswer(fieldId: string, value: string): void {
+    setSitesAnswers((prev) => ({ ...prev, [fieldId]: value }));
+  }
 
-    const timer = window.setInterval(() => {
-      setSitesGenerationProgress((prev) => {
-        const next = Math.min(prev + 20, 100);
-        if (next >= 100) {
-          window.clearInterval(timer);
-          setSitesFlowStatus("ready");
-          setSitesActionMessage("Сайт сгенерирован. Проверьте контент и нажмите «Опубликовать».");
-        }
-        return next;
+  function toStringArray(value: unknown, fallback: string[]): string[] {
+    if (!Array.isArray(value)) return fallback;
+    const normalized = value
+      .map((item) => (typeof item === "string" ? item.trim() : ""))
+      .filter(Boolean)
+      .slice(0, Math.max(fallback.length, 3));
+    return normalized.length > 0 ? normalized : fallback;
+  }
+
+  function toFaqArray(value: unknown, fallback: Array<{ q: string; a: string }>): Array<{ q: string; a: string }> {
+    if (!Array.isArray(value)) return fallback;
+    const normalized = value
+      .map((item) => {
+        const record = item as { q?: unknown; a?: unknown };
+        const q = typeof record.q === "string" ? record.q.trim() : "";
+        const a = typeof record.a === "string" ? record.a.trim() : "";
+        if (!q || !a) return null;
+        return { q, a };
+      })
+      .filter((item): item is { q: string; a: string } => Boolean(item))
+      .slice(0, 4);
+    return normalized.length > 0 ? normalized : fallback;
+  }
+
+  function sanitizeGeneratedContent(
+    candidate: Partial<GeneratedSiteContent> | null,
+    fallback: GeneratedSiteContent
+  ): GeneratedSiteContent {
+    if (!candidate) return fallback;
+    return {
+      heroTitle: typeof candidate.heroTitle === "string" && candidate.heroTitle.trim() ? candidate.heroTitle.trim() : fallback.heroTitle,
+      heroSubtitle:
+        typeof candidate.heroSubtitle === "string" && candidate.heroSubtitle.trim() ? candidate.heroSubtitle.trim() : fallback.heroSubtitle,
+      primaryCta: typeof candidate.primaryCta === "string" && candidate.primaryCta.trim() ? candidate.primaryCta.trim() : fallback.primaryCta,
+      secondaryCta:
+        typeof candidate.secondaryCta === "string" && candidate.secondaryCta.trim() ? candidate.secondaryCta.trim() : fallback.secondaryCta,
+      valueProps: toStringArray(candidate.valueProps, fallback.valueProps),
+      services: toStringArray(candidate.services, fallback.services),
+      about: typeof candidate.about === "string" && candidate.about.trim() ? candidate.about.trim() : fallback.about,
+      processSteps: toStringArray(candidate.processSteps, fallback.processSteps),
+      faq: toFaqArray(candidate.faq, fallback.faq),
+      finalCtaTitle:
+        typeof candidate.finalCtaTitle === "string" && candidate.finalCtaTitle.trim()
+          ? candidate.finalCtaTitle.trim()
+          : fallback.finalCtaTitle,
+      finalCtaText:
+        typeof candidate.finalCtaText === "string" && candidate.finalCtaText.trim()
+          ? candidate.finalCtaText.trim()
+          : fallback.finalCtaText
+    };
+  }
+
+  function parseJsonFromText(text: string): Partial<GeneratedSiteContent> | null {
+    if (!text.trim()) return null;
+    const direct = text.trim();
+    const start = direct.indexOf("{");
+    const end = direct.lastIndexOf("}");
+    const source = start >= 0 && end > start ? direct.slice(start, end + 1) : direct;
+    try {
+      return JSON.parse(source) as Partial<GeneratedSiteContent>;
+    } catch {
+      return null;
+    }
+  }
+
+  async function generateSitesWithAi(): Promise<void> {
+    const baseFallback = buildFallbackSiteContent(selectedSitesTemplate, sitesAnswers);
+    const prompt = [
+      "Сгенерируй контент для лендинга малого бизнеса в России.",
+      "Верни строго JSON без markdown.",
+      "Тон: премиально, спокойно, профессионально, без хайпа.",
+      "Избегай слов: AI, ИИ, нейросеть, революция, магия.",
+      "Структура JSON:",
+      "{\"heroTitle\":\"\",\"heroSubtitle\":\"\",\"primaryCta\":\"\",\"secondaryCta\":\"\",\"valueProps\":[\"\",\"\",\"\"],\"services\":[\"\",\"\",\"\"],\"about\":\"\",\"processSteps\":[\"\",\"\",\"\"],\"faq\":[{\"q\":\"\",\"a\":\"\"},{\"q\":\"\",\"a\":\"\"},{\"q\":\"\",\"a\":\"\"}],\"finalCtaTitle\":\"\",\"finalCtaText\":\"\"}",
+      `Шаблон: ${selectedSitesTemplate.name}. Стиль: ${selectedSitesTemplate.styleLabel}.`,
+      `Данные бизнеса: ${JSON.stringify(sitesAnswers, null, 2)}`
+    ].join("\n");
+
+    setSitesFlowStatus("generating");
+    setSitesGenerationProgress(12);
+    setSitesActionMessage("Готовим структуру и тексты на основе вашего брифа.");
+    setSitesLastGenerationMode(null);
+
+    const progress1 = window.setTimeout(() => setSitesGenerationProgress(34), 300);
+    const progress2 = window.setTimeout(() => setSitesGenerationProgress(58), 700);
+    const progress3 = window.setTimeout(() => setSitesGenerationProgress(82), 1200);
+
+    try {
+      const response = await fetch("/api/openrouter/sites-copy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [{ role: "user", content: prompt }]
+        })
       });
-    }, 450);
 
-    return () => window.clearInterval(timer);
-  }, [sitesFlowStatus]);
+      if (!response.ok) {
+        throw new Error(`OpenRouter status ${response.status}`);
+      }
+
+      const data = (await response.json()) as { reply?: string };
+      const parsed = parseJsonFromText(data.reply ?? "");
+      const normalized = sanitizeGeneratedContent(parsed, baseFallback);
+
+      setSitesGeneratedContent(normalized);
+      setSitesLastGenerationMode("ai");
+      setSitesGenerationProgress(100);
+      setSitesFlowStatus("ready");
+      setSitesActionMessage("Контент сгенерирован. Проверьте предпросмотр и публикуйте.");
+    } catch {
+      setSitesGeneratedContent(baseFallback);
+      setSitesLastGenerationMode("fallback");
+      setSitesGenerationProgress(100);
+      setSitesFlowStatus("ready");
+      setSitesActionMessage("Сеть недоступна, применён надежный шаблонный вариант. Можно публиковать или перегенерировать.");
+    } finally {
+      window.clearTimeout(progress1);
+      window.clearTimeout(progress2);
+      window.clearTimeout(progress3);
+    }
+  }
 
   useEffect(() => {
     saveSubscription(subscription);
   }, [subscription]);
+
+  useEffect(() => {
+    if (sitesFlowStatus !== "idle") return;
+    setSitesGeneratedContent(buildFallbackSiteContent(selectedSitesTemplate, sitesAnswers));
+  }, [sitesAnswers, sitesFlowStatus, selectedSitesTemplate]);
 
   useEffect(() => {
     if (!uiNotice) return;
@@ -2276,112 +2506,131 @@ export default function App() {
 
                 <section className="grid gap-4 xl:grid-cols-2">
                   <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                    <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Анкета бизнеса</p>
-                    <h3 className="mt-1 text-lg font-bold tracking-tight text-slate-900">Данные вашего бизнеса</h3>
+                    <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Бриф для генерации</p>
+                    <h3 className="mt-1 text-lg font-bold tracking-tight text-slate-900">Ответьте на 10 вопросов</h3>
+                    <p className="mt-2 text-sm text-slate-600">
+                      На основе этих ответов сервис перепишет тексты сайта под ваш бизнес и выбранный шаблон.
+                    </p>
                     <div className="mt-4 grid gap-3">
-                      <label className="block">
-                        <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Тип бизнеса</span>
-                        <select
-                          value={sitesBusinessType}
-                          onChange={(e) => setSitesBusinessType(e.target.value)}
-                          className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-900"
-                        >
-                          <option>Салон красоты</option>
-                          <option>Барбершоп</option>
-                          <option>Nail-студия</option>
-                          <option>Локальный бизнес</option>
-                          <option>Самозанятый специалист</option>
-                        </select>
-                      </label>
-
-                      <label className="block">
-                        <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Название</span>
-                        <input
-                          value={sitesBusinessName}
-                          onChange={(e) => setSitesBusinessName(e.target.value)}
-                          className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-900"
-                        />
-                      </label>
-
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <label className="block">
-                          <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Город</span>
+                      {sitesQuestions.map((question) => (
+                        <label key={question.id} className="block rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                          <span className="block text-sm font-semibold text-slate-900">{question.label}</span>
+                          <span className="mt-1 block text-xs text-slate-500">{question.hint}</span>
                           <input
-                            value={sitesCity}
-                            onChange={(e) => setSitesCity(e.target.value)}
-                            className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-900"
+                            value={sitesAnswers[question.id] ?? ""}
+                            onChange={(event) => updateSitesAnswer(question.id, event.target.value)}
+                            placeholder={question.placeholder}
+                            className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-900"
                           />
                         </label>
-                        <label className="block">
-                          <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Тон текста</span>
-                          <select
-                            value={sitesTone}
-                            onChange={(e) => setSitesTone(e.target.value)}
-                            className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-900"
-                          >
-                            <option>Премиально и спокойно</option>
-                            <option>Дружелюбно и понятно</option>
-                            <option>Экспертно и уверенно</option>
-                          </select>
-                        </label>
-                      </div>
-
-                      <label className="block">
-                        <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Ключевая услуга</span>
-                        <input
-                          value={sitesMainOffer}
-                          onChange={(e) => setSitesMainOffer(e.target.value)}
-                          className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-900"
-                        />
-                      </label>
+                      ))}
                     </div>
 
                     <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                       <button
                         onClick={() => {
-                          setSitesFlowStatus("generating");
-                          setSitesGenerationProgress(10);
-                          setSitesActionMessage("AI подготавливает структуру, заголовки и блоки сайта.");
+                          void generateSitesWithAi();
                         }}
                         disabled={sitesFlowStatus === "generating"}
                         className="w-full rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                       >
-                        {sitesFlowStatus === "generating" ? "Генерируем..." : "Сгенерировать сайт"}
+                        {sitesFlowStatus === "generating" ? "Генерируем контент..." : "Сгенерировать тексты и сайт"}
                       </button>
                       <button
                         onClick={() => {
+                          setSitesAnswers(defaultSitesAnswers);
+                          const fallback = buildFallbackSiteContent(selectedSitesTemplate, defaultSitesAnswers);
+                          setSitesGeneratedContent(fallback);
                           setSitesFlowStatus("idle");
                           setSitesGenerationProgress(0);
-                          setSitesActionMessage("Черновик сброшен. Можно сгенерировать новую версию.");
+                          setSitesLastGenerationMode(null);
+                          setSitesActionMessage("Бриф сброшен к стартовым данным. Можно собрать новый вариант.");
                         }}
                         className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-500 sm:w-auto"
                       >
-                        Сбросить
+                        Сбросить бриф
                       </button>
                     </div>
                   </div>
 
                   <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                    <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Предпросмотр AI-контента</p>
-                    <h3 className="mt-1 text-lg font-bold tracking-tight text-slate-900">Предпросмотр сайта</h3>
-                    <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <p className="text-xs font-semibold text-cyan-700">{selectedSitesTemplate.name}</p>
-                      <h4 className="mt-1 text-xl font-extrabold tracking-tight text-slate-900">{generatedSitesHeadline}</h4>
-                      <p className="mt-2 text-sm text-slate-600">{generatedSitesSubheadline}</p>
-                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                        <div className="rounded-xl border border-slate-200 bg-white p-3">
-                          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">О нас</p>
-                          <p className="mt-1 text-sm text-slate-700">
-                            {sitesBusinessName} помогает клиентам получать результат быстрее за счет прозрачного сервиса и понятной записи.
-                          </p>
-                        </div>
-                        <div className="rounded-xl border border-slate-200 bg-white p-3">
-                          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">CTA</p>
-                          <p className="mt-1 text-sm text-slate-700">Оставьте заявку и получите подтверждение записи в течение 2 минут.</p>
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Реальный предпросмотр</p>
+                        <h3 className="mt-1 text-lg font-bold tracking-tight text-slate-900">Как будет выглядеть сайт</h3>
+                      </div>
+                      <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-[11px] font-semibold text-cyan-700">
+                        {sitesLastGenerationMode === "ai" ? "Сгенерировано по брифу" : sitesLastGenerationMode === "fallback" ? "Шаблонный вариант" : "Черновик"}
+                      </span>
+                    </div>
+
+                    <div className={`mt-4 overflow-hidden rounded-2xl border border-slate-200 ${selectedSitesTemplate.previewTheme.surface}`}>
+                      <div className={`bg-gradient-to-r ${selectedSitesTemplate.previewTheme.gradientFrom} ${selectedSitesTemplate.previewTheme.gradientTo} px-4 py-6`}>
+                        <p className="text-xs font-semibold text-slate-700">{selectedSitesTemplate.name} • {selectedSitesTemplate.heroPattern}</p>
+                        <h4 className="mt-2 text-2xl font-extrabold tracking-tight text-slate-900">{generatedSitesHeadline}</h4>
+                        <p className="mt-2 max-w-xl text-sm text-slate-700">{generatedSitesSubheadline}</p>
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <button className={`rounded-full ${selectedSitesTemplate.previewTheme.accent} px-4 py-2 text-xs font-semibold text-white`}>
+                            {sitesGeneratedContent.primaryCta}
+                          </button>
+                          <button className="rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700">
+                            {sitesGeneratedContent.secondaryCta}
+                          </button>
                         </div>
                       </div>
-                      <div className="mt-3 rounded-xl border border-cyan-200 bg-cyan-50 p-3 text-sm text-cyan-900">
-                        Tone: {sitesTone}
+
+                      <div className="grid gap-3 p-4">
+                        <div className="grid gap-2 sm:grid-cols-3">
+                          {sitesGeneratedContent.valueProps.map((item) => (
+                            <div key={item} className="rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700">
+                              {item}
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="rounded-xl border border-slate-200 bg-white p-3">
+                          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Услуги</p>
+                          <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                            {sitesGeneratedContent.services.map((service) => (
+                              <div key={service} className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs font-semibold text-slate-700">
+                                {service}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="rounded-xl border border-slate-200 bg-white p-3">
+                          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">О компании</p>
+                          <p className="mt-1 text-sm text-slate-700">{sitesGeneratedContent.about}</p>
+                        </div>
+
+                        <div className="rounded-xl border border-slate-200 bg-white p-3">
+                          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Как проходит запись</p>
+                          <div className="mt-2 space-y-1.5">
+                            {sitesGeneratedContent.processSteps.map((step, index) => (
+                              <p key={step} className="text-sm text-slate-700">
+                                {index + 1}. {step}
+                              </p>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="rounded-xl border border-slate-200 bg-white p-3">
+                          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">FAQ</p>
+                          <div className="mt-2 space-y-2">
+                            {sitesGeneratedContent.faq.map((item) => (
+                              <div key={item.q} className="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+                                <p className="text-xs font-semibold text-slate-900">{item.q}</p>
+                                <p className="mt-1 text-xs text-slate-600">{item.a}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="rounded-xl border border-cyan-200 bg-cyan-50 p-3">
+                          <p className="text-sm font-semibold text-slate-900">{sitesGeneratedContent.finalCtaTitle}</p>
+                          <p className="mt-1 text-xs text-slate-700">{sitesGeneratedContent.finalCtaText}</p>
+                        </div>
                       </div>
                     </div>
 
@@ -2390,12 +2639,12 @@ export default function App() {
                         onClick={() => {
                           setSitesFlowStatus("published");
                           setSitesGenerationProgress(100);
-                          setSitesActionMessage("Сайт опубликован. Поток лидов автоматически передан в ClientsFlow AI Inbox.");
+                          setSitesActionMessage("Сайт опубликован. Финальная версия будет передана вашим менеджером для выдачи ссылки.");
                         }}
                         disabled={sitesFlowStatus !== "ready" && sitesFlowStatus !== "published"}
                         className="w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                       >
-                        Опубликовать
+                        Опубликовать и передать менеджеру
                       </button>
                       <button
                         onClick={() => handleNavChange("Диалоги")}
