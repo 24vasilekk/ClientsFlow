@@ -23,6 +23,11 @@ function openRouterMiddleware() {
   const businessAuditPrompt =
     "Ты senior growth-аналитик для сервисных бизнесов. " +
     "Пиши по-русски и верни только JSON без markdown.";
+  const businessBriefPrompt =
+    "Ты продуктовый аналитик внедрения ClientsFlow для сервисных бизнесов. " +
+    "Сгенерируй ОДИН следующий вопрос для брифа бизнеса. " +
+    "Вопрос короткий, конкретный, без markdown. " +
+    "Учитывай предыдущие ответы, не повторяйся, не упоминай AI/бота/модель.";
   const telegramReplyPrompt =
     "Ты отвечаешь клиенту в Telegram от лица сервисного бизнеса. " +
     "Пиши по-русски, кратко и вежливо, как живой менеджер. " +
@@ -83,6 +88,7 @@ function openRouterMiddleware() {
     const isSitesRoute = req.method === "POST" && req.url === "/api/openrouter/sites-copy";
     const isProductRoute = req.method === "POST" && req.url === "/api/openrouter/product-chat";
     const isAuditRoute = req.method === "POST" && req.url === "/api/openrouter/business-audit";
+    const isBusinessBriefRoute = req.method === "POST" && req.url === "/api/openrouter/business-brief";
     const isTelegramReplyRoute = req.method === "POST" && req.url === "/api/openrouter/telegram-reply";
     const isTelegramGetUpdatesRoute = req.method === "POST" && req.url === "/api/telegram/get-updates";
     const isTelegramSendRoute = req.method === "POST" && req.url === "/api/telegram/send-message";
@@ -91,6 +97,7 @@ function openRouterMiddleware() {
       !isSitesRoute &&
       !isProductRoute &&
       !isAuditRoute &&
+      !isBusinessBriefRoute &&
       !isTelegramReplyRoute &&
       !isTelegramGetUpdatesRoute &&
       !isTelegramSendRoute
@@ -191,6 +198,22 @@ function openRouterMiddleware() {
           JSON.stringify(body, null, 2)
         ].join("\n");
         messages = [{ role: "user", content: auditPrompt }];
+      } else if (isBusinessBriefRoute) {
+        const answers = Array.isArray(body.answers) ? body.answers : [];
+        const prompt = [
+          `Сервис: ${typeof body.serviceName === "string" ? body.serviceName : "Подключенный сервис"}`,
+          typeof body.endpoint === "string" && body.endpoint ? `Endpoint: ${body.endpoint}` : "",
+          `Нужно задать вопрос №${answers.length + 1} из минимум ${Math.max(10, Number(body.targetCount || 10))}.`,
+          "Уже полученные ответы:",
+          answers.length
+            ? answers
+                .map((item: any, i: number) => `${i + 1}. ${String(item?.question || "")} => ${String(item?.answer || "")}`)
+                .join("\n")
+            : "Пока ответов нет."
+        ]
+          .filter(Boolean)
+          .join("\n");
+        messages = [{ role: "user", content: prompt }];
       } else {
         messages = Array.isArray(body.messages) ? body.messages : [];
         if (isTelegramReplyRoute && typeof body.text === "string") {
@@ -225,15 +248,17 @@ function openRouterMiddleware() {
             ? "ClientsFlow Sites"
             : isProductRoute
               ? "ClientsFlow Product Copilot"
-              : isAuditRoute
-                ? "ClientsFlow Business Audit"
+                : isAuditRoute
+                  ? "ClientsFlow Business Audit"
+                : isBusinessBriefRoute
+                  ? "ClientsFlow Business Brief"
                 : isTelegramReplyRoute
                   ? "ClientsFlow Telegram Reply"
                 : "ClientsFlow MVP"
         },
         body: JSON.stringify({
           model,
-          temperature: isSitesRoute ? 0.4 : isAuditRoute ? 0.3 : 0.35,
+          temperature: isSitesRoute ? 0.4 : isAuditRoute ? 0.3 : isBusinessBriefRoute ? 0.35 : 0.35,
           messages: [
             {
               role: "system",
@@ -243,6 +268,8 @@ function openRouterMiddleware() {
                   ? productChatPrompt
                   : isAuditRoute
                     ? businessAuditPrompt
+                    : isBusinessBriefRoute
+                      ? businessBriefPrompt
                     : isTelegramReplyRoute
                       ? telegramReplyPrompt
                       : systemPrompt
@@ -270,7 +297,7 @@ function openRouterMiddleware() {
 
       res.statusCode = 200;
       res.setHeader("Content-Type", "application/json");
-      if (isSitesRoute || isProductRoute || isAuditRoute || isTelegramReplyRoute) {
+      if (isSitesRoute || isProductRoute || isAuditRoute || isBusinessBriefRoute || isTelegramReplyRoute) {
         res.end(JSON.stringify({ reply, mode: "openrouter", model }));
       } else {
         const lastUserMessage = [...messages].reverse().find((item: any) => item?.role === "user");

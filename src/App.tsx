@@ -3,7 +3,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import DashboardApp from "./DashboardApp";
 import WorkbenchApp from "./WorkbenchApp";
 
-type RoutePath = "/" | "/login" | "/dashboard" | "/pricing" | "/workbench";
+type RoutePath = "/" | "/login" | "/dashboard" | "/pricing" | "/workbench" | "/sites";
 
 type ChatRole = "assistant" | "user";
 type ChatMessage = {
@@ -124,6 +124,7 @@ function normalizePath(pathname: string): RoutePath {
   if (pathname === "/dashboard") return "/dashboard";
   if (pathname === "/pricing") return "/pricing";
   if (pathname === "/workbench") return "/workbench";
+  if (pathname === "/sites") return "/sites";
   return "/";
 }
 
@@ -438,6 +439,9 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
             ))}
           </nav>
           <div className="flex items-center gap-2">
+            <button onClick={() => onNavigate("/sites")} className="hidden rounded-full border border-cyan-200 bg-cyan-50 px-3 py-2 text-xs font-semibold text-cyan-800 sm:block">
+              ClientsFlow Sites
+            </button>
             <button onClick={() => onNavigate("/login")} className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
               Войти
             </button>
@@ -663,6 +667,7 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
         <div className="mx-auto flex max-w-[1240px] flex-wrap items-center justify-between gap-3 px-4 py-6 text-sm text-slate-600 sm:px-6">
           <p className="font-bold text-slate-900">ClientsFlow</p>
           <div className="flex flex-wrap gap-4">
+            <button onClick={() => onNavigate("/sites")} className="hover:text-slate-900">ClientsFlow Sites</button>
             <button onClick={() => onNavigate("/login")} className="hover:text-slate-900">Войти</button>
             <button onClick={() => onNavigate("/dashboard")} className="hover:text-slate-900">Личный кабинет</button>
             <button onClick={() => onNavigate("/pricing")} className="hover:text-slate-900">Тарифы</button>
@@ -746,6 +751,29 @@ function PricingPage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) 
   );
 }
 
+function SitesPage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
+  return (
+    <div className="min-h-screen bg-[radial-gradient(70%_80%_at_10%_10%,rgba(56,189,248,0.18),transparent_60%),radial-gradient(50%_60%_at_90%_0%,rgba(59,130,246,0.2),transparent_60%),#020617]">
+      <div className="sticky top-0 z-40 border-b border-blue-900/50 bg-slate-950/90 backdrop-blur">
+        <div className="mx-auto flex max-w-[1240px] items-center justify-between gap-3 px-4 py-4 sm:px-6">
+          <button onClick={() => onNavigate("/")} className="text-lg font-extrabold tracking-tight text-white">
+            ClientsFlow
+          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => onNavigate("/")} className="rounded-full border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200">
+              Главная
+            </button>
+            <button onClick={() => onNavigate("/dashboard")} className="rounded-full bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950">
+              Личный кабинет
+            </button>
+          </div>
+        </div>
+      </div>
+      <DashboardApp standaloneSites onNavigate={onNavigate} />
+    </div>
+  );
+}
+
 function DashboardRoute({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
   const isAuth = useMemo(() => {
     try {
@@ -790,7 +818,7 @@ function DashboardRoute({ onNavigate }: { onNavigate: (path: RoutePath) => void 
 
   return (
     <div className="relative">
-      <DashboardApp />
+      <DashboardApp onNavigate={onNavigate} />
       {isWorkbenchAuth ? (
         <button
           onClick={() => onNavigate("/workbench")}
@@ -839,6 +867,7 @@ export default function App() {
       {path === "/" ? <HomePage onNavigate={navigate} /> : null}
       {path === "/login" ? <LoginPage onNavigate={navigate} /> : null}
       {path === "/pricing" ? <PricingPage onNavigate={navigate} /> : null}
+      {path === "/sites" ? <SitesPage onNavigate={navigate} /> : null}
       {path === "/dashboard" ? <DashboardRoute onNavigate={navigate} /> : null}
       {path === "/workbench" ? <WorkbenchRoute onNavigate={navigate} /> : null}
     </>

@@ -25,6 +25,11 @@ type NavItem =
   | "ClientsFlow Sites"
   | "Настройки";
 
+type DashboardAppProps = {
+  standaloneSites?: boolean;
+  onNavigate?: (path: "/" | "/login" | "/dashboard" | "/pricing" | "/workbench" | "/sites") => void;
+};
+
 type SubscriptionState = {
   planId: "trial" | "basic" | "pro" | "business" | null;
   subscriptionStatus: "none" | "trial" | "active";
@@ -180,6 +185,33 @@ type TelegramProfile = {
   };
 };
 
+type BusinessBriefAnswer = {
+  question: string;
+  answer: string;
+};
+
+type BusinessBriefState = {
+  started: boolean;
+  completed: boolean;
+  targetCount: number;
+  currentQuestion: string;
+  answers: BusinessBriefAnswer[];
+  updatedAt: string | null;
+};
+
+type BusinessTuningState = {
+  businessSummary: string;
+  targetAudience: string;
+  mainServices: string;
+  responseStyle: string;
+  qualificationRules: string;
+  escalationRules: string;
+  forbiddenWords: string;
+  workingHours: string;
+  cityCoverage: string;
+  updatedAt: string | null;
+};
+
 type PlanFeatureKey = "advancedAnalytics" | "aiRecommendations" | "sitesBuilder" | "lostRecovery";
 
 type PlanDefinition = {
@@ -199,7 +231,6 @@ const navItems: NavItem[] = [
   "Аналитика",
   "Потерянные",
   "AI рекомендации",
-  "ClientsFlow Sites",
   "Настройки"
 ];
 
@@ -988,6 +1019,8 @@ const SERVICE_CONNECTION_KEY = "clientsflow_service_connection_v1";
 const SERVICE_EVENTS_KEY = "clientsflow_service_events_v1";
 const TELEGRAM_OFFSET_KEY = "clientsflow_telegram_offset_v1";
 const TELEGRAM_PROFILES_KEY = "clientsflow_telegram_profiles_v1";
+const BUSINESS_BRIEF_KEY = "clientsflow_business_brief_v1";
+const BUSINESS_TUNING_KEY = "clientsflow_business_tuning_v1";
 const TELEGRAM_ONBOARDING_QUESTIONS = [
   "Чтобы настроить ответы под ваш бизнес, задам 4 коротких вопроса. Первый: в какой нише вы работаете?",
   "Отлично. Какая у вас ключевая услуга или предложение?",
@@ -996,6 +1029,21 @@ const TELEGRAM_ONBOARDING_QUESTIONS = [
 ];
 const TELEGRAM_MAX_AUTO_REPLIES_PER_SYNC = 6;
 const TELEGRAM_AUTO_REPLY_MAX_AGE_SECONDS = 180;
+const BUSINESS_BRIEF_MIN_QUESTIONS = 10;
+const BUSINESS_BRIEF_FALLBACK_QUESTIONS = [
+  "Какую услугу вы продаете чаще всего и в каком среднем чеке?",
+  "Кто ваш основной клиент: возраст, потребность и сценарий обращения?",
+  "Через какие каналы приходят обращения в первую очередь?",
+  "Какой ответ клиент должен получить в первые 30 секунд?",
+  "Какие вопросы о цене или условиях задают чаще всего?",
+  "Как вы определяете, что лид готов к записи или покупке?",
+  "Какие возражения чаще всего мешают довести до сделки?",
+  "Что обязательно нужно уточнить до передачи в запись?",
+  "Через сколько минут после тишины отправлять повторное касание?",
+  "Какая цель на ближайший месяц: больше лидов, выше конверсия или выше средний чек?",
+  "Какие услуги или категории приоритетны для продвижения сейчас?",
+  "В каких случаях диалог нужно сразу передавать менеджеру?"
+];
 
 function loadServiceConnection(): ServiceConnection {
   if (typeof window === "undefined") {
@@ -1067,6 +1115,83 @@ function loadTelegramProfiles(): Record<string, TelegramProfile> {
 function saveTelegramProfiles(profiles: Record<string, TelegramProfile>): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(TELEGRAM_PROFILES_KEY, JSON.stringify(profiles));
+}
+
+function loadBusinessBrief(): BusinessBriefState {
+  if (typeof window === "undefined") {
+    return { started: false, completed: false, targetCount: BUSINESS_BRIEF_MIN_QUESTIONS, currentQuestion: "", answers: [], updatedAt: null };
+  }
+  try {
+    const raw = localStorage.getItem(BUSINESS_BRIEF_KEY);
+    if (!raw) {
+      return { started: false, completed: false, targetCount: BUSINESS_BRIEF_MIN_QUESTIONS, currentQuestion: "", answers: [], updatedAt: null };
+    }
+    const parsed = JSON.parse(raw) as Partial<BusinessBriefState>;
+    const answers = Array.isArray(parsed.answers)
+      ? parsed.answers
+          .filter((item) => item && typeof item.question === "string" && typeof item.answer === "string")
+          .map((item) => ({ question: item.question, answer: item.answer }))
+      : [];
+    const targetCount =
+      typeof parsed.targetCount === "number" && parsed.targetCount >= BUSINESS_BRIEF_MIN_QUESTIONS
+        ? Math.round(parsed.targetCount)
+        : BUSINESS_BRIEF_MIN_QUESTIONS;
+    return {
+      started: parsed.started ?? answers.length > 0,
+      completed: parsed.completed ?? answers.length >= targetCount,
+      targetCount,
+      currentQuestion: typeof parsed.currentQuestion === "string" ? parsed.currentQuestion : "",
+      answers,
+      updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : null
+    };
+  } catch {
+    return { started: false, completed: false, targetCount: BUSINESS_BRIEF_MIN_QUESTIONS, currentQuestion: "", answers: [], updatedAt: null };
+  }
+}
+
+function saveBusinessBrief(brief: BusinessBriefState): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(BUSINESS_BRIEF_KEY, JSON.stringify(brief));
+}
+
+function loadBusinessTuning(): BusinessTuningState {
+  const defaults: BusinessTuningState = {
+    businessSummary: "",
+    targetAudience: "",
+    mainServices: "",
+    responseStyle: "вежливо, коротко, по делу",
+    qualificationRules: "",
+    escalationRules: "",
+    forbiddenWords: "AI, ИИ, бот, нейросеть",
+    workingHours: "",
+    cityCoverage: "",
+    updatedAt: null
+  };
+  if (typeof window === "undefined") return defaults;
+  try {
+    const raw = localStorage.getItem(BUSINESS_TUNING_KEY);
+    if (!raw) return defaults;
+    const parsed = JSON.parse(raw) as Partial<BusinessTuningState>;
+    return {
+      businessSummary: parsed.businessSummary ?? defaults.businessSummary,
+      targetAudience: parsed.targetAudience ?? defaults.targetAudience,
+      mainServices: parsed.mainServices ?? defaults.mainServices,
+      responseStyle: parsed.responseStyle ?? defaults.responseStyle,
+      qualificationRules: parsed.qualificationRules ?? defaults.qualificationRules,
+      escalationRules: parsed.escalationRules ?? defaults.escalationRules,
+      forbiddenWords: parsed.forbiddenWords ?? defaults.forbiddenWords,
+      workingHours: parsed.workingHours ?? defaults.workingHours,
+      cityCoverage: parsed.cityCoverage ?? defaults.cityCoverage,
+      updatedAt: parsed.updatedAt ?? defaults.updatedAt
+    };
+  } catch {
+    return defaults;
+  }
+}
+
+function saveBusinessTuning(tuning: BusinessTuningState): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(BUSINESS_TUNING_KEY, JSON.stringify(tuning));
 }
 
 function parseServiceEvents(raw: unknown): ServiceEvent[] {
@@ -1159,9 +1284,9 @@ function buildLinePoints(values: number[]): string {
     .join(" ");
 }
 
-export default function App() {
+export default function App({ standaloneSites = false, onNavigate }: DashboardAppProps) {
   const serviceImportRef = useRef<HTMLInputElement | null>(null);
-  const [activeNav, setActiveNav] = useState<NavItem>("Обзор");
+  const [activeNav, setActiveNav] = useState<NavItem>(standaloneSites ? "ClientsFlow Sites" : "Обзор");
   const [statusFilter, setStatusFilter] = useState<LeadStatus | "все">("все");
   const [channelFilter, setChannelFilter] = useState<Channel | "все">("все");
   const [selectedConversationId, setSelectedConversationId] = useState<string>("");
@@ -1206,6 +1331,10 @@ export default function App() {
   const [serviceSyncLoading, setServiceSyncLoading] = useState(false);
   const [telegramOffset, setTelegramOffset] = useState<number>(() => loadTelegramOffset());
   const [telegramProfiles, setTelegramProfiles] = useState<Record<string, TelegramProfile>>(() => loadTelegramProfiles());
+  const [businessBrief, setBusinessBrief] = useState<BusinessBriefState>(() => loadBusinessBrief());
+  const [businessBriefAnswer, setBusinessBriefAnswer] = useState("");
+  const [businessBriefLoading, setBusinessBriefLoading] = useState(false);
+  const [businessTuning, setBusinessTuning] = useState<BusinessTuningState>(() => loadBusinessTuning());
 
   const hasLiveData = serviceEvents.length > 0;
 
@@ -1696,6 +1825,7 @@ export default function App() {
   }
 
   function handleNavChange(item: NavItem): void {
+    if (standaloneSites && item !== "ClientsFlow Sites") return;
     if (item === "AI рекомендации" && !hasFeature("aiRecommendations")) {
       handleFeatureGuard("aiRecommendations");
       return;
@@ -1973,6 +2103,14 @@ export default function App() {
   }, [telegramProfiles]);
 
   useEffect(() => {
+    saveBusinessBrief(businessBrief);
+  }, [businessBrief]);
+
+  useEffect(() => {
+    saveBusinessTuning(businessTuning);
+  }, [businessTuning]);
+
+  useEffect(() => {
     if (sitesFlowStatus !== "idle") return;
     setSitesGeneratedContent(buildFallbackSiteContent(selectedSitesTemplate, sitesAnswers));
   }, [sitesAnswers, sitesFlowStatus, selectedSitesTemplate]);
@@ -1992,6 +2130,12 @@ export default function App() {
       setSelectedConversationId(filteredConversations[0].id);
     }
   }, [filteredConversations, selectedConversationId]);
+
+  useEffect(() => {
+    if (standaloneSites && activeNav !== "ClientsFlow Sites") {
+      setActiveNav("ClientsFlow Sites");
+    }
+  }, [standaloneSites, activeNav]);
 
   const selectedCheckoutPlan = planDefinitions.find((plan) => plan.id === checkoutPlanId) ?? null;
   const navNeedsLiveData = ["Обзор", "Диалоги", "Лиды", "Аналитика", "Потерянные", "AI рекомендации"].includes(activeNav);
@@ -2029,7 +2173,10 @@ export default function App() {
       const events = parseServiceEvents(data);
       setServiceEvents(events);
       setServiceConnection((prev) => ({ ...prev, connectedAt: new Date().toISOString() }));
-      triggerNotice(`Синхронизация завершена. Событий: ${events.length}`);
+      triggerNotice(
+        `Синхронизация завершена. Событий: ${events.length}.` +
+          (!businessBrief.started ? " Рекомендуем запустить AI-бриф бизнеса в этом разделе." : "")
+      );
     } catch {
       triggerNotice("Синхронизация не удалась. Используйте импорт JSON или проверьте endpoint/CORS.");
     } finally {
@@ -2078,9 +2225,117 @@ export default function App() {
     ].join("; ");
   }
 
+  function buildBusinessBriefContext(brief: BusinessBriefState): string {
+    if (!brief.answers.length) return "";
+    return brief.answers
+      .slice(0, brief.targetCount)
+      .map((item, index) => `${index + 1}. ${item.question}: ${item.answer}`)
+      .join(" | ");
+  }
+
+  function buildBusinessTuningContext(tuning: BusinessTuningState): string {
+    const parts = [
+      tuning.businessSummary ? `Описание бизнеса: ${tuning.businessSummary}` : "",
+      tuning.targetAudience ? `ЦА: ${tuning.targetAudience}` : "",
+      tuning.mainServices ? `Ключевые услуги: ${tuning.mainServices}` : "",
+      tuning.responseStyle ? `Стиль ответа: ${tuning.responseStyle}` : "",
+      tuning.qualificationRules ? `Правила квалификации: ${tuning.qualificationRules}` : "",
+      tuning.escalationRules ? `Когда передавать менеджеру: ${tuning.escalationRules}` : "",
+      tuning.workingHours ? `График: ${tuning.workingHours}` : "",
+      tuning.cityCoverage ? `География: ${tuning.cityCoverage}` : "",
+      tuning.forbiddenWords ? `Нельзя использовать слова: ${tuning.forbiddenWords}` : ""
+    ].filter(Boolean);
+    return parts.join(" | ");
+  }
+
+  function fallbackAdaptiveQuestion(answers: BusinessBriefAnswer[]): string {
+    const next = BUSINESS_BRIEF_FALLBACK_QUESTIONS[answers.length];
+    if (next) return next;
+    const lastAnswer = answers[answers.length - 1]?.answer || "вашу цель по росту конверсии";
+    return `Уточните дополнительные детали по теме "${lastAnswer}", чтобы сделать ответы точнее в реальных диалогах.`;
+  }
+
+  async function generateBusinessBriefQuestion(answers: BusinessBriefAnswer[]): Promise<string> {
+    try {
+      const response = await fetch("/api/openrouter/business-brief", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          serviceName: serviceConnection.serviceName || "Подключенный сервис",
+          targetCount: businessBrief.targetCount,
+          answers,
+          endpoint: serviceConnection.endpoint || "",
+          onboarding: subscription.onboardingData || null
+        })
+      });
+      const data = (await response.json()) as { question?: string; reply?: string };
+      const rawQuestion = data.question || data.reply || "";
+      if (response.ok && rawQuestion.trim()) {
+        return rawQuestion.trim();
+      }
+    } catch {
+      // fallback below
+    }
+    return fallbackAdaptiveQuestion(answers);
+  }
+
+  async function startBusinessBrief(): Promise<void> {
+    setBusinessBriefLoading(true);
+    try {
+      const firstQuestion = await generateBusinessBriefQuestion([]);
+      setBusinessBrief({
+        started: true,
+        completed: false,
+        targetCount: BUSINESS_BRIEF_MIN_QUESTIONS,
+        currentQuestion: firstQuestion,
+        answers: [],
+        updatedAt: new Date().toISOString()
+      });
+      setBusinessBriefAnswer("");
+      triggerNotice("Бриф запущен. Ответьте на вопросы, чтобы адаптировать ответы под ваш бизнес.");
+    } finally {
+      setBusinessBriefLoading(false);
+    }
+  }
+
+  async function submitBusinessBriefAnswer(): Promise<void> {
+    const answerText = businessBriefAnswer.trim();
+    if (!businessBrief.currentQuestion.trim() || !answerText) {
+      triggerNotice("Заполните ответ на текущий вопрос.");
+      return;
+    }
+    setBusinessBriefLoading(true);
+    try {
+      const nextAnswers = [...businessBrief.answers, { question: businessBrief.currentQuestion, answer: answerText }];
+      if (nextAnswers.length >= businessBrief.targetCount) {
+        setBusinessBrief({
+          ...businessBrief,
+          answers: nextAnswers,
+          currentQuestion: "",
+          completed: true,
+          updatedAt: new Date().toISOString()
+        });
+        setBusinessBriefAnswer("");
+        triggerNotice("Бриф завершен. Ответы теперь учитываются при генерации сообщений клиентам.");
+        return;
+      }
+      const nextQuestion = await generateBusinessBriefQuestion(nextAnswers);
+      setBusinessBrief({
+        ...businessBrief,
+        answers: nextAnswers,
+        currentQuestion: nextQuestion,
+        completed: false,
+        updatedAt: new Date().toISOString()
+      });
+      setBusinessBriefAnswer("");
+    } finally {
+      setBusinessBriefLoading(false);
+    }
+  }
+
   function buildTelegramFallbackReply(input: string, profile: TelegramProfile | undefined): string {
     const text = input.toLowerCase();
-    const service = profile?.answers.mainService || "услуга";
+    const service = profile?.answers.mainService || businessTuning.mainServices || "услуга";
     if (text.includes("цена") || text.includes("стоим")) {
       return `Стоимость зависит от задачи и формата. Следующий шаг: напишите, какая именно ${service} нужна и на когда планируете запись.`;
     }
@@ -2202,8 +2457,14 @@ export default function App() {
                   body: JSON.stringify({
                     text: incomingText,
                     businessName: serviceConnection.serviceName || "Ваш сервис",
-                    businessContext: buildTelegramBusinessContext(currentProfile)
-                  }),
+                  businessContext: [
+                    buildTelegramBusinessContext(currentProfile),
+                    buildBusinessBriefContext(businessBrief),
+                    buildBusinessTuningContext(businessTuning)
+                  ]
+                      .filter(Boolean)
+                      .join(" | ")
+                }),
                   signal: controller.signal
                 });
               } finally {
@@ -2260,7 +2521,10 @@ export default function App() {
         serviceConnection.autoReplyEnabled && autoRepliesCount >= TELEGRAM_MAX_AUTO_REPLIES_PER_SYNC
           ? ` Ответов за цикл: ${autoRepliesCount}, остальные обработаются при следующей синхронизации.`
           : ` Ответов за цикл: ${autoRepliesCount}.`;
-      triggerNotice(`Telegram синхронизирован. Новых событий: ${inboundEvents.length}.${extraInfo}`);
+      triggerNotice(
+        `Telegram синхронизирован. Новых событий: ${inboundEvents.length}.${extraInfo}` +
+          (!businessBrief.started ? " Запустите AI-бриф бизнеса для точных ответов под вашу нишу." : "")
+      );
     } catch (error: any) {
       triggerNotice(error?.message || "Ошибка синхронизации Telegram.");
     } finally {
@@ -2336,8 +2600,15 @@ export default function App() {
   }
 
   return (
-    <div className="app-shell min-h-screen bg-gradient-to-b from-slate-100 via-slate-50 to-slate-100 text-slate-900">
+    <div
+      className={`app-shell min-h-screen text-slate-900 ${
+        standaloneSites
+          ? "bg-[radial-gradient(70%_80%_at_10%_10%,rgba(56,189,248,0.18),transparent_60%),radial-gradient(50%_60%_at_90%_0%,rgba(59,130,246,0.2),transparent_60%),#020617]"
+          : "bg-gradient-to-b from-slate-100 via-slate-50 to-slate-100"
+      }`}
+    >
       <div className="flex min-h-screen">
+        {!standaloneSites ? (
         <aside className="hidden w-[260px] shrink-0 border-r border-slate-200 bg-white px-4 py-5 lg:block">
           <div className="mb-8 px-2">
             <p className="text-lg font-extrabold tracking-tight">ClientsFlow</p>
@@ -2365,25 +2636,54 @@ export default function App() {
             <p className="mt-1 text-sm font-semibold text-slate-900">{currentPlanLabel}</p>
           </div>
         </aside>
+        ) : null}
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-30 border-b border-slate-200/90 bg-white/95 px-3 py-3 backdrop-blur md:px-6 md:py-4">
+          <header
+            className={`sticky top-0 z-30 px-3 py-3 backdrop-blur md:px-6 md:py-4 ${
+              standaloneSites ? "border-b border-blue-900/50 bg-slate-950/90" : "border-b border-slate-200/90 bg-white/95"
+            }`}
+          >
             <div className="flex items-center justify-between gap-4">
               <div>
-                <h1 className="text-lg font-extrabold tracking-tight sm:text-xl">{activeNav}</h1>
-                <p className="text-xs text-slate-500 sm:text-sm">Рабочая панель управления потоком обращений</p>
+                <h1 className={`text-lg font-extrabold tracking-tight sm:text-xl ${standaloneSites ? "text-white" : ""}`}>
+                  {standaloneSites ? "ClientsFlow Sites" : activeNav}
+                </h1>
+                <p className={`text-xs sm:text-sm ${standaloneSites ? "text-slate-300" : "text-slate-500"}`}>
+                  {standaloneSites ? "Конструктор сайтов для бизнеса: шаблон, контент, публикация" : "Рабочая панель управления потоком обращений"}
+                </p>
               </div>
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => triggerNotice("Период: последние 30 дней")}
-                  className="hidden rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 sm:block"
-                >
-                  Последние 30 дней
-                </button>
-                <div className="h-8 w-8 rounded-full bg-slate-900 shadow-sm sm:h-9 sm:w-9" />
+                {standaloneSites ? (
+                  <>
+                    <button
+                      onClick={() => onNavigate?.("/")}
+                      className="rounded-full border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200"
+                    >
+                      На главную
+                    </button>
+                    <button
+                      onClick={() => onNavigate?.("/dashboard")}
+                      className="rounded-full bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950"
+                    >
+                      Личный кабинет
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => triggerNotice("Период: последние 30 дней")}
+                      className="hidden rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 sm:block"
+                    >
+                      Последние 30 дней
+                    </button>
+                    <div className="h-8 w-8 rounded-full bg-slate-900 shadow-sm sm:h-9 sm:w-9" />
+                  </>
+                )}
               </div>
             </div>
 
+            {!standaloneSites ? (
             <div className="-mx-1 mt-3 overflow-x-auto pb-1 lg:hidden">
               <div className="flex min-w-max gap-2 px-1">
                 {navItems.map((item) => (
@@ -2399,10 +2699,11 @@ export default function App() {
                 ))}
               </div>
             </div>
+            ) : null}
           </header>
 
-          <main className="flex-1 overflow-auto px-3 py-4 pb-24 sm:px-4 sm:py-6 md:px-6 lg:pb-6">
-            <div className="mx-auto w-full max-w-[1440px]">
+          <main className={`flex-1 overflow-auto px-3 py-4 pb-24 sm:px-4 sm:py-6 md:px-6 lg:pb-6 ${standaloneSites ? "text-slate-100" : ""}`}>
+            <div className={`mx-auto w-full ${standaloneSites ? "max-w-[1320px]" : "max-w-[1440px]"}`}>
             {uiNotice ? (
               <div className="mb-3 rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm font-semibold text-cyan-900">
                 {uiNotice}
@@ -3985,6 +4286,209 @@ export default function App() {
                 </section>
 
                 <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Адаптация ответов</p>
+                      <h2 className="mt-1 text-xl font-extrabold tracking-tight text-slate-900">AI-бриф бизнеса (10+ вопросов)</h2>
+                      <p className="mt-2 text-sm text-slate-600">
+                        После подключения сервиса система задает вопросы о вашем бизнесе, услугах, клиентах и воронке. На основе ответов формируется профиль,
+                        который используется для более точных ответов в реальных диалогах.
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-cyan-200 bg-cyan-50 px-3 py-2 text-xs text-cyan-900">
+                      Пройдено: <span className="font-bold">{businessBrief.answers.length}</span> / {businessBrief.targetCount}
+                    </div>
+                  </div>
+
+                  {!businessBrief.started ? (
+                    <button
+                      onClick={() => void startBusinessBrief()}
+                      disabled={businessBriefLoading}
+                      className="mt-4 w-full rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60 sm:w-auto"
+                    >
+                      {businessBriefLoading ? "Подготовка вопросов..." : "Начать бриф"}
+                    </button>
+                  ) : businessBrief.completed ? (
+                    <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
+                      <p className="text-sm font-semibold text-emerald-900">Бриф завершен. Ответы применяются в логике генерации сообщений.</p>
+                      <p className="mt-1 text-xs text-emerald-800">
+                        {businessBrief.updatedAt ? `Обновлено: ${new Date(businessBrief.updatedAt).toLocaleString("ru-RU")}` : "Профиль готов к использованию"}
+                      </p>
+                      <button
+                        onClick={() => void startBusinessBrief()}
+                        disabled={businessBriefLoading}
+                        className="mt-3 rounded-xl border border-emerald-300 bg-white px-3 py-2 text-sm font-semibold text-emerald-700"
+                      >
+                        Пересобрать бриф
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="mt-4 space-y-3">
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                        <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">
+                          Вопрос {businessBrief.answers.length + 1} из {businessBrief.targetCount}
+                        </p>
+                        <p className="mt-1 text-sm font-semibold text-slate-900">{businessBrief.currentQuestion}</p>
+                      </div>
+                      <textarea
+                        value={businessBriefAnswer}
+                        onChange={(event) => setBusinessBriefAnswer(event.target.value)}
+                        placeholder="Введите ответ в свободной форме"
+                        rows={4}
+                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
+                      />
+                      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                        <button
+                          onClick={() => void submitBusinessBriefAnswer()}
+                          disabled={businessBriefLoading || !businessBriefAnswer.trim()}
+                          className="w-full rounded-xl bg-cyan-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60 sm:w-auto"
+                        >
+                          {businessBriefLoading ? "Генерация следующего вопроса..." : "Сохранить и следующий вопрос"}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setBusinessBrief({
+                              started: false,
+                              completed: false,
+                              targetCount: BUSINESS_BRIEF_MIN_QUESTIONS,
+                              currentQuestion: "",
+                              answers: [],
+                              updatedAt: new Date().toISOString()
+                            });
+                            setBusinessBriefAnswer("");
+                            triggerNotice("Бриф очищен.");
+                          }}
+                          className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 sm:w-auto"
+                        >
+                          Сбросить бриф
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </section>
+
+                <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Тонкая настройка</p>
+                  <h2 className="mt-1 text-xl font-extrabold tracking-tight text-slate-900">Донастройка под ваш бизнес</h2>
+                  <p className="mt-2 text-sm text-slate-600">
+                    Здесь можно детально описать ваш бизнес и правила общения. Эти данные используются в ответах клиентам после подключения.
+                  </p>
+
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    <label className="md:col-span-2">
+                      <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Коротко о бизнесе</span>
+                      <textarea
+                        value={businessTuning.businessSummary}
+                        onChange={(event) => setBusinessTuning((prev) => ({ ...prev, businessSummary: event.target.value }))}
+                        rows={3}
+                        placeholder="Кто вы, что продаете, чем отличаетесь"
+                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
+                      />
+                    </label>
+                    <label>
+                      <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Целевая аудитория</span>
+                      <input
+                        value={businessTuning.targetAudience}
+                        onChange={(event) => setBusinessTuning((prev) => ({ ...prev, targetAudience: event.target.value }))}
+                        placeholder="Например: женщины 25-45, средний чек 4000 ₽"
+                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
+                      />
+                    </label>
+                    <label>
+                      <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Ключевые услуги</span>
+                      <input
+                        value={businessTuning.mainServices}
+                        onChange={(event) => setBusinessTuning((prev) => ({ ...prev, mainServices: event.target.value }))}
+                        placeholder="Через запятую"
+                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
+                      />
+                    </label>
+                    <label>
+                      <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Стиль ответа</span>
+                      <input
+                        value={businessTuning.responseStyle}
+                        onChange={(event) => setBusinessTuning((prev) => ({ ...prev, responseStyle: event.target.value }))}
+                        placeholder="Например: спокойно, коротко, уверенно"
+                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
+                      />
+                    </label>
+                    <label>
+                      <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">График работы</span>
+                      <input
+                        value={businessTuning.workingHours}
+                        onChange={(event) => setBusinessTuning((prev) => ({ ...prev, workingHours: event.target.value }))}
+                        placeholder="Пн–Сб 09:00–21:00"
+                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
+                      />
+                    </label>
+                    <label>
+                      <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">География</span>
+                      <input
+                        value={businessTuning.cityCoverage}
+                        onChange={(event) => setBusinessTuning((prev) => ({ ...prev, cityCoverage: event.target.value }))}
+                        placeholder="Город / районы / онлайн"
+                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
+                      />
+                    </label>
+                    <label className="md:col-span-2">
+                      <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Правила квалификации</span>
+                      <textarea
+                        value={businessTuning.qualificationRules}
+                        onChange={(event) => setBusinessTuning((prev) => ({ ...prev, qualificationRules: event.target.value }))}
+                        rows={2}
+                        placeholder="Что обязательно уточнять у клиента до записи"
+                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
+                      />
+                    </label>
+                    <label className="md:col-span-2">
+                      <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Правила эскалации менеджеру</span>
+                      <textarea
+                        value={businessTuning.escalationRules}
+                        onChange={(event) => setBusinessTuning((prev) => ({ ...prev, escalationRules: event.target.value }))}
+                        rows={2}
+                        placeholder="В каких случаях сразу передавать менеджеру"
+                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
+                      />
+                    </label>
+                    <label className="md:col-span-2">
+                      <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Слова, которые нельзя использовать</span>
+                      <input
+                        value={businessTuning.forbiddenWords}
+                        onChange={(event) => setBusinessTuning((prev) => ({ ...prev, forbiddenWords: event.target.value }))}
+                        placeholder="Через запятую"
+                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                    <button
+                      onClick={() => {
+                        setBusinessTuning((prev) => ({ ...prev, updatedAt: new Date().toISOString() }));
+                        triggerNotice("Донастройка сохранена и применяется в ответах.");
+                      }}
+                      className="w-full rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white sm:w-auto"
+                    >
+                      Применить донастройку
+                    </button>
+                    <button
+                      onClick={() => {
+                        setBusinessTuning(loadBusinessTuning());
+                        triggerNotice("Текущие сохраненные настройки загружены.");
+                      }}
+                      className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 sm:w-auto"
+                    >
+                      Обновить из сохраненного
+                    </button>
+                  </div>
+
+                  <div className="mt-3 rounded-2xl border border-cyan-200 bg-cyan-50 p-3 text-xs text-cyan-900">
+                    Контекст для ответов обновлен
+                    {businessTuning.updatedAt ? ` • Последнее сохранение: ${new Date(businessTuning.updatedAt).toLocaleString("ru-RU")}` : ""}
+                  </div>
+                </section>
+
+                <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
                   <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Подписка</p>
                   <h2 className="mt-1 text-xl font-extrabold tracking-tight text-slate-900">Тариф и активация</h2>
                   <p className="mt-2 text-sm text-slate-600">
@@ -4347,7 +4851,10 @@ export default function App() {
                       <div className="mt-3 flex flex-col items-start justify-between gap-2 text-xs text-slate-700 sm:flex-row sm:items-center">
                         <span>Фиксированная цена: <span className="font-semibold text-slate-900">3 500 ₽</span></span>
                         <button
-                          onClick={() => handleNavChange("ClientsFlow Sites")}
+                          onClick={() => {
+                            if (onNavigate) onNavigate("/sites");
+                            else handleNavChange("ClientsFlow Sites");
+                          }}
                           className="w-full rounded-lg bg-slate-900 px-2.5 py-2 font-semibold text-white transition hover:bg-slate-700 sm:w-auto"
                         >
                           Открыть модуль
