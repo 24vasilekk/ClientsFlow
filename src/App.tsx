@@ -148,7 +148,30 @@ function uid() {
   return Math.random().toString(36).slice(2, 10);
 }
 
-function formatHumanReply(text: string) {
+function pickNextStep(context: string) {
+  const text = context.toLowerCase();
+  if (text.includes("голос") || text.includes("аудио")) {
+    return "Отправьте голосовое, и я покажу готовый ответ клиенту.";
+  }
+  if (text.includes("фото") || text.includes("изображ") || text.includes("картин")) {
+    return "Загрузите фото запроса, и я предложу корректный сценарий ответа.";
+  }
+  if (text.includes("цена") || text.includes("стоим") || text.includes("дорог")) {
+    return "Напишите: Покажи ответ на вопрос о цене.";
+  }
+  if (text.includes("аналит") || text.includes("ворон") || text.includes("конверс") || text.includes("выруч")) {
+    return "Перейдите в личный кабинет и откройте раздел аналитики.";
+  }
+  if (text.includes("запис") || text.includes("брон") || text.includes("слот") || text.includes("календар")) {
+    return "Напишите: Нужен сценарий доведения до записи.";
+  }
+  if (text.includes("директ") || text.includes("лид") || text.includes("входящ") || text.includes("клиент")) {
+    return "Напишите сферу бизнеса, и я предложу стартовый сценарий первого ответа.";
+  }
+  return "Опишите задачу в одном предложении, и я предложу рабочий сценарий.";
+}
+
+function formatSalesReply(text: string, context = "") {
   const noMarkdown = text
     .replace(/[*#`_~]/g, "")
     .replace(/\[(.*?)\]/g, "$1")
@@ -166,14 +189,16 @@ function formatHumanReply(text: string) {
     .replace(/\bбот\b/gi, "сервис")
     .replace(/ассистент/gi, "специалист");
 
-  const sentences = noTechWords
+  const withoutStep = noTechWords.replace(/следующий шаг\s*:\s*.*/gi, "").trim();
+  const sentences = withoutStep
     .split(/(?<=[.!?])\s+/)
     .map((part) => part.trim())
     .filter(Boolean)
-    .slice(0, 4);
+    .slice(0, 2);
 
-  const compact = sentences.join(" ").slice(0, 420).trim();
-  return compact || "Понял задачу. Можем настроить сценарий под ваши входящие и показать это в личном кабинете.";
+  const compact = sentences.join(" ").slice(0, 220).trim();
+  const main = compact || "Понял задачу и вижу, как это улучшить в обработке входящих.";
+  return `${main}\nСледующий шаг: ${pickNextStep(`${context} ${noTechWords}`)}`;
 }
 
 function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
@@ -181,7 +206,7 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
     {
       id: uid(),
       role: "assistant",
-      text: "Здравствуйте. Я на связи от ClientsFlow. Покажу, как мы отвечаем на входящие, квалифицируем обращения и доводим до записи.",
+      text: "Здравствуйте, на связи команда ClientsFlow. Покажу, как выстроить стабильную обработку входящих и доведение до записи.\nСледующий шаг: выберите один из вариантов ниже.",
       kind: "text"
     }
   ]);
@@ -275,30 +300,31 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
       }
       const data = (await response.json()) as { reply?: string; mode?: "openrouter" | "mock" };
       setChatMode(data.mode === "openrouter" ? "openrouter" : "mock");
+      const localFallback =
+        kind === "image"
+          ? "Вижу фото. По контексту это похоже на запрос по услуге. Могу сразу дать рабочий ответ и предложить следующий шаг по воронке."
+          : kind === "voice"
+            ? "Голосовое получено. Кратко: клиент уточняет стоимость и ближайшую запись. Рекомендую ответить диапазоном цены и предложить два слота на выбор."
+            : buildReply(text);
       const assistantMessage: ChatMessage = {
         id: uid(),
         role: "assistant",
-        text:
-          formatHumanReply(data.reply?.trim() || "") ||
-          (kind === "image"
-            ? "Вижу фото. По контексту это похоже на запрос по услуге. Могу сразу дать рабочий ответ и предложить следующий шаг по воронке."
-            : kind === "voice"
-              ? "Голосовое получено. Кратко: клиент уточняет стоимость и ближайшую запись. Рекомендую ответить диапазоном цены и предложить два слота на выбор."
-              : formatHumanReply(buildReply(text))),
+        text: formatSalesReply(data.reply?.trim() || localFallback, text),
         kind: "text"
       };
       setMessages((prev) => [...prev, assistantMessage]);
     } catch {
       setChatMode("mock");
+      const fallback =
+        kind === "image"
+          ? "Вижу фото. По контексту это похоже на запрос по услуге. Могу сразу дать рабочий ответ и предложить следующий шаг по воронке."
+          : kind === "voice"
+            ? "Голосовое получено. Кратко: клиент уточняет стоимость и ближайшую запись. Рекомендую ответить диапазоном цены и предложить два слота на выбор."
+            : buildReply(text);
       const assistantMessage: ChatMessage = {
         id: uid(),
         role: "assistant",
-        text:
-          kind === "image"
-            ? "Вижу фото. По контексту это похоже на запрос по услуге. Могу сразу дать рабочий ответ и предложить следующий шаг по воронке."
-            : kind === "voice"
-              ? "Голосовое получено. Кратко: клиент уточняет стоимость и ближайшую запись. Рекомендую ответить диапазоном цены и предложить два слота на выбор."
-              : formatHumanReply(buildReply(text)),
+        text: formatSalesReply(fallback, text),
         kind: "text"
       };
       setMessages((prev) => [...prev, assistantMessage]);

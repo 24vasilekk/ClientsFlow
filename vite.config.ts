@@ -7,12 +7,33 @@ function openRouterMiddleware() {
     "Всегда отвечай как живой специалист, а не как технология. " +
     "Запрещено использовать слова: AI, ИИ, нейросеть, искусственный интеллект, бот, ассистент. " +
     "Запрещено использовать markdown и служебное оформление: *, **, #, -, ---, [ ], ( ). " +
-    "Формат: 2-4 коротких предложения, максимум 420 символов. " +
+    "Формат строго: 1 короткий ответ и отдельная строка с префиксом Следующий шаг:. " +
+    "Ответ до 220 символов, без списков и без длинных пояснений. " +
     "Стиль: спокойно, профессионально, конкретно, без хайпа. " +
     "Фокус: лиды, запись, квалификация, follow-up, конверсия, аналитика. " +
-    "В конце при уместности предложи один следующий шаг.";
+    "Следующий шаг должен быть чётким действием.";
 
-  const formatHumanReply = (text: string) => {
+  const pickNextStep = (context: string) => {
+    const text = context.toLowerCase();
+    if (text.includes("голос") || text.includes("аудио")) return "Отправьте голосовое, и я дам готовый вариант ответа клиенту.";
+    if (text.includes("фото") || text.includes("изображ") || text.includes("картин")) return "Загрузите фото запроса, и я предложу корректный сценарий ответа.";
+    if (text.includes("цена") || text.includes("стоим") || text.includes("дорог")) return "Напишите: Покажи ответ на вопрос о цене.";
+    if (text.includes("аналит") || text.includes("ворон") || text.includes("конверс") || text.includes("выруч")) return "Перейдите в личный кабинет и откройте раздел аналитики.";
+    if (text.includes("запис") || text.includes("брон") || text.includes("слот") || text.includes("календар")) return "Напишите: Нужен сценарий доведения до записи.";
+    if (text.includes("директ") || text.includes("лид") || text.includes("входящ") || text.includes("клиент")) return "Напишите сферу бизнеса, и я предложу стартовый сценарий первого ответа.";
+    return "Опишите задачу в одном предложении, и я предложу рабочий сценарий.";
+  };
+
+  const extractUserText = (content: unknown) => {
+    if (typeof content === "string") return content;
+    if (Array.isArray(content)) {
+      const textPart = content.find((item: any) => item?.type === "text" && typeof item?.text === "string");
+      return textPart?.text || "";
+    }
+    return "";
+  };
+
+  const formatSalesReply = (text: string, context = "") => {
     const noMarkdown = text
       .replace(/[*#`_~]/g, "")
       .replace(/\[(.*?)\]/g, "$1")
@@ -30,14 +51,16 @@ function openRouterMiddleware() {
       .replace(/\bбот\b/gi, "сервис")
       .replace(/ассистент/gi, "специалист");
 
-    const sentences = noTechWords
+    const withoutStep = noTechWords.replace(/следующий шаг\s*:\s*.*/gi, "").trim();
+    const sentences = withoutStep
       .split(/(?<=[.!?])\s+/)
       .map((part) => part.trim())
       .filter(Boolean)
-      .slice(0, 4);
+      .slice(0, 2);
 
-    const compact = sentences.join(" ").slice(0, 420).trim();
-    return compact || "Понял задачу. Можем настроить сценарий под ваши входящие и показать это в личном кабинете.";
+    const compact = sentences.join(" ").slice(0, 220).trim();
+    const main = compact || "Понял задачу и вижу, как усилить обработку входящих.";
+    return `${main}\nСледующий шаг: ${pickNextStep(`${context} ${noTechWords}`)}`;
   };
 
   const handler = async (req: any, res: any, next: () => void) => {
@@ -90,6 +113,8 @@ function openRouterMiddleware() {
       }
 
       const content = data?.choices?.[0]?.message?.content;
+      const lastUserMessage = [...messages].reverse().find((item: any) => item?.role === "user");
+      const userContext = extractUserText(lastUserMessage?.content);
       const reply =
         typeof content === "string"
           ? content
@@ -99,7 +124,7 @@ function openRouterMiddleware() {
 
       res.statusCode = 200;
       res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ reply: formatHumanReply(reply), mode: "openrouter", model }));
+      res.end(JSON.stringify({ reply: formatSalesReply(reply, userContext), mode: "openrouter", model }));
     } catch (error: any) {
       res.statusCode = 500;
       res.setHeader("Content-Type", "application/json");
