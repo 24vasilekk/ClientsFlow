@@ -1,8 +1,9 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import DashboardApp from "./DashboardApp";
+import WorkbenchApp from "./WorkbenchApp";
 
-type RoutePath = "/" | "/login" | "/dashboard" | "/pricing";
+type RoutePath = "/" | "/login" | "/dashboard" | "/pricing" | "/workbench";
 
 type ChatRole = "assistant" | "user";
 type ChatMessage = {
@@ -19,6 +20,7 @@ type ApiChatMessage = {
 };
 
 const AUTH_KEY = "clientsflow_demo_auth_v1";
+const WORKBENCH_AUTH_KEY = "clientsflow_workbench_auth_v1";
 
 const navLinks = [
   { id: "how", label: "Как работает" },
@@ -121,6 +123,7 @@ function normalizePath(pathname: string): RoutePath {
   if (pathname === "/login") return "/login";
   if (pathname === "/dashboard") return "/dashboard";
   if (pathname === "/pricing") return "/pricing";
+  if (pathname === "/workbench") return "/workbench";
   return "/";
 }
 
@@ -666,19 +669,25 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
 function LoginPage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    localStorage.setItem(AUTH_KEY, JSON.stringify({ isAuth: true, email }));
-    onNavigate("/dashboard");
+    if (email === "111" && password === "111") {
+      localStorage.setItem(WORKBENCH_AUTH_KEY, JSON.stringify({ isAuth: true, email }));
+      setError(null);
+      onNavigate("/workbench");
+      return;
+    }
+    setError("Неверный логин или пароль. Для рабочего входа используйте 111 / 111.");
   };
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#f7f8f6] px-4">
       <form onSubmit={submit} className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
         <p className="text-sm font-semibold text-cyan-700">ClientsFlow</p>
-        <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900">Вход в личный кабинет</h1>
-        <p className="mt-2 text-sm text-slate-600">MVP-режим: для демо подходят любые email и пароль.</p>
+        <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900">Рабочий вход</h1>
+        <p className="mt-2 text-sm text-slate-600">Доступ в рабочий контур: логин `111`, пароль `111`.</p>
         <label className="mt-5 block">
           <span className="mb-1 block text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Email</span>
           <input value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm" />
@@ -688,6 +697,7 @@ function LoginPage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
           <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm" />
         </label>
         <button className="mt-5 w-full rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white">Войти</button>
+        {error ? <p className="mt-3 text-sm font-semibold text-rose-600">{error}</p> : null}
         <button type="button" onClick={() => onNavigate("/")} className="mt-3 w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700">На главную</button>
       </form>
     </div>
@@ -764,6 +774,34 @@ function DashboardRoute({ onNavigate }: { onNavigate: (path: RoutePath) => void 
   return <DashboardApp />;
 }
 
+function WorkbenchRoute({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
+  const isAuth = useMemo(() => {
+    try {
+      const raw = localStorage.getItem(WORKBENCH_AUTH_KEY);
+      return raw ? JSON.parse(raw).isAuth === true : false;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  if (!isAuth) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#f7f8f6] px-4">
+        <div className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">Рабочий контур закрыт</h1>
+          <p className="mt-2 text-sm text-slate-600">Перейдите во вход и авторизуйтесь с учётными данными 111 / 111.</p>
+          <div className="mt-5 flex flex-col gap-2 sm:flex-row">
+            <button onClick={() => onNavigate("/login")} className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white">Перейти ко входу</button>
+            <button onClick={() => onNavigate("/")} className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700">На главную</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return <WorkbenchApp onNavigate={onNavigate} />;
+}
+
 export default function App() {
   const [path, navigate] = useRoute();
 
@@ -773,6 +811,7 @@ export default function App() {
       {path === "/login" ? <LoginPage onNavigate={navigate} /> : null}
       {path === "/pricing" ? <PricingPage onNavigate={navigate} /> : null}
       {path === "/dashboard" ? <DashboardRoute onNavigate={navigate} /> : null}
+      {path === "/workbench" ? <WorkbenchRoute onNavigate={navigate} /> : null}
     </>
   );
 }

@@ -16,6 +16,13 @@ function openRouterMiddleware() {
     "Ты senior UX-copywriter для премиального B2B SaaS. " +
     "Пиши только по-русски, без hype, без клише. " +
     "Верни строго JSON без markdown и без пояснений.";
+  const productChatPrompt =
+    "Ты продуктовый copilot ClientsFlow для владельцев бизнеса. " +
+    "Пиши по-русски, практично и конкретно. " +
+    "Давай рекомендации по Telegram, лидам, конверсии, записи и аналитике.";
+  const businessAuditPrompt =
+    "Ты senior growth-аналитик для сервисных бизнесов. " +
+    "Пиши по-русски и верни только JSON без markdown.";
 
   const pickNextStep = (context: string) => {
     const text = context.toLowerCase();
@@ -70,7 +77,9 @@ function openRouterMiddleware() {
   const handler = async (req: any, res: any, next: () => void) => {
     const isChatRoute = req.method === "POST" && req.url === "/api/openrouter/chat";
     const isSitesRoute = req.method === "POST" && req.url === "/api/openrouter/sites-copy";
-    if (!isChatRoute && !isSitesRoute) {
+    const isProductRoute = req.method === "POST" && req.url === "/api/openrouter/product-chat";
+    const isAuditRoute = req.method === "POST" && req.url === "/api/openrouter/business-audit";
+    if (!isChatRoute && !isSitesRoute && !isProductRoute && !isAuditRoute) {
       next();
       return;
     }
@@ -84,13 +93,25 @@ function openRouterMiddleware() {
     }
 
     try {
+      let messages: any[] = [];
       const chunks: Buffer[] = [];
       for await (const chunk of req) {
         chunks.push(Buffer.from(chunk));
       }
       const raw = Buffer.concat(chunks).toString("utf8");
       const body = raw ? JSON.parse(raw) : {};
-      const messages = Array.isArray(body.messages) ? body.messages : [];
+      if (isAuditRoute) {
+        const auditPrompt = [
+          "Проанализируй бизнес-контекст и дай практический план улучшений.",
+          "Верни JSON строго по схеме:",
+          "{\"summary\":\"\",\"whatWorks\":[\"\",\"\",\"\"],\"risks\":[\"\",\"\",\"\"],\"quickWins\":[\"\",\"\",\"\"],\"automationPlan\":[\"\",\"\",\"\"],\"telegramPlan\":[\"\",\"\",\"\"],\"kpis\":[\"\",\"\",\"\"],\"firstWeekPlan\":[\"\",\"\",\"\"],\"estimatedImpact\":\"\"}",
+          "Контекст:",
+          JSON.stringify(body, null, 2)
+        ].join("\n");
+        messages = [{ role: "user", content: auditPrompt }];
+      } else {
+        messages = Array.isArray(body.messages) ? body.messages : [];
+      }
 
       const model = process.env.OPENROUTER_MODEL || "google/gemini-2.5-pro";
       const referer = process.env.OPENROUTER_SITE_URL || "http://localhost:5173";
@@ -101,12 +122,24 @@ function openRouterMiddleware() {
           Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
           "HTTP-Referer": referer,
-          "X-Title": isSitesRoute ? "ClientsFlow Sites" : "ClientsFlow MVP"
+          "X-Title": isSitesRoute
+            ? "ClientsFlow Sites"
+            : isProductRoute
+              ? "ClientsFlow Product Copilot"
+              : isAuditRoute
+                ? "ClientsFlow Business Audit"
+                : "ClientsFlow MVP"
         },
         body: JSON.stringify({
           model,
-          temperature: isSitesRoute ? 0.4 : 0.35,
-          messages: [{ role: "system", content: isSitesRoute ? sitesSystemPrompt : systemPrompt }, ...messages]
+          temperature: isSitesRoute ? 0.4 : isAuditRoute ? 0.3 : 0.35,
+          messages: [
+            {
+              role: "system",
+              content: isSitesRoute ? sitesSystemPrompt : isProductRoute ? productChatPrompt : isAuditRoute ? businessAuditPrompt : systemPrompt
+            },
+            ...messages
+          ]
         })
       });
 
@@ -128,7 +161,7 @@ function openRouterMiddleware() {
 
       res.statusCode = 200;
       res.setHeader("Content-Type", "application/json");
-      if (isSitesRoute) {
+      if (isSitesRoute || isProductRoute || isAuditRoute) {
         res.end(JSON.stringify({ reply, mode: "openrouter", model }));
       } else {
         const lastUserMessage = [...messages].reverse().find((item: any) => item?.role === "user");
