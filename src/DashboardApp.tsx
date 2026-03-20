@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -127,13 +127,20 @@ type GeneratedSiteContent = {
   heroSubtitle: string;
   primaryCta: string;
   secondaryCta: string;
+  trustStats: Array<{ label: string; value: string }>;
   valueProps: string[];
   services: string[];
   about: string;
   processSteps: string[];
+  outcomes: string[];
+  showcaseTitle: string;
+  showcaseText: string;
+  testimonials: Array<{ name: string; role: string; text: string }>;
+  packages: Array<{ name: string; price: string; features: string[]; recommended?: boolean }>;
   faq: Array<{ q: string; a: string }>;
   finalCtaTitle: string;
   finalCtaText: string;
+  contactLine: string;
 };
 
 type PlanFeatureKey = "advancedAnalytics" | "aiRecommendations" | "sitesBuilder" | "lostRecovery";
@@ -866,33 +873,68 @@ function buildFallbackSiteContent(
   answers: Record<string, string>
 ): GeneratedSiteContent {
   return {
-    heroTitle: `${answers.businessName} — ${answers.mainOffer.toLowerCase()} без лишних ожиданий`,
-    heroSubtitle: `${answers.businessType} в ${answers.city}. Помогаем клиенту быстро понять формат услуги и записаться в удобное время.`,
-    primaryCta: "Оставить заявку",
-    secondaryCta: "Посмотреть услуги",
+    heroTitle: `${answers.businessName} — ${answers.mainOffer.toLowerCase()} with seamless booking`,
+    heroSubtitle: `${answers.businessType} in ${answers.city}. Clear offer, fast response, and a smooth path from inquiry to confirmed appointment.`,
+    primaryCta: "Book a consultation",
+    secondaryCta: "View services",
+    trustStats: [
+      { label: "Clients per month", value: "500+" },
+      { label: "Average rating", value: "4.9/5" },
+      { label: "First response time", value: "< 2 min" }
+    ],
     valueProps: [
-      `Ответ по заявке в течение 2 минут через ${answers.channels}.`,
-      `Прозрачный диапазон стоимости: ${answers.priceRange}.`,
-      `Сервис под аудиторию: ${answers.audience}.`
+      `Fast reply across ${answers.channels}.`,
+      `Transparent pricing range: ${answers.priceRange}.`,
+      `Built for ${answers.audience}.`
     ],
     services: [
       `${answers.mainOffer}`,
-      "Первичная консультация",
-      "Сопровождение до результата"
+      "Initial consultation",
+      "End-to-end service support"
     ],
-    about: `${answers.businessName} — это ${answers.businessType.toLowerCase()} с акцентом на сервис и понятную коммуникацию. Наши сильные стороны: ${answers.advantages}.`,
+    about: `${answers.businessName} is a ${answers.businessType.toLowerCase()} focused on service quality and clear communication. Core strengths: ${answers.advantages}.`,
     processSteps: [
-      "Оставляете заявку на сайте",
-      "Получаете быстрый ответ и уточнение задачи",
-      "Подтверждаете удобное время и приходите на услугу"
+      "Submit your request on the website",
+      "Get a fast confirmation and details",
+      "Choose a time slot and complete booking"
+    ],
+    outcomes: [
+      "Higher intent inquiries with less manual back-and-forth",
+      "Stable bookings even during peak periods",
+      "Clear customer journey from inquiry to payment"
+    ],
+    showcaseTitle: "Lead Operations Workspace",
+    showcaseText: "Track source channel, qualification stage, booking status, and next best action in one operational view.",
+    testimonials: [
+      {
+        name: "Elena Smirnova",
+        role: "Managing Partner, Local Studio",
+        text: "After launch, we reduced low-intent chats and improved booking consistency. Visitors now understand what to do next."
+      },
+      {
+        name: "Andrew Polyakov",
+        role: "Owner, Service Company",
+        text: "The website feels premium and trustworthy. We now receive more qualified inquiries that are ready to book."
+      },
+      {
+        name: "Maria Kuznetsova",
+        role: "Independent Consultant",
+        text: "Clear structure and professional copy made it easy to launch quickly without rewriting every block manually."
+      }
+    ],
+    packages: [
+      { name: "Start", price: "from 3,500 RUB", features: ["Core pages", "Lead form", "Launch-ready setup"] },
+      { name: "Growth", price: "from 7,500 RUB", features: ["Extended sections", "Booking flow blocks", "CRM-ready handoff"], recommended: true },
+      { name: "Scale", price: "custom", features: ["Multi-page structure", "Conversion experiments", "Priority support"] }
     ],
     faq: [
-      { q: "Как быстро вы отвечаете на заявку?", a: "Обычно в течение 2 минут в рабочие часы, в остальное время — с ранним приоритетом." },
-      { q: "Можно ли уточнить стоимость заранее?", a: `Да, сразу даем рабочий диапазон: ${answers.priceRange} и объясняем, от чего зависит финальная стоимость.` },
-      { q: "Как записаться?", a: "Оставьте заявку в форме или напишите в удобный канал связи — мы предложим ближайшие окна." }
+      { q: "How quickly do you reply?", a: "Typically within 2 minutes during business hours, with priority follow-up after hours." },
+      { q: "Can I get pricing before booking?", a: `Yes. We share a transparent working range: ${answers.priceRange}, plus what impacts final pricing.` },
+      { q: "How do I book?", a: "Submit the form or message us in your preferred channel and we will offer available time slots." }
     ],
-    finalCtaTitle: `${template.name}: готово к публикации за 5 минут`,
-    finalCtaText: `Цель сайта: ${answers.goal}. Подключите форму и передавайте лиды прямо в ClientsFlow.`
+    finalCtaTitle: `${template.name}: ready to launch in minutes`,
+    finalCtaText: `Primary website goal: ${answers.goal}. Connect your form and route all leads into ClientsFlow.`,
+    contactLine: `${answers.businessName}, ${answers.city} • Channels: ${answers.channels}`
   };
 }
 
@@ -980,6 +1022,10 @@ export default function App() {
   const [sitesGenerationProgress, setSitesGenerationProgress] = useState(0);
   const [sitesActionMessage, setSitesActionMessage] = useState<string | null>(null);
   const [sitesLastGenerationMode, setSitesLastGenerationMode] = useState<"ai" | "fallback" | null>(null);
+  const [sitesLogoUrl, setSitesLogoUrl] = useState<string>("");
+  const [sitesGalleryUrls, setSitesGalleryUrls] = useState<string[]>([]);
+  const sitesLogoInputRef = useRef<HTMLInputElement | null>(null);
+  const sitesGalleryInputRef = useRef<HTMLInputElement | null>(null);
   const [mobileInboxView, setMobileInboxView] = useState<"list" | "detail">("list");
   const [subscription, setSubscription] = useState<SubscriptionState>(() => loadSubscription());
   const [checkoutPlanId, setCheckoutPlanId] = useState<PlanDefinition["id"] | null>(null);
@@ -1222,6 +1268,39 @@ export default function App() {
     setSitesAnswers((prev) => ({ ...prev, [fieldId]: value }));
   }
 
+  function readFileAsDataUrl(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === "string") resolve(reader.result);
+        else reject(new Error("File read error"));
+      };
+      reader.onerror = () => reject(new Error("File read error"));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function handleSitesLogoUpload(file?: File): Promise<void> {
+    if (!file) return;
+    const dataUrl = await readFileAsDataUrl(file);
+    setSitesLogoUrl(dataUrl);
+    setSitesActionMessage("Логотип загружен. Теперь можно генерировать финальный вариант сайта.");
+  }
+
+  async function handleSitesGalleryUpload(files: FileList | null): Promise<void> {
+    if (!files || files.length === 0) return;
+    const currentCount = sitesGalleryUrls.length;
+    const room = Math.max(0, 5 - currentCount);
+    if (room === 0) {
+      setSitesActionMessage("Добавлено максимум 5 фотографий. Удалите одну, чтобы загрузить новую.");
+      return;
+    }
+    const selected = Array.from(files).slice(0, room);
+    const dataUrls = await Promise.all(selected.map((file) => readFileAsDataUrl(file)));
+    setSitesGalleryUrls((prev) => [...prev, ...dataUrls].slice(0, 5));
+    setSitesActionMessage("Фотографии добавлены в предпросмотр сайта.");
+  }
+
   function toStringArray(value: unknown, fallback: string[]): string[] {
     if (!Array.isArray(value)) return fallback;
     const normalized = value
@@ -1229,6 +1308,70 @@ export default function App() {
       .filter(Boolean)
       .slice(0, Math.max(fallback.length, 3));
     return normalized.length > 0 ? normalized : fallback;
+  }
+
+  function toStatsArray(
+    value: unknown,
+    fallback: Array<{ label: string; value: string }>
+  ): Array<{ label: string; value: string }> {
+    if (!Array.isArray(value)) return fallback;
+    const normalized = value
+      .map((item) => {
+        const record = item as { label?: unknown; value?: unknown };
+        const label = typeof record.label === "string" ? record.label.trim() : "";
+        const statValue = typeof record.value === "string" ? record.value.trim() : "";
+        if (!label || !statValue) return null;
+        return { label, value: statValue };
+      })
+      .filter((item): item is { label: string; value: string } => Boolean(item))
+      .slice(0, 3);
+    return normalized.length > 0 ? normalized : fallback;
+  }
+
+  function toTestimonialsArray(
+    value: unknown,
+    fallback: Array<{ name: string; role: string; text: string }>
+  ): Array<{ name: string; role: string; text: string }> {
+    if (!Array.isArray(value)) return fallback;
+    const normalized = value
+      .map((item) => {
+        const record = item as { name?: unknown; role?: unknown; text?: unknown };
+        const name = typeof record.name === "string" ? record.name.trim() : "";
+        const role = typeof record.role === "string" ? record.role.trim() : "";
+        const text = typeof record.text === "string" ? record.text.trim() : "";
+        if (!name || !role || !text) return null;
+        return { name, role, text };
+      })
+      .filter((item): item is { name: string; role: string; text: string } => Boolean(item))
+      .slice(0, 3);
+    return normalized.length > 0 ? normalized : fallback;
+  }
+
+  function toPackagesArray(
+    value: unknown,
+    fallback: Array<{ name: string; price: string; features: string[]; recommended?: boolean }>
+  ): Array<{ name: string; price: string; features: string[]; recommended?: boolean }> {
+    if (!Array.isArray(value)) return fallback;
+    const normalized = value
+      .map((item) => {
+        const record = item as { name?: unknown; price?: unknown; features?: unknown; recommended?: unknown };
+        const name = typeof record.name === "string" ? record.name.trim() : "";
+        const price = typeof record.price === "string" ? record.price.trim() : "";
+        const features = toStringArray(record.features, []);
+        if (!name || !price || features.length === 0) return null;
+        const normalizedPackage: { name: string; price: string; features: string[]; recommended?: boolean } = {
+          name,
+          price,
+          features
+        };
+        if (record.recommended === true) {
+          normalizedPackage.recommended = true;
+        }
+        return normalizedPackage;
+      })
+      .filter((item) => item !== null)
+      .slice(0, 3);
+    return normalized.length > 0 ? (normalized as Array<{ name: string; price: string; features: string[]; recommended?: boolean }>) : fallback;
   }
 
   function toFaqArray(value: unknown, fallback: Array<{ q: string; a: string }>): Array<{ q: string; a: string }> {
@@ -1258,10 +1401,18 @@ export default function App() {
       primaryCta: typeof candidate.primaryCta === "string" && candidate.primaryCta.trim() ? candidate.primaryCta.trim() : fallback.primaryCta,
       secondaryCta:
         typeof candidate.secondaryCta === "string" && candidate.secondaryCta.trim() ? candidate.secondaryCta.trim() : fallback.secondaryCta,
+      trustStats: toStatsArray(candidate.trustStats, fallback.trustStats),
       valueProps: toStringArray(candidate.valueProps, fallback.valueProps),
       services: toStringArray(candidate.services, fallback.services),
       about: typeof candidate.about === "string" && candidate.about.trim() ? candidate.about.trim() : fallback.about,
       processSteps: toStringArray(candidate.processSteps, fallback.processSteps),
+      outcomes: toStringArray(candidate.outcomes, fallback.outcomes),
+      showcaseTitle:
+        typeof candidate.showcaseTitle === "string" && candidate.showcaseTitle.trim() ? candidate.showcaseTitle.trim() : fallback.showcaseTitle,
+      showcaseText:
+        typeof candidate.showcaseText === "string" && candidate.showcaseText.trim() ? candidate.showcaseText.trim() : fallback.showcaseText,
+      testimonials: toTestimonialsArray(candidate.testimonials, fallback.testimonials),
+      packages: toPackagesArray(candidate.packages, fallback.packages),
       faq: toFaqArray(candidate.faq, fallback.faq),
       finalCtaTitle:
         typeof candidate.finalCtaTitle === "string" && candidate.finalCtaTitle.trim()
@@ -1270,7 +1421,9 @@ export default function App() {
       finalCtaText:
         typeof candidate.finalCtaText === "string" && candidate.finalCtaText.trim()
           ? candidate.finalCtaText.trim()
-          : fallback.finalCtaText
+          : fallback.finalCtaText,
+      contactLine:
+        typeof candidate.contactLine === "string" && candidate.contactLine.trim() ? candidate.contactLine.trim() : fallback.contactLine
     };
   }
 
@@ -1288,14 +1441,21 @@ export default function App() {
   }
 
   async function generateSitesWithAi(): Promise<void> {
+    if (!sitesLogoUrl) {
+      setSitesActionMessage("Сначала загрузите логотип. Он обязателен для генерации и публикации сайта.");
+      return;
+    }
     const baseFallback = buildFallbackSiteContent(selectedSitesTemplate, sitesAnswers);
     const prompt = [
-      "Сгенерируй контент для лендинга малого бизнеса в России.",
+      "Создай контент для премиального production-looking template website для малого/среднего сервисного бизнеса.",
+      "Сайт должен адаптироваться под ниши: beauty, auto service, clinic, dental, local agency, consulting, repair, cleaning, real estate и схожие.",
+      "Это единый универсальный шаблон, меняется только стиль и наполнение.",
       "Верни строго JSON без markdown.",
       "Тон: премиально, спокойно, профессионально, без хайпа.",
       "Избегай слов: AI, ИИ, нейросеть, революция, магия.",
+      "Копирайтинг на английском языке, лаконичный и конверсионный.",
       "Структура JSON:",
-      "{\"heroTitle\":\"\",\"heroSubtitle\":\"\",\"primaryCta\":\"\",\"secondaryCta\":\"\",\"valueProps\":[\"\",\"\",\"\"],\"services\":[\"\",\"\",\"\"],\"about\":\"\",\"processSteps\":[\"\",\"\",\"\"],\"faq\":[{\"q\":\"\",\"a\":\"\"},{\"q\":\"\",\"a\":\"\"},{\"q\":\"\",\"a\":\"\"}],\"finalCtaTitle\":\"\",\"finalCtaText\":\"\"}",
+      "{\"heroTitle\":\"\",\"heroSubtitle\":\"\",\"primaryCta\":\"\",\"secondaryCta\":\"\",\"trustStats\":[{\"label\":\"\",\"value\":\"\"},{\"label\":\"\",\"value\":\"\"},{\"label\":\"\",\"value\":\"\"}],\"valueProps\":[\"\",\"\",\"\"],\"services\":[\"\",\"\",\"\"],\"about\":\"\",\"processSteps\":[\"\",\"\",\"\"],\"outcomes\":[\"\",\"\",\"\"],\"showcaseTitle\":\"\",\"showcaseText\":\"\",\"testimonials\":[{\"name\":\"\",\"role\":\"\",\"text\":\"\"},{\"name\":\"\",\"role\":\"\",\"text\":\"\"},{\"name\":\"\",\"role\":\"\",\"text\":\"\"}],\"packages\":[{\"name\":\"\",\"price\":\"\",\"features\":[\"\",\"\"],\"recommended\":true},{\"name\":\"\",\"price\":\"\",\"features\":[\"\",\"\"]},{\"name\":\"\",\"price\":\"\",\"features\":[\"\",\"\"]}],\"faq\":[{\"q\":\"\",\"a\":\"\"},{\"q\":\"\",\"a\":\"\"},{\"q\":\"\",\"a\":\"\"}],\"finalCtaTitle\":\"\",\"finalCtaText\":\"\",\"contactLine\":\"\"}",
       `Шаблон: ${selectedSitesTemplate.name}. Стиль: ${selectedSitesTemplate.styleLabel}.`,
       `Данные бизнеса: ${JSON.stringify(sitesAnswers, null, 2)}`
     ].join("\n");
@@ -2418,7 +2578,7 @@ export default function App() {
                       <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Продукт экосистемы</p>
                       <h2 className="mt-1 text-2xl font-extrabold tracking-tight text-slate-900">ClientsFlow Sites</h2>
                       <p className="mt-2 max-w-3xl text-sm text-slate-600">
-                        Запустите сайт за 5 минут: выберите шаблон, заполните данные бизнеса, получите AI-переписанный контент и опубликуйте.
+                        Запустите сайт за 5 минут: выберите один из 4 стилей, заполните бриф из 10 вопросов, получите сгенерированный контент и опубликуйте.
                         Sites выводит бизнес онлайн, а ClientsFlow берет входящие обращения и доводит до записи.
                       </p>
                     </div>
@@ -2432,8 +2592,8 @@ export default function App() {
 
                 <section className="grid gap-4 xl:grid-cols-3">
                   <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
-                    <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Галерея шаблонов</p>
-                    <h3 className="mt-1 text-lg font-bold tracking-tight text-slate-900">Выберите шаблон под ваш бизнес</h3>
+                    <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Варианты дизайна</p>
+                    <h3 className="mt-1 text-lg font-bold tracking-tight text-slate-900">4 стиля одного шаблона сайта</h3>
                     <div className="mt-4 grid gap-3 md:grid-cols-2">
                       {sitesTemplates.map((template) => {
                         const selected = template.id === sitesTemplateId;
@@ -2511,6 +2671,85 @@ export default function App() {
                     <p className="mt-2 text-sm text-slate-600">
                       На основе этих ответов сервис перепишет тексты сайта под ваш бизнес и выбранный шаблон.
                     </p>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                        <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Логотип (обязательно)</p>
+                        <div className="mt-2 flex items-center gap-3">
+                          <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white">
+                            {sitesLogoUrl ? (
+                              <img src={sitesLogoUrl} alt="Логотип" className="h-full w-full object-contain" />
+                            ) : (
+                              <span className="text-[10px] font-semibold text-slate-400">LOGO</span>
+                            )}
+                          </div>
+                          <div>
+                            <button
+                              type="button"
+                              onClick={() => sitesLogoInputRef.current?.click()}
+                              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700"
+                            >
+                              Загрузить логотип
+                            </button>
+                            <p className="mt-1 text-[11px] text-slate-500">Без логотипа генерация недоступна.</p>
+                          </div>
+                        </div>
+                        <input
+                          ref={sitesLogoInputRef}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(event) => {
+                            void handleSitesLogoUpload(event.target.files?.[0]);
+                            event.currentTarget.value = "";
+                          }}
+                        />
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                        <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Фотографии (до 5, по желанию)</p>
+                        <div className="mt-2 flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => sitesGalleryInputRef.current?.click()}
+                            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700"
+                          >
+                            Добавить фото
+                          </button>
+                          <span className="text-[11px] text-slate-500">{sitesGalleryUrls.length}/5</span>
+                        </div>
+                        <p className="mt-1 text-[11px] text-slate-500">
+                          Если фото есть, на сайте автоматически появляется секция галереи. Если нет, секция не показывается.
+                        </p>
+                        {sitesGalleryUrls.length > 0 ? (
+                          <div className="mt-2">
+                            <div className="grid grid-cols-5 gap-1.5">
+                              {sitesGalleryUrls.map((url, index) => (
+                                <div key={`${url}-${index}`} className="overflow-hidden rounded-md border border-slate-200 bg-white">
+                                  <img src={url} alt={`Фото ${index + 1}`} className="h-10 w-full object-cover" />
+                                </div>
+                              ))}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setSitesGalleryUrls([])}
+                              className="mt-2 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600"
+                            >
+                              Удалить все фото
+                            </button>
+                          </div>
+                        ) : null}
+                        <input
+                          ref={sitesGalleryInputRef}
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          className="hidden"
+                          onChange={(event) => {
+                            void handleSitesGalleryUpload(event.target.files);
+                            event.currentTarget.value = "";
+                          }}
+                        />
+                      </div>
+                    </div>
                     <div className="mt-4 grid gap-3">
                       {sitesQuestions.map((question) => (
                         <label key={question.id} className="block rounded-2xl border border-slate-200 bg-slate-50 p-3">
@@ -2565,71 +2804,167 @@ export default function App() {
                     </div>
 
                     <div className={`mt-4 overflow-hidden rounded-2xl border border-slate-200 ${selectedSitesTemplate.previewTheme.surface}`}>
-                      <div className={`bg-gradient-to-r ${selectedSitesTemplate.previewTheme.gradientFrom} ${selectedSitesTemplate.previewTheme.gradientTo} px-4 py-6`}>
-                        <p className="text-xs font-semibold text-slate-700">{selectedSitesTemplate.name} • {selectedSitesTemplate.heroPattern}</p>
-                        <h4 className="mt-2 text-2xl font-extrabold tracking-tight text-slate-900">{generatedSitesHeadline}</h4>
-                        <p className="mt-2 max-w-xl text-sm text-slate-700">{generatedSitesSubheadline}</p>
-                        <div className="mt-4 flex flex-wrap gap-2">
-                          <button className={`rounded-full ${selectedSitesTemplate.previewTheme.accent} px-4 py-2 text-xs font-semibold text-white`}>
-                            {sitesGeneratedContent.primaryCta}
-                          </button>
-                          <button className="rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700">
-                            {sitesGeneratedContent.secondaryCta}
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="grid gap-3 p-4">
-                        <div className="grid gap-2 sm:grid-cols-3">
-                          {sitesGeneratedContent.valueProps.map((item) => (
-                            <div key={item} className="rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700">
-                              {item}
+                      <div className="h-[760px] overflow-y-auto">
+                        <div className="border-b border-slate-200 bg-white/95 px-4 py-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2">
+                              <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-white">
+                                {sitesLogoUrl ? (
+                                  <img src={sitesLogoUrl} alt="Логотип сайта" className="h-full w-full object-contain" />
+                                ) : (
+                                  <span className="text-[10px] font-semibold text-slate-400">LOGO</span>
+                                )}
+                              </div>
+                              <div>
+                                <p className="text-xs font-semibold text-slate-500">{selectedSitesTemplate.name}</p>
+                                <p className="text-sm font-bold text-slate-900">{sitesAnswers.businessName}</p>
+                              </div>
                             </div>
-                          ))}
+                            <button className={`rounded-full ${selectedSitesTemplate.previewTheme.accent} px-3 py-1.5 text-[11px] font-semibold text-white`}>
+                              {sitesGeneratedContent.primaryCta}
+                            </button>
+                          </div>
                         </div>
 
-                        <div className="rounded-xl border border-slate-200 bg-white p-3">
-                          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Услуги</p>
-                          <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                            {sitesGeneratedContent.services.map((service) => (
-                              <div key={service} className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs font-semibold text-slate-700">
-                                {service}
+                        <div className={`bg-gradient-to-r ${selectedSitesTemplate.previewTheme.gradientFrom} ${selectedSitesTemplate.previewTheme.gradientTo} px-4 py-6`}>
+                          <p className="text-xs font-semibold text-slate-700">{selectedSitesTemplate.heroPattern}</p>
+                          <h4 className="mt-2 text-2xl font-extrabold tracking-tight text-slate-900">{generatedSitesHeadline}</h4>
+                          <p className="mt-2 max-w-xl text-sm text-slate-700">{generatedSitesSubheadline}</p>
+                          <div className="mt-4 flex flex-wrap gap-2">
+                            <button className={`rounded-full ${selectedSitesTemplate.previewTheme.accent} px-4 py-2 text-xs font-semibold text-white`}>
+                              {sitesGeneratedContent.primaryCta}
+                            </button>
+                            <button className="rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700">
+                              {sitesGeneratedContent.secondaryCta}
+                            </button>
+                          </div>
+                          <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                            {sitesGeneratedContent.trustStats.map((item) => (
+                              <div key={item.label} className="rounded-xl border border-white/60 bg-white/80 p-2.5">
+                                <p className="text-[11px] text-slate-500">{item.label}</p>
+                                <p className="text-sm font-bold text-slate-900">{item.value}</p>
                               </div>
                             ))}
                           </div>
                         </div>
 
-                        <div className="rounded-xl border border-slate-200 bg-white p-3">
-                          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">О компании</p>
-                          <p className="mt-1 text-sm text-slate-700">{sitesGeneratedContent.about}</p>
-                        </div>
-
-                        <div className="rounded-xl border border-slate-200 bg-white p-3">
-                          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Как проходит запись</p>
-                          <div className="mt-2 space-y-1.5">
-                            {sitesGeneratedContent.processSteps.map((step, index) => (
-                              <p key={step} className="text-sm text-slate-700">
-                                {index + 1}. {step}
-                              </p>
-                            ))}
+                        <div className="space-y-3 p-4">
+                          <div className="rounded-xl border border-slate-200 bg-white p-3">
+                            <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Value Propositions</p>
+                            <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                              {sitesGeneratedContent.valueProps.map((item) => (
+                                <div key={item} className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700">{item}</div>
+                              ))}
+                            </div>
                           </div>
-                        </div>
 
-                        <div className="rounded-xl border border-slate-200 bg-white p-3">
-                          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">FAQ</p>
-                          <div className="mt-2 space-y-2">
-                            {sitesGeneratedContent.faq.map((item) => (
-                              <div key={item.q} className="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
-                                <p className="text-xs font-semibold text-slate-900">{item.q}</p>
-                                <p className="mt-1 text-xs text-slate-600">{item.a}</p>
+                          <div className="rounded-xl border border-slate-200 bg-white p-3">
+                            <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Services</p>
+                            <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                              {sitesGeneratedContent.services.map((service) => (
+                                <div key={service} className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs font-semibold text-slate-700">
+                                  {service}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="rounded-xl border border-slate-200 bg-white p-3">
+                            <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">How It Works</p>
+                            <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                              {sitesGeneratedContent.processSteps.map((step, index) => (
+                                <div key={step} className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700">
+                                  <span className="font-semibold text-slate-900">{index + 1}. </span>{step}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="rounded-xl border border-slate-200 bg-white p-3">
+                            <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Business Outcomes</p>
+                            <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                              {sitesGeneratedContent.outcomes.map((item) => (
+                                <div key={item} className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700">{item}</div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="rounded-xl border border-slate-200 bg-white p-3">
+                            <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">{sitesGeneratedContent.showcaseTitle}</p>
+                            <p className="mt-1 text-xs text-slate-600">{sitesGeneratedContent.showcaseText}</p>
+                            <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                              {["Новые лиды", "Квалифицировано", "Ожидают записи"].map((label, index) => (
+                                <div key={label} className="rounded-lg border border-slate-200 bg-slate-50 p-2">
+                                  <p className="text-[11px] text-slate-500">{label}</p>
+                                  <p className="text-sm font-bold text-slate-900">{index === 0 ? "24" : index === 1 ? "17" : "9"}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {sitesGalleryUrls.length > 0 ? (
+                            <div className="rounded-xl border border-slate-200 bg-white p-3">
+                              <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Gallery</p>
+                              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                                {sitesGalleryUrls.map((url, index) => (
+                                  <div key={`${url}-${index}`} className="overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+                                    <img src={url} alt={`Фото ${index + 1}`} className="h-24 w-full object-cover" />
+                                  </div>
+                                ))}
                               </div>
-                            ))}
-                          </div>
-                        </div>
+                            </div>
+                          ) : null}
 
-                        <div className="rounded-xl border border-cyan-200 bg-cyan-50 p-3">
-                          <p className="text-sm font-semibold text-slate-900">{sitesGeneratedContent.finalCtaTitle}</p>
-                          <p className="mt-1 text-xs text-slate-700">{sitesGeneratedContent.finalCtaText}</p>
+                          <div className="rounded-xl border border-slate-200 bg-white p-3">
+                            <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Testimonials</p>
+                            <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                              {sitesGeneratedContent.testimonials.map((item) => (
+                                <div key={item.name} className="rounded-lg border border-slate-200 bg-slate-50 p-2">
+                                  <p className="text-xs font-semibold text-slate-900">{item.name}</p>
+                                  <p className="text-[11px] text-slate-500">{item.role}</p>
+                                  <p className="mt-1 text-xs text-slate-700">{item.text}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="rounded-xl border border-slate-200 bg-white p-3">
+                            <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Packages</p>
+                            <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                              {sitesGeneratedContent.packages.map((item) => (
+                                <div
+                                  key={item.name}
+                                  className={`rounded-lg border p-2 ${item.recommended ? "border-cyan-300 bg-cyan-50" : "border-slate-200 bg-slate-50"}`}
+                                >
+                                  <p className="text-xs font-semibold text-slate-900">{item.name}</p>
+                                  <p className="text-xs text-slate-600">{item.price}</p>
+                                  <div className="mt-1 space-y-0.5">
+                                    {item.features.map((feature) => (
+                                      <p key={feature} className="text-[11px] text-slate-700">• {feature}</p>
+                                    ))}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="rounded-xl border border-slate-200 bg-white p-3">
+                            <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">FAQ</p>
+                            <div className="mt-2 space-y-2">
+                              {sitesGeneratedContent.faq.map((item) => (
+                                <div key={item.q} className="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+                                  <p className="text-xs font-semibold text-slate-900">{item.q}</p>
+                                  <p className="mt-1 text-xs text-slate-600">{item.a}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="rounded-xl border border-cyan-200 bg-cyan-50 p-3">
+                            <p className="text-sm font-semibold text-slate-900">{sitesGeneratedContent.finalCtaTitle}</p>
+                            <p className="mt-1 text-xs text-slate-700">{sitesGeneratedContent.finalCtaText}</p>
+                            <p className="mt-2 text-[11px] text-slate-600">{sitesGeneratedContent.contactLine}</p>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -2637,11 +2972,15 @@ export default function App() {
                     <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                       <button
                         onClick={() => {
+                          if (!sitesLogoUrl) {
+                            setSitesActionMessage("Публикация невозможна без логотипа. Загрузите логотип в брифе.");
+                            return;
+                          }
                           setSitesFlowStatus("published");
                           setSitesGenerationProgress(100);
                           setSitesActionMessage("Сайт опубликован. Финальная версия будет передана вашим менеджером для выдачи ссылки.");
                         }}
-                        disabled={sitesFlowStatus !== "ready" && sitesFlowStatus !== "published"}
+                        disabled={!sitesLogoUrl || (sitesFlowStatus !== "ready" && sitesFlowStatus !== "published")}
                         className="w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                       >
                         Опубликовать и передать менеджеру
