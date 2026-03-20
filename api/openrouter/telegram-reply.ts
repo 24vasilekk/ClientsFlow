@@ -49,25 +49,34 @@ export default async function handler(req: any, res: any) {
   ].join("\n");
 
   try {
-    const model = process.env.OPENROUTER_MODEL || "google/gemini-2.5-flash";
+    const model = process.env.OPENROUTER_MODEL_TELEGRAM || process.env.OPENROUTER_MODEL || "google/gemini-2.5-flash";
     const referer = process.env.OPENROUTER_SITE_URL || "https://clients-flow-ten.vercel.app";
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": referer,
-        "X-Title": "ClientsFlow Telegram Reply"
-      },
-      body: JSON.stringify({
-        model,
-        temperature: 0.35,
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: prompt }
-        ]
-      })
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 9000);
+    let response: Response;
+    try {
+      response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": referer,
+          "X-Title": "ClientsFlow Telegram Reply"
+        },
+        body: JSON.stringify({
+          model,
+          temperature: 0.2,
+          max_tokens: 120,
+          messages: [
+            { role: "system", content: SYSTEM_PROMPT },
+            { role: "user", content: prompt }
+          ]
+        }),
+        signal: controller.signal
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
 
     const data = await response.json();
     if (!response.ok) {
@@ -90,6 +99,7 @@ export default async function handler(req: any, res: any) {
         "Понял ваш запрос. Следующий шаг: напишите, какая услуга интересует и на какое время вам удобно."
     });
   } catch (error: any) {
-    res.status(500).json({ error: error?.message || "OpenRouter telegram reply error" });
+    const isTimeout = error?.name === "AbortError";
+    res.status(500).json({ error: isTimeout ? "OpenRouter timeout" : error?.message || "OpenRouter telegram reply error" });
   }
 }

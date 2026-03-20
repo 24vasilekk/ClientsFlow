@@ -357,14 +357,22 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
     setInput("");
     setIsTyping(true);
     try {
-      const response = await fetch("/api/openrouter/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: toApiMessages(nextMessages),
-          interactionCount: nextMessages.filter((item) => item.role === "user").length
-        })
-      });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      let response: Response;
+      try {
+        response = await fetch("/api/openrouter/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: toApiMessages(nextMessages),
+            interactionCount: nextMessages.filter((item) => item.role === "user").length
+          }),
+          signal: controller.signal
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
       if (!response.ok) {
         throw new Error(`API status ${response.status}`);
       }

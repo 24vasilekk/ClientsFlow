@@ -75,21 +75,30 @@ export default async function handler(req: any, res: any) {
     const messages = Array.isArray(req.body?.messages) ? req.body.messages : [];
     const model = process.env.OPENROUTER_MODEL || "google/gemini-2.5-flash";
     const referer = process.env.OPENROUTER_SITE_URL || "https://clients-flow-ten.vercel.app";
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 9000);
 
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": referer,
-        "X-Title": "ClientsFlow MVP"
-      },
-      body: JSON.stringify({
-        model,
-        temperature: 0.35,
-        messages: [{ role: "system", content: SYSTEM_PROMPT }, ...messages]
-      })
-    });
+    let response: Response;
+    try {
+      response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": referer,
+          "X-Title": "ClientsFlow MVP"
+        },
+        body: JSON.stringify({
+          model,
+          temperature: 0.25,
+          max_tokens: 120,
+          messages: [{ role: "system", content: SYSTEM_PROMPT }, ...messages]
+        }),
+        signal: controller.signal
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
 
     const data = await response.json();
 
@@ -110,6 +119,7 @@ export default async function handler(req: any, res: any) {
 
     res.status(200).json({ reply: formatSalesReply(reply, userContext), mode: "openrouter", model });
   } catch (error: any) {
-    res.status(500).json({ error: error?.message || "OpenRouter handler error", mode: "mock" });
+    const isTimeout = error?.name === "AbortError";
+    res.status(500).json({ error: isTimeout ? "OpenRouter timeout" : error?.message || "OpenRouter handler error", mode: "mock" });
   }
 }

@@ -994,6 +994,8 @@ const TELEGRAM_ONBOARDING_QUESTIONS = [
   "В каком городе или регионе вы работаете?",
   "Какая главная цель: больше лидов, больше записей или рост среднего чека?"
 ];
+const TELEGRAM_MAX_AUTO_REPLIES_PER_SYNC = 6;
+const TELEGRAM_AUTO_REPLY_MAX_AGE_SECONDS = 180;
 
 function loadServiceConnection(): ServiceConnection {
   if (typeof window === "undefined") {
@@ -2126,6 +2128,7 @@ export default function App() {
       let nextOffset = telegramOffset;
       const inboundEvents: ServiceEvent[] = [];
       const profilesNext = { ...telegramProfiles };
+      let autoRepliesCount = 0;
 
       for (const update of updates) {
         if (update.update_id > nextOffset) nextOffset = update.update_id;
@@ -2154,7 +2157,13 @@ export default function App() {
           bookingState: "не начата"
         });
 
-        if (serviceConnection.autoReplyEnabled) {
+        const messageAgeSeconds = Math.floor(Date.now() / 1000) - message.date;
+        const canAutoReply =
+          serviceConnection.autoReplyEnabled &&
+          autoRepliesCount < TELEGRAM_MAX_AUTO_REPLIES_PER_SYNC &&
+          messageAgeSeconds <= TELEGRAM_AUTO_REPLY_MAX_AGE_SECONDS;
+
+        if (canAutoReply) {
           try {
             const incomingText = message.text.trim();
             const currentProfile = profilesNext[leadId];
@@ -2183,15 +2192,23 @@ export default function App() {
                   "Отлично, профиль бизнеса зафиксирован. Теперь буду отвечать с учетом вашей ниши и целей. Напишите любой вопрос клиента для теста.";
               }
             } else {
-              const replyResp = await fetch("/api/openrouter/telegram-reply", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  text: incomingText,
-                  businessName: serviceConnection.serviceName || "Ваш сервис",
-                  businessContext: buildTelegramBusinessContext(currentProfile)
-                })
-              });
+              const controller = new AbortController();
+              const timeout = setTimeout(() => controller.abort(), 10000);
+              let replyResp: Response;
+              try {
+                replyResp = await fetch("/api/openrouter/telegram-reply", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    text: incomingText,
+                    businessName: serviceConnection.serviceName || "Ваш сервис",
+                    businessContext: buildTelegramBusinessContext(currentProfile)
+                  }),
+                  signal: controller.signal
+                });
+              } finally {
+                clearTimeout(timeout);
+              }
               const replyData = (await replyResp.json()) as { reply?: string };
               replyText = replyResp.ok ? (replyData.reply || "").trim() : "";
               if (!replyText) {
@@ -2221,6 +2238,7 @@ export default function App() {
                 stage: "квалифицирован",
                 bookingState: "в процессе"
               });
+              autoRepliesCount += 1;
             }
           } catch {
             // Keep sync resilient even if one reply fails.
@@ -2238,7 +2256,11 @@ export default function App() {
         });
       }
       setServiceConnection((prev) => ({ ...prev, connectedAt: new Date().toISOString() }));
-      triggerNotice(`Telegram синхронизирован. Новых событий: ${inboundEvents.length}`);
+      const extraInfo =
+        serviceConnection.autoReplyEnabled && autoRepliesCount >= TELEGRAM_MAX_AUTO_REPLIES_PER_SYNC
+          ? ` Ответов за цикл: ${autoRepliesCount}, остальные обработаются при следующей синхронизации.`
+          : ` Ответов за цикл: ${autoRepliesCount}.`;
+      triggerNotice(`Telegram синхронизирован. Новых событий: ${inboundEvents.length}.${extraInfo}`);
     } catch (error: any) {
       triggerNotice(error?.message || "Ошибка синхронизации Telegram.");
     } finally {
