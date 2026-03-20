@@ -150,6 +150,15 @@ function uid() {
 
 function pickNextStep(context: string) {
   const text = context.toLowerCase();
+  if (text.includes("личный кабинет") || text.includes("войти")) {
+    return "Нажмите кнопку Перейти в личный кабинет ниже.";
+  }
+  if (text.includes("входящ") || text.includes("заявк")) {
+    return "Напишите нишу бизнеса, и я адаптирую ответ под ваш поток обращений.";
+  }
+  if (text.includes("бьюти") || text.includes("салон") || text.includes("барбер") || text.includes("клиник")) {
+    return "Укажите услугу и средний чек, и я соберу готовый сценарий под запись.";
+  }
   if (text.includes("голос") || text.includes("аудио")) {
     return "Отправьте голосовое, и я покажу готовый ответ клиенту.";
   }
@@ -157,7 +166,7 @@ function pickNextStep(context: string) {
     return "Загрузите фото запроса, и я предложу корректный сценарий ответа.";
   }
   if (text.includes("цена") || text.includes("стоим") || text.includes("дорог")) {
-    return "Напишите: Покажи ответ на вопрос о цене.";
+    return "Дайте тип услуги, и я подготовлю мягкий ответ с диапазоном цены.";
   }
   if (text.includes("аналит") || text.includes("ворон") || text.includes("конверс") || text.includes("выруч")) {
     return "Перейдите в личный кабинет и откройте раздел аналитики.";
@@ -198,7 +207,50 @@ function formatSalesReply(text: string, context = "") {
 
   const compact = sentences.join(" ").slice(0, 220).trim();
   const main = compact || "Понял задачу и вижу, как это улучшить в обработке входящих.";
-  return `${main}\nСледующий шаг: ${pickNextStep(`${context} ${noTechWords}`)}`;
+  return `${main}\nСледующий шаг: ${pickNextStep(context)}`;
+}
+
+function buildDemoReply(userText: string, kind: ChatMessage["kind"]) {
+  const text = userText.toLowerCase().trim();
+
+  if (kind === "voice" || text.includes("голос") || text.includes("аудио")) {
+    return "Принял голосовое. Коротко: клиент спрашивает стоимость и ближайшую запись, при этом готов записаться в ближайшие дни.\nСледующий шаг: показать готовый ответ на это голосовое.";
+  }
+
+  if (kind === "image" || text.includes("фото") || text.includes("изображ") || text.includes("картин")) {
+    return "По фото видно, что клиент выбирает услугу и сравнивает варианты. В таком запросе важно сразу дать понятный выбор и мягко подвести к записи.\nСледующий шаг: загрузите ещё одно фото, и я покажу второй вариант ответа.";
+  }
+
+  if (
+    text.includes("покажи, как ты отвечаешь на входящий лид") ||
+    text.includes("входящий лид") ||
+    text.includes("представь что я лид") ||
+    text.includes("как ты отвечаешь на мою заявку")
+  ) {
+    return "Пример ответа клиенту: Добрый день, спасибо за заявку. Подскажите, какая услуга вам нужна и в какие дни удобно прийти, чтобы я сразу предложил ближайшие свободные слоты.\nСледующий шаг: напишите нишу бизнеса, и я адаптирую этот ответ под ваш формат.";
+  }
+
+  if (text.includes("бьюти") || text.includes("салон") || text.includes("барбер") || text.includes("клиник")) {
+    return "Пример для бьюти-направления: Добрый день, спасибо за обращение. Подскажите, какая процедура интересует и на какое время вам удобно, чтобы я сразу предложил подходящего мастера и свободные окна.\nСледующий шаг: укажите услугу и средний чек, и я дам готовый сценарий до записи.";
+  }
+
+  if (text.includes("теряю клиентов в директе") || text.includes("теряю клиентов") || text.includes("директе")) {
+    return "Это типовая проблема: обращения теряются между диалогами и ответ приходит с задержкой. Мы фиксируем каждый лид, отвечаем сразу и запускаем повторное касание, если клиент не ответил.\nСледующий шаг: напишите, через сколько минут вы обычно отвечаете сейчас.";
+  }
+
+  if (text.includes("вопрос о цене") || text.includes("покажи ответ на вопрос о цене") || text.includes("цена") || text.includes("стоимость")) {
+    return "Готовый ответ на цену: Стоимость зависит от задачи и обычно составляет от 3 500 до 5 500 ₽. Чтобы точно рассчитать и подобрать время, подскажите удобный день, и я предложу ближайшие слоты.\nСледующий шаг: хотите вариант ответа для премиум-сегмента или для массового потока.";
+  }
+
+  if (text.includes("личный кабинет") || text.includes("войти в кабинет") || text.includes("перейти в личный кабинет")) {
+    return "В личном кабинете вы увидите диалоги, этапы воронки, потери и точки роста по конверсии.\nСледующий шаг: нажмите кнопку Перейти в личный кабинет.";
+  }
+
+  if (text.includes("аналит")) {
+    return "В аналитике видно источники лидов, конверсию по этапам и причины потерь. Это позволяет быстро корректировать сценарии и возвращать выручку.\nСледующий шаг: перейти в личный кабинет и открыть раздел Аналитика.";
+  }
+
+  return null;
 }
 
 function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
@@ -222,8 +274,23 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
     [messages]
   );
 
+  const isQualifiedForCta = useMemo(() => {
+    const joined = messages
+      .filter((m) => m.role === "user")
+      .map((m) => m.text.toLowerCase())
+      .join(" ");
+    const hasBusinessIntent =
+      joined.includes("лид") ||
+      joined.includes("заявк") ||
+      joined.includes("директ") ||
+      joined.includes("цена") ||
+      joined.includes("запис") ||
+      joined.includes("конверс");
+    return interactionCount >= 3 && hasBusinessIntent;
+  }, [messages, interactionCount]);
+
   useEffect(() => {
-    if (interactionCount >= 4 && !showCabinetCta) {
+    if (isQualifiedForCta && !showCabinetCta) {
       setShowCabinetCta(true);
       setMessages((prev) => [
         ...prev,
@@ -231,11 +298,11 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
           id: uid(),
           role: "assistant",
           kind: "cta",
-          text: "Похоже, вам подойдёт полноценный сценарий ClientsFlow. Перейдите в личный кабинет и посмотрите, как это работает на воронке, диалогах и аналитике."
+          text: "Если хотите, покажу это уже в рабочем интерфейсе на воронке, диалогах и аналитике."
         }
       ]);
     }
-  }, [interactionCount, showCabinetCta]);
+  }, [isQualifiedForCta, showCabinetCta]);
 
   const buildReply = (userText: string) => {
     const text = userText.toLowerCase();
@@ -300,6 +367,7 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
       }
       const data = (await response.json()) as { reply?: string; mode?: "openrouter" | "mock" };
       setChatMode(data.mode === "openrouter" ? "openrouter" : "mock");
+      const deterministicReply = buildDemoReply(text, kind);
       const localFallback =
         kind === "image"
           ? "Вижу фото. По контексту это похоже на запрос по услуге. Могу сразу дать рабочий ответ и предложить следующий шаг по воронке."
@@ -309,12 +377,13 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
       const assistantMessage: ChatMessage = {
         id: uid(),
         role: "assistant",
-        text: formatSalesReply(data.reply?.trim() || localFallback, text),
+        text: deterministicReply || formatSalesReply(data.reply?.trim() || localFallback, text),
         kind: "text"
       };
       setMessages((prev) => [...prev, assistantMessage]);
     } catch {
       setChatMode("mock");
+      const deterministicReply = buildDemoReply(text, kind);
       const fallback =
         kind === "image"
           ? "Вижу фото. По контексту это похоже на запрос по услуге. Могу сразу дать рабочий ответ и предложить следующий шаг по воронке."
@@ -324,7 +393,7 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
       const assistantMessage: ChatMessage = {
         id: uid(),
         role: "assistant",
-        text: formatSalesReply(fallback, text),
+        text: deterministicReply || formatSalesReply(fallback, text),
         kind: "text"
       };
       setMessages((prev) => [...prev, assistantMessage]);
