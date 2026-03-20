@@ -1,8 +1,40 @@
 const SYSTEM_PROMPT =
-  "Ты AI-ассистент ClientsFlow для B2B бизнеса. Пиши только по-русски. " +
+  "Ты консультант ClientsFlow для B2B бизнеса. Пиши только по-русски. " +
+  "Всегда отвечай как живой специалист, а не как технология. " +
+  "Запрещено использовать слова: AI, ИИ, нейросеть, искусственный интеллект, бот, ассистент. " +
+  "Запрещено использовать markdown и служебное оформление: *, **, #, -, ---, [ ], ( ). " +
+  "Формат: 2-4 коротких предложения, максимум 420 символов. " +
+  "Стиль: спокойно, профессионально, конкретно, без хайпа. " +
   "Фокус: лиды, запись, квалификация, follow-up, конверсия, аналитика. " +
-  "Тон: премиально, спокойно, конкретно, без хайпа. " +
-  "Если пользователь делится болью бизнеса, предлагай конкретный рабочий шаг.";
+  "В конце при уместности предложи один следующий шаг.";
+
+function formatHumanReply(text: string) {
+  const noMarkdown = text
+    .replace(/[*#`_~]/g, "")
+    .replace(/\[(.*?)\]/g, "$1")
+    .replace(/[()]/g, "")
+    .replace(/---+/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  const noTechWords = noMarkdown
+    .replace(/\bAI\b/gi, "специалист")
+    .replace(/\bИИ\b/gi, "специалист")
+    .replace(/нейросеть/gi, "система")
+    .replace(/искусственный интеллект/gi, "система")
+    .replace(/чат-бот/gi, "сервис")
+    .replace(/\bбот\b/gi, "сервис")
+    .replace(/ассистент/gi, "специалист");
+
+  const sentences = noTechWords
+    .split(/(?<=[.!?])\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .slice(0, 4);
+
+  const compact = sentences.join(" ").slice(0, 420).trim();
+  return compact || "Понял задачу. Можем настроить сценарий под ваши входящие и показать это в личном кабинете.";
+}
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
@@ -51,7 +83,7 @@ export default async function handler(req: any, res: any) {
           ? content.map((item: any) => item?.text || "").join("\n").trim()
           : "";
 
-    res.status(200).json({ reply, mode: "openrouter", model });
+    res.status(200).json({ reply: formatHumanReply(reply), mode: "openrouter", model });
   } catch (error: any) {
     res.status(500).json({ error: error?.message || "OpenRouter handler error", mode: "mock" });
   }

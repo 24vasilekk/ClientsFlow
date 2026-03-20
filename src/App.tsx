@@ -148,12 +148,40 @@ function uid() {
   return Math.random().toString(36).slice(2, 10);
 }
 
+function formatHumanReply(text: string) {
+  const noMarkdown = text
+    .replace(/[*#`_~]/g, "")
+    .replace(/\[(.*?)\]/g, "$1")
+    .replace(/[()]/g, "")
+    .replace(/---+/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  const noTechWords = noMarkdown
+    .replace(/\bAI\b/gi, "специалист")
+    .replace(/\bИИ\b/gi, "специалист")
+    .replace(/нейросеть/gi, "система")
+    .replace(/искусственный интеллект/gi, "система")
+    .replace(/чат-бот/gi, "сервис")
+    .replace(/\bбот\b/gi, "сервис")
+    .replace(/ассистент/gi, "специалист");
+
+  const sentences = noTechWords
+    .split(/(?<=[.!?])\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .slice(0, 4);
+
+  const compact = sentences.join(" ").slice(0, 420).trim();
+  return compact || "Понял задачу. Можем настроить сценарий под ваши входящие и показать это в личном кабинете.";
+}
+
 function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: uid(),
       role: "assistant",
-      text: "Здравствуйте! Я демо-ассистент ClientsFlow. Покажу, как мы обрабатываем лиды, квалифицируем обращения и доводим до записи.",
+      text: "Здравствуйте. Я на связи от ClientsFlow. Покажу, как мы отвечаем на входящие, квалифицируем обращения и доводим до записи.",
       kind: "text"
     }
   ]);
@@ -188,25 +216,25 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
     const text = userText.toLowerCase();
 
     if (text.includes("голос") || text.includes("аудио")) {
-      return "Мы автоматически расшифровываем голосовое, выделяем намерение клиента и готовим ответ с предложением записи.";
+      return "Разбираем голосовое за секунды: фиксируем запрос, выделяем ключевую задачу и сразу готовим корректный ответ с предложением записи.";
     }
     if (text.includes("фото") || text.includes("изображ") || text.includes("картин")) {
-      return "По изображению мы можем определить контекст запроса и подсказать следующий шаг: консультация, прайс, запись к специалисту.";
+      return "По фото определяем контекст запроса и подсказываем следующий шаг: консультация, прайс или запись к нужному специалисту.";
     }
     if (text.includes("цена") || text.includes("стоим") || text.includes("дорого")) {
-      return "Для вопросов о цене мы используем мягкий сценарий: диапазон стоимости + ценность услуги + два ближайших слота для записи.";
+      return "На вопрос о цене даем аккуратный сценарий: понятный диапазон, что входит в услугу и два ближайших слота на запись.";
     }
     if (text.includes("директ") || text.includes("теряю") || text.includes("лид")) {
-      return "ClientsFlow фиксирует входящий лид, отвечает за секунды, квалифицирует и запускает follow-up, если клиент замолчал.";
+      return "ClientsFlow фиксирует входящий лид, отвечает без задержек, квалифицирует обращение и запускает повторное касание, если клиент замолчал.";
     }
     if (text.includes("аналит") || text.includes("ворон") || text.includes("конверс")) {
-      return "В кабинете вы увидите конверсию по каналам, потерянную выручку, причины оттока и конкретные AI-рекомендации по росту.";
+      return "В кабинете видно конверсию по каналам, причины потерь и недополученную выручку. По каждому узкому месту даем конкретные действия.";
     }
     if (text.includes("запис") || text.includes("бронь")) {
-      return "После квалификации ассистент предлагает удобные слоты, подтверждает запись и передает сложные кейсы менеджеру.";
+      return "После квалификации система предлагает удобные слоты, подтверждает запись и передает нестандартные кейсы менеджеру.";
     }
 
-    return "Понял задачу. Для вашего сценария мы настраиваем ответы, квалификацию, follow-up и маршрут клиента до записи в одной системе.";
+    return "Понял задачу. Для вашего сценария настраиваем ответы, квалификацию и маршрут клиента до записи в одной системе.";
   };
 
   const toApiMessages = (list: ChatMessage[]): ApiChatMessage[] =>
@@ -251,12 +279,12 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
         id: uid(),
         role: "assistant",
         text:
-          data.reply?.trim() ||
+          formatHumanReply(data.reply?.trim() || "") ||
           (kind === "image"
-            ? "Вижу изображение. По контексту похоже на клиентский запрос по услуге. Могу сформировать корректный ответ и сразу предложить следующий шаг воронки."
+            ? "Вижу фото. По контексту это похоже на запрос по услуге. Могу сразу дать рабочий ответ и предложить следующий шаг по воронке."
             : kind === "voice"
-              ? "Голосовое получено. Краткая выжимка: клиент интересуется стоимостью и ближайшей записью. Предлагаю ответить с диапазоном цены и двумя слотами на выбор."
-              : buildReply(text)),
+              ? "Голосовое получено. Кратко: клиент уточняет стоимость и ближайшую запись. Рекомендую ответить диапазоном цены и предложить два слота на выбор."
+              : formatHumanReply(buildReply(text))),
         kind: "text"
       };
       setMessages((prev) => [...prev, assistantMessage]);
@@ -267,10 +295,10 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
         role: "assistant",
         text:
           kind === "image"
-            ? "Вижу изображение. По контексту похоже на клиентский запрос по услуге. Могу сформировать корректный ответ и сразу предложить следующий шаг воронки."
+            ? "Вижу фото. По контексту это похоже на запрос по услуге. Могу сразу дать рабочий ответ и предложить следующий шаг по воронке."
             : kind === "voice"
-              ? "Голосовое получено. Краткая выжимка: клиент интересуется стоимостью и ближайшей записью. Предлагаю ответить с диапазоном цены и двумя слотами на выбор."
-              : buildReply(text),
+              ? "Голосовое получено. Кратко: клиент уточняет стоимость и ближайшую запись. Рекомендую ответить диапазоном цены и предложить два слота на выбор."
+              : formatHumanReply(buildReply(text)),
         kind: "text"
       };
       setMessages((prev) => [...prev, assistantMessage]);
@@ -345,8 +373,8 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
             <motion.div id="demo" initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.55, delay: 0.05 }} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
               <div className="mb-3 flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-bold text-slate-900">Интерактивный демо-ассистент</p>
-                  <p className="text-xs text-slate-500">{chatMode === "openrouter" ? "Live AI mode" : "Fallback demo mode"}</p>
+                  <p className="text-sm font-bold text-slate-900">Интерактивный демо-диалог</p>
+                  <p className="text-xs text-slate-500">{chatMode === "openrouter" ? "Онлайн-режим" : "Резервный демо-режим"}</p>
                 </div>
                 <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-[11px] font-semibold text-cyan-700">Сообщения • Голосовые • Фото</span>
               </div>
