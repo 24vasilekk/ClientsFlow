@@ -23,6 +23,10 @@ function openRouterMiddleware() {
   const businessAuditPrompt =
     "Ты senior growth-аналитик для сервисных бизнесов. " +
     "Пиши по-русски и верни только JSON без markdown.";
+  const telegramReplyPrompt =
+    "Ты отвечаешь клиенту в Telegram от лица сервисного бизнеса. " +
+    "Пиши по-русски, кратко и вежливо, как живой менеджер. " +
+    "Цель: уточнить запрос и предложить следующий шаг к записи.";
 
   const pickNextStep = (context: string) => {
     const text = context.toLowerCase();
@@ -79,9 +83,87 @@ function openRouterMiddleware() {
     const isSitesRoute = req.method === "POST" && req.url === "/api/openrouter/sites-copy";
     const isProductRoute = req.method === "POST" && req.url === "/api/openrouter/product-chat";
     const isAuditRoute = req.method === "POST" && req.url === "/api/openrouter/business-audit";
-    if (!isChatRoute && !isSitesRoute && !isProductRoute && !isAuditRoute) {
+    const isTelegramReplyRoute = req.method === "POST" && req.url === "/api/openrouter/telegram-reply";
+    const isTelegramGetUpdatesRoute = req.method === "POST" && req.url === "/api/telegram/get-updates";
+    const isTelegramSendRoute = req.method === "POST" && req.url === "/api/telegram/send-message";
+    if (
+      !isChatRoute &&
+      !isSitesRoute &&
+      !isProductRoute &&
+      !isAuditRoute &&
+      !isTelegramReplyRoute &&
+      !isTelegramGetUpdatesRoute &&
+      !isTelegramSendRoute
+    ) {
       next();
       return;
+    }
+
+    if (isTelegramGetUpdatesRoute || isTelegramSendRoute) {
+      try {
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) {
+          chunks.push(Buffer.from(chunk));
+        }
+        const raw = Buffer.concat(chunks).toString("utf8");
+        const body = raw ? JSON.parse(raw) : {};
+        const botToken = body.botToken || process.env.TELEGRAM_BOT_TOKEN;
+        if (!botToken) {
+          res.statusCode = 400;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: "Telegram bot token is missing" }));
+          return;
+        }
+        if (isTelegramGetUpdatesRoute) {
+          const offset = Number(body.offset ?? 0);
+          const tgResponse = await fetch(`https://api.telegram.org/bot${botToken}/getUpdates`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ offset, timeout: 0, allowed_updates: ["message"] })
+          });
+          const tgData = await tgResponse.json();
+          if (!tgResponse.ok || tgData?.ok !== true) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ error: tgData?.description || "Telegram getUpdates failed" }));
+            return;
+          }
+          res.statusCode = 200;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ updates: Array.isArray(tgData.result) ? tgData.result : [] }));
+          return;
+        }
+
+        const chatId = body.chatId;
+        const text = body.text;
+        if (!chatId || !text) {
+          res.statusCode = 400;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: "chatId and text are required" }));
+          return;
+        }
+        const tgResponse = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chat_id: chatId, text, disable_web_page_preview: true })
+        });
+        const tgData = await tgResponse.json();
+        if (!tgResponse.ok || tgData?.ok !== true) {
+          res.statusCode = 400;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: tgData?.description || "Telegram sendMessage failed" }));
+          return;
+        }
+        res.statusCode = 200;
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ ok: true, result: tgData.result }));
+        return;
+      } catch (error: any) {
+        res.statusCode = 500;
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ error: error?.message || "Telegram middleware error" }));
+        return;
+      }
     }
 
     const apiKey = process.env.OPENROUTER_API_KEY;
@@ -111,6 +193,21 @@ function openRouterMiddleware() {
         messages = [{ role: "user", content: auditPrompt }];
       } else {
         messages = Array.isArray(body.messages) ? body.messages : [];
+        if (isTelegramReplyRoute && typeof body.text === "string") {
+          const businessName = typeof body.businessName === "string" ? body.businessName : "ClientsFlow";
+          messages = [
+            {
+              role: "user",
+              content: [
+                `Бизнес: ${businessName}`,
+                "Сформируй ответ клиенту в Telegram.",
+                "Формат: 1-3 коротких предложения, до 320 символов.",
+                "Сообщение клиента:",
+                body.text
+              ].join("\n")
+            }
+          ];
+        }
       }
 
       const model = process.env.OPENROUTER_MODEL || "google/gemini-2.5-pro";
@@ -128,6 +225,8 @@ function openRouterMiddleware() {
               ? "ClientsFlow Product Copilot"
               : isAuditRoute
                 ? "ClientsFlow Business Audit"
+                : isTelegramReplyRoute
+                  ? "ClientsFlow Telegram Reply"
                 : "ClientsFlow MVP"
         },
         body: JSON.stringify({
@@ -136,7 +235,15 @@ function openRouterMiddleware() {
           messages: [
             {
               role: "system",
-              content: isSitesRoute ? sitesSystemPrompt : isProductRoute ? productChatPrompt : isAuditRoute ? businessAuditPrompt : systemPrompt
+              content: isSitesRoute
+                ? sitesSystemPrompt
+                : isProductRoute
+                  ? productChatPrompt
+                  : isAuditRoute
+                    ? businessAuditPrompt
+                    : isTelegramReplyRoute
+                      ? telegramReplyPrompt
+                      : systemPrompt
             },
             ...messages
           ]
@@ -161,7 +268,7 @@ function openRouterMiddleware() {
 
       res.statusCode = 200;
       res.setHeader("Content-Type", "application/json");
-      if (isSitesRoute || isProductRoute || isAuditRoute) {
+      if (isSitesRoute || isProductRoute || isAuditRoute || isTelegramReplyRoute) {
         res.end(JSON.stringify({ reply, mode: "openrouter", model }));
       } else {
         const lastUserMessage = [...messages].reverse().find((item: any) => item?.role === "user");

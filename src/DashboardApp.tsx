@@ -163,6 +163,8 @@ type ServiceConnection = {
   serviceName: string;
   endpoint: string;
   token: string;
+  botToken: string;
+  autoReplyEnabled: boolean;
   connectedAt: string | null;
 };
 
@@ -972,23 +974,26 @@ const analyticsPalette = {
 
 const SERVICE_CONNECTION_KEY = "clientsflow_service_connection_v1";
 const SERVICE_EVENTS_KEY = "clientsflow_service_events_v1";
+const TELEGRAM_OFFSET_KEY = "clientsflow_telegram_offset_v1";
 
 function loadServiceConnection(): ServiceConnection {
   if (typeof window === "undefined") {
-    return { serviceName: "", endpoint: "", token: "", connectedAt: null };
+    return { serviceName: "", endpoint: "", token: "", botToken: "", autoReplyEnabled: true, connectedAt: null };
   }
   try {
     const raw = localStorage.getItem(SERVICE_CONNECTION_KEY);
-    if (!raw) return { serviceName: "", endpoint: "", token: "", connectedAt: null };
+    if (!raw) return { serviceName: "", endpoint: "", token: "", botToken: "", autoReplyEnabled: true, connectedAt: null };
     const parsed = JSON.parse(raw) as Partial<ServiceConnection>;
     return {
       serviceName: parsed.serviceName ?? "",
       endpoint: parsed.endpoint ?? "",
       token: parsed.token ?? "",
+      botToken: parsed.botToken ?? "",
+      autoReplyEnabled: parsed.autoReplyEnabled ?? true,
       connectedAt: parsed.connectedAt ?? null
     };
   } catch {
-    return { serviceName: "", endpoint: "", token: "", connectedAt: null };
+    return { serviceName: "", endpoint: "", token: "", botToken: "", autoReplyEnabled: true, connectedAt: null };
   }
 }
 
@@ -1012,6 +1017,18 @@ function loadServiceEvents(): ServiceEvent[] {
 function saveServiceEvents(events: ServiceEvent[]): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(SERVICE_EVENTS_KEY, JSON.stringify(events));
+}
+
+function loadTelegramOffset(): number {
+  if (typeof window === "undefined") return 0;
+  const raw = localStorage.getItem(TELEGRAM_OFFSET_KEY);
+  const parsed = Number(raw ?? 0);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function saveTelegramOffset(offset: number): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(TELEGRAM_OFFSET_KEY, String(offset));
 }
 
 function parseServiceEvents(raw: unknown): ServiceEvent[] {
@@ -1149,6 +1166,7 @@ export default function App() {
   const [serviceConnection, setServiceConnection] = useState<ServiceConnection>(() => loadServiceConnection());
   const [serviceEvents, setServiceEvents] = useState<ServiceEvent[]>(() => loadServiceEvents());
   const [serviceSyncLoading, setServiceSyncLoading] = useState(false);
+  const [telegramOffset, setTelegramOffset] = useState<number>(() => loadTelegramOffset());
 
   const hasLiveData = serviceEvents.length > 0;
 
@@ -1908,6 +1926,10 @@ export default function App() {
   }, [serviceEvents]);
 
   useEffect(() => {
+    saveTelegramOffset(telegramOffset);
+  }, [telegramOffset]);
+
+  useEffect(() => {
     if (sitesFlowStatus !== "idle") return;
     setSitesGeneratedContent(buildFallbackSiteContent(selectedSitesTemplate, sitesAnswers));
   }, [sitesAnswers, sitesFlowStatus, selectedSitesTemplate]);
@@ -1967,6 +1989,126 @@ export default function App() {
       triggerNotice(`Синхронизация завершена. Событий: ${events.length}`);
     } catch {
       triggerNotice("Синхронизация не удалась. Используйте импорт JSON или проверьте endpoint/CORS.");
+    } finally {
+      setServiceSyncLoading(false);
+    }
+  }
+
+  async function syncTelegramBotEvents(): Promise<void> {
+    if (!serviceConnection.botToken.trim()) {
+      triggerNotice("Укажите Bot Token для Telegram.");
+      return;
+    }
+    setServiceSyncLoading(true);
+    try {
+      const updatesResp = await fetch("/api/telegram/get-updates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          botToken: serviceConnection.botToken.trim(),
+          offset: telegramOffset > 0 ? telegramOffset + 1 : 0
+        })
+      });
+      const updatesData = (await updatesResp.json()) as {
+        updates?: Array<{
+          update_id: number;
+          message?: {
+            date: number;
+            text?: string;
+            from?: { is_bot?: boolean; first_name?: string; username?: string };
+            chat?: { id: number; type: string; title?: string; username?: string; first_name?: string };
+          };
+        }>;
+        error?: string;
+      };
+      if (!updatesResp.ok) {
+        throw new Error(updatesData.error || "Telegram sync failed");
+      }
+
+      const updates = Array.isArray(updatesData.updates) ? updatesData.updates : [];
+      let nextOffset = telegramOffset;
+      const inboundEvents: ServiceEvent[] = [];
+
+      for (const update of updates) {
+        if (update.update_id > nextOffset) nextOffset = update.update_id;
+        const message = update.message;
+        if (!message?.text || !message.chat?.id) continue;
+        if (message.from?.is_bot) continue;
+        const timestamp = new Date(message.date * 1000).toISOString();
+        const leadId = `tg-${message.chat.id}`;
+        const clientName =
+          message.from?.first_name ||
+          message.from?.username ||
+          message.chat.title ||
+          message.chat.username ||
+          message.chat.first_name ||
+          "Telegram клиент";
+        inboundEvents.push({
+          id: `in-${update.update_id}`,
+          leadId,
+          clientName,
+          channel: "Telegram",
+          direction: "inbound",
+          text: message.text,
+          timestamp,
+          status: "новый",
+          stage: "новый",
+          bookingState: "не начата"
+        });
+
+        if (serviceConnection.autoReplyEnabled) {
+          try {
+            const replyResp = await fetch("/api/openrouter/telegram-reply", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                text: message.text,
+                businessName: serviceConnection.serviceName || "Ваш сервис"
+              })
+            });
+            const replyData = (await replyResp.json()) as { reply?: string };
+            const replyText = (replyData.reply || "").trim();
+            if (replyText) {
+              await fetch("/api/telegram/send-message", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  botToken: serviceConnection.botToken.trim(),
+                  chatId: message.chat.id,
+                  text: replyText
+                })
+              });
+              inboundEvents.push({
+                id: `out-${update.update_id}`,
+                leadId,
+                clientName,
+                channel: "Telegram",
+                direction: "outbound",
+                text: replyText,
+                timestamp: new Date().toISOString(),
+                status: "квалифицирован",
+                stage: "квалифицирован",
+                bookingState: "в процессе"
+              });
+            }
+          } catch {
+            // Keep sync resilient even if one reply fails.
+          }
+        }
+      }
+
+      if (nextOffset > telegramOffset) setTelegramOffset(nextOffset);
+      if (inboundEvents.length > 0) {
+        setServiceEvents((prev) => {
+          const dedupe = new Set(prev.map((event) => event.id));
+          const appended = inboundEvents.filter((event) => !dedupe.has(event.id));
+          return [...appended, ...prev].slice(0, 1500);
+        });
+      }
+      setServiceConnection((prev) => ({ ...prev, connectedAt: new Date().toISOString() }));
+      triggerNotice(`Telegram синхронизирован. Новых событий: ${inboundEvents.length}`);
+    } catch (error: any) {
+      triggerNotice(error?.message || "Ошибка синхронизации Telegram.");
     } finally {
       setServiceSyncLoading(false);
     }
@@ -3616,6 +3758,23 @@ export default function App() {
                         className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
                       />
                     </label>
+                    <label className="md:col-span-2">
+                      <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Telegram Bot Token</span>
+                      <input
+                        value={serviceConnection.botToken}
+                        onChange={(event) => setServiceConnection((prev) => ({ ...prev, botToken: event.target.value }))}
+                        placeholder="123456789:AA..."
+                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
+                      />
+                    </label>
+                    <label className="md:col-span-2 flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                      <input
+                        type="checkbox"
+                        checked={serviceConnection.autoReplyEnabled}
+                        onChange={(event) => setServiceConnection((prev) => ({ ...prev, autoReplyEnabled: event.target.checked }))}
+                      />
+                      <span className="text-sm text-slate-700">Автоответ в Telegram включен</span>
+                    </label>
                   </div>
                   <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                     <button
@@ -3624,6 +3783,13 @@ export default function App() {
                       className="w-full rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60 sm:w-auto"
                     >
                       {serviceSyncLoading ? "Синхронизация..." : "Синхронизировать"}
+                    </button>
+                    <button
+                      onClick={() => void syncTelegramBotEvents()}
+                      disabled={serviceSyncLoading}
+                      className="w-full rounded-xl bg-cyan-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60 sm:w-auto"
+                    >
+                      {serviceSyncLoading ? "Синхронизация..." : "Синхронизировать Telegram"}
                     </button>
                     <button
                       onClick={() => serviceImportRef.current?.click()}
@@ -3654,6 +3820,7 @@ export default function App() {
                   />
                   <div className="mt-3 rounded-2xl border border-cyan-200 bg-cyan-50 p-3 text-xs text-cyan-900">
                     Событий в системе: <span className="font-bold">{serviceEvents.length}</span>
+                    <span> • Telegram offset: {telegramOffset}</span>
                     {serviceConnection.connectedAt ? (
                       <span> • Последняя синхронизация: {new Date(serviceConnection.connectedAt).toLocaleString("ru-RU")}</span>
                     ) : (
