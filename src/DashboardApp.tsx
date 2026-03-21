@@ -1876,10 +1876,6 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
       handleFeatureGuard("sitesBuilder");
       return;
     }
-    if (item === "Потерянные" && !hasFeature("lostRecovery")) {
-      handleFeatureGuard("lostRecovery");
-      return;
-    }
     setActiveNav(item);
     setMobileInboxView("list");
   }
