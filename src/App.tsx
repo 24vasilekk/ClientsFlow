@@ -39,16 +39,19 @@ function BrandWordmark({
 
 function SitesWordmark() {
   return (
-    <span className="inline-flex items-center gap-1.5">
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
       <BrandWordmark cClass="text-slate-900" flowClass="text-cyan-600" />
       <span className="text-slate-300">/</span>
-      <motion.span
-        animate={{ color: ["#0f172a", "#0891b2", "#0f172a"] }}
-        transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-        className="font-semibold"
-      >
-        Sites
-      </motion.span>
+      <span className="inline-flex items-baseline gap-1">
+        <BrandWordmark cClass="text-slate-900" flowClass="text-cyan-600" />
+        <motion.span
+          animate={{ color: ["#0f172a", "#0891b2", "#0f172a"] }}
+          transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+          className="font-semibold"
+        >
+          Sites
+        </motion.span>
+      </span>
     </span>
   );
 }
@@ -731,30 +734,33 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
           </div>
         </section>
 
-        <section className="mx-auto max-w-[1240px] px-4 pb-16 sm:px-6">
-          <div className="grid gap-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm lg:grid-cols-[1fr_1.1fr] lg:p-8">
-            <div>
-              <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Личный кабинет CFlow</h2>
-              <p className="mt-3 text-slate-600">Внутри: AI Inbox, статусы лидов, аналитика по каналам, потерянная выручка и AI-рекомендации.</p>
-              <button onClick={() => onNavigate("/dashboard")} className="mt-5 rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white">
-                Открыть личный кабинет
-              </button>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="grid gap-3 sm:grid-cols-3">
-                {["Входящие лиды", "Записано", "Конверсия"].map((k) => (
-                  <div key={k} className="rounded-xl border border-slate-200 bg-white p-3">
-                    <p className="text-[11px] uppercase tracking-[0.1em] text-slate-500">{k}</p>
-                    <p className="mt-1 text-xl font-extrabold text-slate-900">{k === "Конверсия" ? "36.5%" : k === "Записано" ? "176" : "482"}</p>
-                  </div>
-                ))}
+        <section className="relative overflow-hidden">
+          <div className="absolute inset-0 bg-[radial-gradient(70%_50%_at_15%_100%,rgba(125,211,252,0.24),transparent_70%),radial-gradient(40%_40%_at_90%_65%,rgba(99,102,241,0.18),transparent_70%)]" />
+          <div className="relative mx-auto max-w-[1240px] px-4 pb-16 sm:px-6">
+            <div className="grid gap-6 rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-sm backdrop-blur lg:grid-cols-[1fr_1.1fr] lg:p-8">
+              <div>
+                <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Личный кабинет CFlow</h2>
+                <p className="mt-3 text-slate-600">Внутри: AI Inbox, статусы лидов, аналитика по каналам, потерянная выручка и AI-рекомендации.</p>
+                <button onClick={() => onNavigate("/dashboard")} className="mt-5 rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white">
+                  Открыть личный кабинет
+                </button>
               </div>
-              <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
-                <p className="text-xs font-semibold text-slate-600">Потерянная выручка: <span className="font-bold text-slate-900">54 000 ₽ / 7 дней</span></p>
-              </div>
-              <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
-                <p className="text-xs font-semibold text-cyan-700">AI рекомендации</p>
-                <p className="mt-1 text-sm text-slate-700">Скорректируйте ответ на вопрос о цене и запустите follow-up для 12 лидов.</p>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="grid gap-3 sm:grid-cols-3">
+                  {["Входящие лиды", "Записано", "Конверсия"].map((k) => (
+                    <div key={k} className="rounded-xl border border-slate-200 bg-white p-3">
+                      <p className="text-[11px] uppercase tracking-[0.1em] text-slate-500">{k}</p>
+                      <p className="mt-1 text-xl font-extrabold text-slate-900">{k === "Конверсия" ? "36.5%" : k === "Записано" ? "176" : "482"}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
+                  <p className="text-xs font-semibold text-slate-600">Потерянная выручка: <span className="font-bold text-slate-900">54 000 ₽ / 7 дней</span></p>
+                </div>
+                <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
+                  <p className="text-xs font-semibold text-cyan-700">AI рекомендации</p>
+                  <p className="mt-1 text-sm text-slate-700">Скорректируйте ответ на вопрос о цене и запустите follow-up для 12 лидов.</p>
+                </div>
               </div>
             </div>
           </div>
