@@ -38,22 +38,7 @@ function BrandWordmark({
 }
 
 function SitesWordmark() {
-  return (
-    <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-      <BrandWordmark cClass="text-slate-900" flowClass="text-cyan-600" />
-      <span className="text-slate-300">/</span>
-      <span className="inline-flex items-baseline gap-1">
-        <BrandWordmark cClass="text-slate-900" flowClass="text-cyan-600" />
-        <motion.span
-          animate={{ color: ["#0f172a", "#0891b2", "#0f172a"] }}
-          transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-          className="font-semibold"
-        >
-          Sites
-        </motion.span>
-      </span>
-    </span>
-  );
+  return <span className="font-semibold">Cflow Sites</span>;
 }
 
 const navLinks = [
@@ -512,9 +497,6 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
               <SitesWordmark />
             </button>
             <button onClick={() => onNavigate("/login")} className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
-              Войти
-            </button>
-            <button onClick={() => onNavigate("/dashboard")} className="hidden rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 sm:block">
               Личный кабинет
             </button>
             <button onClick={() => document.getElementById("demo")?.scrollIntoView({ behavior: "smooth" })} className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
@@ -542,8 +524,8 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
                 <button onClick={() => document.getElementById("demo")?.scrollIntoView({ behavior: "smooth" })} className="rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white sm:text-base">
                   Попробовать демо
                 </button>
-                <button onClick={() => onNavigate("/dashboard")} className="rounded-full border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-700 sm:text-base">
-                  Войти в кабинет
+                <button onClick={() => onNavigate("/login")} className="rounded-full border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-700 sm:text-base">
+                  Личный кабинет
                 </button>
               </div>
               <p className="mt-4 text-sm text-slate-500">Включает AI Inbox, аналитику, воронку лидов, recovery-сценарии и AI-рекомендации.</p>
@@ -563,7 +545,7 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
                     {message.imageUrl ? <img src={message.imageUrl} alt="upload" className="mb-2 h-28 w-full rounded-xl object-cover" /> : null}
                     <p>{message.text}</p>
                     {message.kind === "cta" && showCabinetCta ? (
-                      <button onClick={() => onNavigate("/dashboard")} className="mt-2 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white">
+                      <button onClick={() => onNavigate("/login")} className="mt-2 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white">
                         Перейти в личный кабинет
                       </button>
                     ) : null}
@@ -741,7 +723,7 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
               <div>
                 <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Личный кабинет CFlow</h2>
                 <p className="mt-3 text-slate-600">Внутри: AI Inbox, статусы лидов, аналитика по каналам, потерянная выручка и AI-рекомендации.</p>
-                <button onClick={() => onNavigate("/dashboard")} className="mt-5 rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white">
+                <button onClick={() => onNavigate("/login")} className="mt-5 rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white">
                   Открыть личный кабинет
                 </button>
               </div>
@@ -797,7 +779,7 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
             <h2 className="text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl">Покажите бизнесу, как должен выглядеть современный AI для работы с клиентами</h2>
             <div className="mt-6 flex flex-col gap-3 sm:flex-row">
               <button onClick={() => document.getElementById("demo")?.scrollIntoView({ behavior: "smooth" })} className="rounded-full bg-white px-6 py-3 text-sm font-semibold text-slate-900">Попробовать демо</button>
-              <button onClick={() => onNavigate("/dashboard")} className="rounded-full border border-white/40 px-6 py-3 text-sm font-semibold text-white">Перейти в кабинет</button>
+              <button onClick={() => onNavigate("/login")} className="rounded-full border border-white/40 px-6 py-3 text-sm font-semibold text-white">Личный кабинет</button>
             </div>
           </div>
         </section>
@@ -808,8 +790,7 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
           <p className="font-bold text-slate-900"><BrandWordmark /></p>
           <div className="flex flex-wrap gap-4">
             <button onClick={() => onNavigate("/sites")} className="hover:text-slate-900"><SitesWordmark /></button>
-            <button onClick={() => onNavigate("/login")} className="hover:text-slate-900">Войти</button>
-            <button onClick={() => onNavigate("/dashboard")} className="hover:text-slate-900">Личный кабинет</button>
+            <button onClick={() => onNavigate("/login")} className="hover:text-slate-900">Личный кабинет</button>
             <button onClick={() => onNavigate("/pricing")} className="hover:text-slate-900">Тарифы</button>
             <span>Контакты</span>
           </div>
@@ -905,7 +886,7 @@ function SitesPage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
             <button onClick={() => onNavigate("/")} className="rounded-full border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200">
               Главная
             </button>
-            <button onClick={() => onNavigate("/dashboard")} className="rounded-full bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950">
+            <button onClick={() => onNavigate("/login")} className="rounded-full bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950">
               Личный кабинет
             </button>
           </div>
