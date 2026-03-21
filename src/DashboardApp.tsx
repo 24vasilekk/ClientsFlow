@@ -39,6 +39,8 @@ type SubscriptionState = {
     businessType: string;
     channels: string[];
     goals: string[];
+    profileSummary?: string;
+    businessAnswers?: Array<{ question: string; answer: string }>;
   };
 };
 
@@ -210,6 +212,11 @@ type BusinessTuningState = {
   workingHours: string;
   cityCoverage: string;
   updatedAt: string | null;
+};
+
+type SettingsQuestion = {
+  id: string;
+  question: string;
 };
 
 type PlanFeatureKey = "advancedAnalytics" | "aiRecommendations" | "sitesBuilder" | "lostRecovery";
@@ -1028,6 +1035,18 @@ const TELEGRAM_ONBOARDING_QUESTIONS = [
   "Какая главная цель: больше лидов, больше записей или рост среднего чека?"
 ];
 const TELEGRAM_MAX_AUTO_REPLIES_PER_SYNC = 6;
+const SETTINGS_QUESTIONS: SettingsQuestion[] = [
+  { id: "q1", question: "Как называется ваш бизнес и чем вы занимаетесь?" },
+  { id: "q2", question: "Какая ключевая услуга или продукт приносит основной доход?" },
+  { id: "q3", question: "Кто ваш основной клиент?" },
+  { id: "q4", question: "Через какие каналы чаще всего приходят обращения?" },
+  { id: "q5", question: "Какие вопросы клиенты задают чаще всего в первом сообщении?" },
+  { id: "q6", question: "Какие возражения по цене или условиям встречаются чаще всего?" },
+  { id: "q7", question: "Что обязательно нужно уточнить перед записью или продажей?" },
+  { id: "q8", question: "В каких случаях диалог нужно передавать менеджеру?" },
+  { id: "q9", question: "Какой стиль ответа вы хотите: формальный, дружелюбный, экспертный?" },
+  { id: "q10", question: "Какая главная цель на ближайший месяц: лиды, запись, конверсия, средний чек?" }
+];
 const BUSINESS_BRIEF_MIN_QUESTIONS = 10;
 const BUSINESS_BRIEF_FALLBACK_QUESTIONS = [
   "Какую услугу вы продаете чаще всего и в каком среднем чеке?",
@@ -1335,6 +1354,14 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
   const [businessBriefLoading, setBusinessBriefLoading] = useState(false);
   const [businessTuning, setBusinessTuning] = useState<BusinessTuningState>(() => loadBusinessTuning());
   const [showFullTimeline, setShowFullTimeline] = useState(false);
+  const [settingsSetupStep, setSettingsSetupStep] = useState<1 | 2 | 3 | 4>(1);
+  const [settingsChannels, setSettingsChannels] = useState<string[]>(["Telegram"]);
+  const [settingsQuestionIndex, setSettingsQuestionIndex] = useState(0);
+  const [settingsBusinessAnswers, setSettingsBusinessAnswers] = useState<Record<string, string>>(
+    () => SETTINGS_QUESTIONS.reduce<Record<string, string>>((acc, item) => ({ ...acc, [item.id]: "" }), {})
+  );
+  const [settingsSummary, setSettingsSummary] = useState("");
+  const [settingsSummaryLoading, setSettingsSummaryLoading] = useState(false);
 
   const hasLiveData = serviceEvents.length > 0;
 
@@ -2143,6 +2170,9 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
 
   const selectedCheckoutPlan = planDefinitions.find((plan) => plan.id === checkoutPlanId) ?? null;
   const navNeedsLiveData = ["Обзор", "Диалоги", "Лиды", "Аналитика", "Потерянные", "AI рекомендации"].includes(activeNav);
+  const showSettingsSetupWizard = activeNav === "Настройки" && !standaloneSites && !subscription.onboardingCompleted;
+  const currentSettingsQuestion = SETTINGS_QUESTIONS[settingsQuestionIndex];
+  const answeredSettingsQuestions = SETTINGS_QUESTIONS.filter((item) => settingsBusinessAnswers[item.id]?.trim()).length;
 
   function triggerNotice(message: string): void {
     setUiNotice(message);
@@ -2177,10 +2207,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
       const events = parseServiceEvents(data);
       setServiceEvents(events);
       setServiceConnection((prev) => ({ ...prev, connectedAt: new Date().toISOString() }));
-      triggerNotice(
-        `Синхронизация завершена. Событий: ${events.length}.` +
-          (!businessBrief.started ? " Рекомендуем запустить AI-бриф бизнеса в этом разделе." : "")
-      );
+      triggerNotice(`Синхронизация завершена. Событий: ${events.length}.`);
     } catch {
       triggerNotice("Синхронизация не удалась. Используйте импорт JSON или проверьте endpoint/CORS.");
     } finally {
@@ -2466,8 +2493,14 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                     businessName: serviceConnection.serviceName || "Ваш сервис",
                   businessContext: [
                     buildTelegramBusinessContext(currentProfile),
-                    buildBusinessBriefContext(businessBrief),
-                    buildBusinessTuningContext(businessTuning)
+                    subscription.onboardingData?.profileSummary
+                      ? `Профиль бизнеса: ${subscription.onboardingData.profileSummary}`
+                      : "",
+                    Array.isArray(subscription.onboardingData?.businessAnswers) && subscription.onboardingData?.businessAnswers.length
+                      ? `Внутренние правила: ${subscription.onboardingData.businessAnswers
+                          .map((item) => `${item.question}: ${item.answer}`)
+                          .join(" | ")}`
+                      : ""
                   ]
                       .filter(Boolean)
                       .join(" | ")
@@ -2535,8 +2568,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
         : ` Ответов за цикл: ${autoRepliesCount}.`;
       const errorsInfo = replyErrorsCount > 0 ? ` Ошибок отправки: ${replyErrorsCount}.` : "";
       triggerNotice(
-        `Telegram синхронизирован. Новых событий: ${inboundEvents.length}.${extraInfo}${errorsInfo}` +
-          (!businessBrief.started ? " Запустите AI-бриф бизнеса для точных ответов под вашу нишу." : "")
+        `Telegram синхронизирован. Новых событий: ${inboundEvents.length}.${extraInfo}${errorsInfo}`
       );
     } catch (error: any) {
       triggerNotice(error?.message || "Ошибка синхронизации Telegram.");
@@ -2598,18 +2630,105 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
     }, 1300);
   }
 
-  function finishOnboarding(): void {
+  function finishOnboarding(summaryOverride?: string): void {
+    const answered = SETTINGS_QUESTIONS.map((item) => ({
+      question: item.question,
+      answer: settingsBusinessAnswers[item.id] || ""
+    })).filter((item) => item.answer.trim().length > 0);
     setSubscription((prev) => ({
       ...prev,
       onboardingCompleted: true,
       onboardingData: {
         businessType: onboardingBusinessType,
-        channels: onboardingChannels,
-        goals: onboardingGoals
+        channels: settingsChannels.length > 0 ? settingsChannels : onboardingChannels,
+        goals: onboardingGoals,
+        profileSummary: summaryOverride || settingsSummary || prev.onboardingData?.profileSummary || "",
+        businessAnswers: answered
       }
     }));
-    triggerNotice("Онбординг завершен. Система готова к работе.");
-    handleNavChange("Обзор");
+    setSettingsSetupStep(1);
+    setSettingsQuestionIndex(0);
+    triggerNotice("Настройка завершена. Система готова к работе.");
+  }
+
+  function resetSettingsSetup(): void {
+    setSettingsSetupStep(1);
+    setSettingsQuestionIndex(0);
+    setSettingsChannels(["Telegram"]);
+    setSettingsSummary("");
+    setCheckoutPlanId(null);
+    setCheckoutState("idle");
+    setSettingsBusinessAnswers(SETTINGS_QUESTIONS.reduce<Record<string, string>>((acc, item) => ({ ...acc, [item.id]: "" }), {}));
+  }
+
+  async function goToSettingsStepThree(): Promise<void> {
+    setSettingsSetupStep(3);
+    if (!settingsSummary.trim()) {
+      await generateBusinessSummaryForSetup();
+    }
+  }
+
+  function completeSettingsSetupWithPlan(planId: PlanDefinition["id"]): void {
+    if (planId === "trial") {
+      setSubscription((prev) => ({
+        ...prev,
+        planId: "trial",
+        subscriptionStatus: "trial",
+        trialStartDate: new Date().toISOString(),
+        onboardingCompleted: false
+      }));
+      finishOnboarding(settingsSummary);
+      return;
+    }
+    setCheckoutState("processing");
+    window.setTimeout(() => {
+      setCheckoutState("success");
+      setSubscription((prev) => ({
+        ...prev,
+        planId,
+        subscriptionStatus: "active",
+        trialStartDate: null,
+        onboardingCompleted: false
+      }));
+      finishOnboarding(settingsSummary);
+    }, 1200);
+  }
+
+  async function generateBusinessSummaryForSetup(): Promise<void> {
+    setSettingsSummaryLoading(true);
+    try {
+      const answersPayload = SETTINGS_QUESTIONS.map((item) => ({
+        question: item.question,
+        answer: settingsBusinessAnswers[item.id] || ""
+      }));
+      const response = await fetch("/api/openrouter/business-summary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          businessName: serviceConnection.serviceName || "Подключенный бизнес",
+          channels: settingsChannels,
+          answers: answersPayload
+        })
+      });
+      const data = (await response.json()) as { summary?: string; reply?: string };
+      const raw = (data.summary || data.reply || "").trim();
+      if (response.ok && raw.length >= 120) {
+        setSettingsSummary(raw);
+      } else {
+        throw new Error("fallback");
+      }
+    } catch {
+      const fallback = [
+        `${serviceConnection.serviceName || "Ваш бизнес"} работает с входящими обращениями через ${settingsChannels.join(", ") || "основные каналы связи"}.`,
+        "Ключевая задача — быстро отвечать на первый запрос, корректно квалифицировать клиента и переводить его к записи или покупке без лишних шагов.",
+        "В коммуникации важно сохранять единый стиль, учитывать частые вопросы по цене, срокам и доступным слотам, а также заранее выделять обращения, которые требуют участия менеджера.",
+        "Фокус на ближайший период: повысить скорость первого ответа, снизить потери лидов между касаниями и увеличить долю обращений, дошедших до целевого действия.",
+        "Операционная логика должна включать прозрачные этапы воронки, контроль follow-up и регулярный анализ причин потерь, чтобы команда могла быстро корректировать сценарии."
+      ].join(" ");
+      setSettingsSummary(fallback);
+    } finally {
+      setSettingsSummaryLoading(false);
+    }
   }
 
   return (
@@ -4201,6 +4320,214 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
               </div>
             ) : activeNav === "Настройки" ? (
               <div className="space-y-4">
+                {showSettingsSetupWizard ? (
+                  <section className="relative min-h-[78vh] overflow-hidden rounded-3xl border border-slate-200 bg-slate-950 p-4 shadow-sm sm:p-6">
+                    <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(70%_80%_at_15%_15%,rgba(56,189,248,0.26),transparent_60%),radial-gradient(60%_80%_at_85%_0%,rgba(59,130,246,0.2),transparent_60%),radial-gradient(40%_60%_at_50%_100%,rgba(14,165,233,0.18),transparent_60%)]" />
+                    <div className="relative mx-auto flex min-h-[70vh] max-w-4xl items-center justify-center">
+                      <div className="w-full rounded-3xl border border-slate-700 bg-slate-900/95 p-5 shadow-2xl sm:p-7">
+                        <div className="mb-4 flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-xs font-bold uppercase tracking-[0.12em] text-cyan-300">Настройка ClientsFlow</p>
+                            <h2 className="mt-1 text-2xl font-extrabold tracking-tight text-white">Подключение и запуск</h2>
+                          </div>
+                          <div className="rounded-full border border-slate-600 bg-slate-800 px-3 py-1 text-xs font-semibold text-slate-200">
+                            Шаг {settingsSetupStep} / 4
+                          </div>
+                        </div>
+
+                        {settingsSetupStep === 1 ? (
+                          <div>
+                            <p className="text-sm text-slate-300">Сначала подключим рабочие каналы, с которыми будет работать система.</p>
+                            <div className="mt-4 flex flex-wrap gap-2">
+                              {["Telegram", "Instagram", "WhatsApp"].map((channel) => (
+                                <button
+                                  key={channel}
+                                  onClick={() => setSettingsChannels((prev) => toggleChoice(prev, channel))}
+                                  className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+                                    settingsChannels.includes(channel)
+                                      ? "bg-cyan-500 text-slate-950"
+                                      : "border border-slate-600 bg-slate-800 text-slate-200"
+                                  }`}
+                                >
+                                  {channel}
+                                </button>
+                              ))}
+                            </div>
+                            <div className="mt-5 flex flex-wrap gap-2">
+                              <button
+                                onClick={() => {
+                                  if (settingsChannels.length === 0) {
+                                    triggerNotice("Выберите хотя бы один канал.");
+                                    return;
+                                  }
+                                  setSettingsSetupStep(2);
+                                }}
+                                className="rounded-xl bg-cyan-500 px-4 py-2.5 text-sm font-semibold text-slate-950"
+                              >
+                                Далее
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {settingsSetupStep === 2 ? (
+                          <div>
+                            <p className="text-sm text-slate-300">
+                              Ответьте на вопросы о бизнесе, чтобы система понимала контекст и отвечала по вашей логике.
+                            </p>
+                            <div className="mt-3 rounded-2xl border border-slate-700 bg-slate-800/60 p-4">
+                              <p className="text-xs font-bold uppercase tracking-[0.08em] text-cyan-300">
+                                Вопрос {settingsQuestionIndex + 1} из {SETTINGS_QUESTIONS.length}
+                              </p>
+                              <p className="mt-2 text-sm font-semibold text-white">{currentSettingsQuestion.question}</p>
+                              <textarea
+                                value={settingsBusinessAnswers[currentSettingsQuestion.id] || ""}
+                                onChange={(event) =>
+                                  setSettingsBusinessAnswers((prev) => ({ ...prev, [currentSettingsQuestion.id]: event.target.value }))
+                                }
+                                rows={4}
+                                className="mt-3 w-full rounded-xl border border-slate-600 bg-slate-800 px-3 py-2.5 text-sm text-slate-100 placeholder:text-slate-400"
+                                placeholder="Введите ответ"
+                              />
+                            </div>
+                            <p className="mt-2 text-xs text-slate-400">Заполнено: {answeredSettingsQuestions} / {SETTINGS_QUESTIONS.length}</p>
+                            <div className="mt-4 flex flex-wrap gap-2">
+                              <button
+                                onClick={() => {
+                                  if (settingsQuestionIndex === 0) setSettingsSetupStep(1);
+                                  else setSettingsQuestionIndex((prev) => Math.max(0, prev - 1));
+                                }}
+                                className="rounded-xl border border-slate-600 bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-200"
+                              >
+                                Назад
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (!(settingsBusinessAnswers[currentSettingsQuestion.id] || "").trim()) {
+                                    triggerNotice("Нужен ответ на текущий вопрос.");
+                                    return;
+                                  }
+                                  if (settingsQuestionIndex < SETTINGS_QUESTIONS.length - 1) {
+                                    setSettingsQuestionIndex((prev) => prev + 1);
+                                    return;
+                                  }
+                                  void goToSettingsStepThree();
+                                }}
+                                className="rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950"
+                              >
+                                {settingsQuestionIndex < SETTINGS_QUESTIONS.length - 1 ? "Следующий вопрос" : "Сформировать профиль"}
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {settingsSetupStep === 3 ? (
+                          <div>
+                            <p className="text-sm text-slate-300">Краткая выжимка по вашему бизнесу для настройки сценариев ответов.</p>
+                            <div className="mt-3 rounded-2xl border border-slate-700 bg-slate-800 p-4">
+                              {settingsSummaryLoading ? (
+                                <p className="text-sm text-slate-300">Формируем профиль бизнеса...</p>
+                              ) : (
+                                <textarea
+                                  value={settingsSummary}
+                                  onChange={(event) => setSettingsSummary(event.target.value)}
+                                  rows={10}
+                                  className="w-full rounded-xl border border-slate-600 bg-slate-900 px-3 py-2.5 text-sm leading-relaxed text-slate-100"
+                                />
+                              )}
+                            </div>
+                            <div className="mt-4 flex flex-wrap gap-2">
+                              <button
+                                onClick={() => setSettingsSetupStep(2)}
+                                className="rounded-xl border border-slate-600 bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-200"
+                              >
+                                Назад
+                              </button>
+                              <button
+                                onClick={() => void generateBusinessSummaryForSetup()}
+                                disabled={settingsSummaryLoading}
+                                className="rounded-xl border border-cyan-400 bg-transparent px-4 py-2 text-sm font-semibold text-cyan-300 disabled:opacity-60"
+                              >
+                                Перегенерировать
+                              </button>
+                              <button
+                                onClick={() => setSettingsSetupStep(4)}
+                                disabled={settingsSummaryLoading || settingsSummary.trim().length < 120}
+                                className="rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 disabled:opacity-60"
+                              >
+                                Далее к тарифу
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {settingsSetupStep === 4 ? (
+                          <div>
+                            <p className="text-sm text-slate-300">Выберите тариф и завершите запуск. После этого откроется полный экран настроек.</p>
+                            <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                              {planDefinitions.map((plan) => (
+                                <button
+                                  key={`setup-${plan.id}`}
+                                  onClick={() => {
+                                    setCheckoutPlanId(plan.id);
+                                    setCheckoutState("idle");
+                                  }}
+                                  className={`rounded-2xl border p-3 text-left transition ${
+                                    checkoutPlanId === plan.id
+                                      ? "border-cyan-400 bg-cyan-500/10"
+                                      : "border-slate-700 bg-slate-800 hover:border-slate-500"
+                                  }`}
+                                >
+                                  <p className="text-sm font-bold text-white">{plan.title}</p>
+                                  <p className="mt-1 text-base font-extrabold text-slate-100">{plan.priceLabel}</p>
+                                  <p className="mt-1 text-xs text-slate-300">{plan.description}</p>
+                                </button>
+                              ))}
+                            </div>
+
+                            {checkoutPlanId && checkoutPlanId !== "trial" ? (
+                              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                                <input value={checkoutCardholder} onChange={(e) => setCheckoutCardholder(e.target.value)} placeholder="Имя держателя" className="rounded-xl border border-slate-600 bg-slate-800 px-3 py-2.5 text-sm text-slate-100" />
+                                <input value={checkoutCardNumber} onChange={(e) => setCheckoutCardNumber(e.target.value)} placeholder="Номер карты" className="rounded-xl border border-slate-600 bg-slate-800 px-3 py-2.5 text-sm text-slate-100" />
+                                <input value={checkoutExpiry} onChange={(e) => setCheckoutExpiry(e.target.value)} placeholder="Срок" className="rounded-xl border border-slate-600 bg-slate-800 px-3 py-2.5 text-sm text-slate-100" />
+                                <input value={checkoutCvv} onChange={(e) => setCheckoutCvv(e.target.value)} placeholder="CVV" className="rounded-xl border border-slate-600 bg-slate-800 px-3 py-2.5 text-sm text-slate-100" />
+                              </div>
+                            ) : null}
+
+                            <div className="mt-4 flex flex-wrap gap-2">
+                              <button
+                                onClick={() => setSettingsSetupStep(3)}
+                                className="rounded-xl border border-slate-600 bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-200"
+                              >
+                                Назад
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (!checkoutPlanId) {
+                                    triggerNotice("Выберите тариф для продолжения.");
+                                    return;
+                                  }
+                                  completeSettingsSetupWithPlan(checkoutPlanId);
+                                }}
+                                disabled={checkoutState === "processing"}
+                                className="rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 disabled:opacity-60"
+                              >
+                                {checkoutState === "processing" ? "Обработка оплаты..." : "Завершить запуск"}
+                              </button>
+                              <button
+                                onClick={resetSettingsSetup}
+                                className="rounded-xl border border-slate-600 bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-200"
+                              >
+                                Начать заново
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  </section>
+                ) : (
+                  <>
                 <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
                   <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Источник данных</p>
                   <h2 className="mt-1 text-xl font-extrabold tracking-tight text-slate-900">Подключить свой сервис</h2>
@@ -4310,203 +4637,27 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                 <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Адаптация ответов</p>
-                      <h2 className="mt-1 text-xl font-extrabold tracking-tight text-slate-900">AI-бриф бизнеса (10+ вопросов)</h2>
+                      <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Профиль бизнеса</p>
+                      <h2 className="mt-1 text-xl font-extrabold tracking-tight text-slate-900">Текущая выжимка для ответов</h2>
                       <p className="mt-2 text-sm text-slate-600">
-                        После подключения сервиса система задает вопросы о вашем бизнесе, услугах, клиентах и воронке. На основе ответов формируется профиль,
-                        который используется для более точных ответов в реальных диалогах.
+                        Профиль формируется в мастере настройки и используется в ответах по всем подключенным каналам.
                       </p>
                     </div>
-                    <div className="rounded-xl border border-cyan-200 bg-cyan-50 px-3 py-2 text-xs text-cyan-900">
-                      Пройдено: <span className="font-bold">{businessBrief.answers.length}</span> / {businessBrief.targetCount}
-                    </div>
-                  </div>
-
-                  {!businessBrief.started ? (
-                    <button
-                      onClick={() => void startBusinessBrief()}
-                      disabled={businessBriefLoading}
-                      className="mt-4 w-full rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60 sm:w-auto"
-                    >
-                      {businessBriefLoading ? "Подготовка вопросов..." : "Начать бриф"}
-                    </button>
-                  ) : businessBrief.completed ? (
-                    <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
-                      <p className="text-sm font-semibold text-emerald-900">Бриф завершен. Ответы применяются в логике генерации сообщений.</p>
-                      <p className="mt-1 text-xs text-emerald-800">
-                        {businessBrief.updatedAt ? `Обновлено: ${new Date(businessBrief.updatedAt).toLocaleString("ru-RU")}` : "Профиль готов к использованию"}
-                      </p>
-                      <button
-                        onClick={() => void startBusinessBrief()}
-                        disabled={businessBriefLoading}
-                        className="mt-3 rounded-xl border border-emerald-300 bg-white px-3 py-2 text-sm font-semibold text-emerald-700"
-                      >
-                        Пересобрать бриф
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="mt-4 space-y-3">
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                        <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">
-                          Вопрос {businessBrief.answers.length + 1} из {businessBrief.targetCount}
-                        </p>
-                        <p className="mt-1 text-sm font-semibold text-slate-900">{businessBrief.currentQuestion}</p>
-                      </div>
-                      <textarea
-                        value={businessBriefAnswer}
-                        onChange={(event) => setBusinessBriefAnswer(event.target.value)}
-                        placeholder="Введите ответ в свободной форме"
-                        rows={4}
-                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
-                      />
-                      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-                        <button
-                          onClick={() => void submitBusinessBriefAnswer()}
-                          disabled={businessBriefLoading || !businessBriefAnswer.trim()}
-                          className="w-full rounded-xl bg-cyan-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60 sm:w-auto"
-                        >
-                          {businessBriefLoading ? "Генерация следующего вопроса..." : "Сохранить и следующий вопрос"}
-                        </button>
-                        <button
-                          onClick={() => {
-                            setBusinessBrief({
-                              started: false,
-                              completed: false,
-                              targetCount: BUSINESS_BRIEF_MIN_QUESTIONS,
-                              currentQuestion: "",
-                              answers: [],
-                              updatedAt: new Date().toISOString()
-                            });
-                            setBusinessBriefAnswer("");
-                            triggerNotice("Бриф очищен.");
-                          }}
-                          className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 sm:w-auto"
-                        >
-                          Сбросить бриф
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </section>
-
-                <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                  <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Тонкая настройка</p>
-                  <h2 className="mt-1 text-xl font-extrabold tracking-tight text-slate-900">Донастройка под ваш бизнес</h2>
-                  <p className="mt-2 text-sm text-slate-600">
-                    Здесь можно детально описать ваш бизнес и правила общения. Эти данные используются в ответах клиентам после подключения.
-                  </p>
-
-                  <div className="mt-4 grid gap-3 md:grid-cols-2">
-                    <label className="md:col-span-2">
-                      <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Коротко о бизнесе</span>
-                      <textarea
-                        value={businessTuning.businessSummary}
-                        onChange={(event) => setBusinessTuning((prev) => ({ ...prev, businessSummary: event.target.value }))}
-                        rows={3}
-                        placeholder="Кто вы, что продаете, чем отличаетесь"
-                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
-                      />
-                    </label>
-                    <label>
-                      <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Целевая аудитория</span>
-                      <input
-                        value={businessTuning.targetAudience}
-                        onChange={(event) => setBusinessTuning((prev) => ({ ...prev, targetAudience: event.target.value }))}
-                        placeholder="Например: женщины 25-45, средний чек 4000 ₽"
-                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
-                      />
-                    </label>
-                    <label>
-                      <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Ключевые услуги</span>
-                      <input
-                        value={businessTuning.mainServices}
-                        onChange={(event) => setBusinessTuning((prev) => ({ ...prev, mainServices: event.target.value }))}
-                        placeholder="Через запятую"
-                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
-                      />
-                    </label>
-                    <label>
-                      <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Стиль ответа</span>
-                      <input
-                        value={businessTuning.responseStyle}
-                        onChange={(event) => setBusinessTuning((prev) => ({ ...prev, responseStyle: event.target.value }))}
-                        placeholder="Например: спокойно, коротко, уверенно"
-                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
-                      />
-                    </label>
-                    <label>
-                      <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">График работы</span>
-                      <input
-                        value={businessTuning.workingHours}
-                        onChange={(event) => setBusinessTuning((prev) => ({ ...prev, workingHours: event.target.value }))}
-                        placeholder="Пн–Сб 09:00–21:00"
-                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
-                      />
-                    </label>
-                    <label>
-                      <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">География</span>
-                      <input
-                        value={businessTuning.cityCoverage}
-                        onChange={(event) => setBusinessTuning((prev) => ({ ...prev, cityCoverage: event.target.value }))}
-                        placeholder="Город / районы / онлайн"
-                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
-                      />
-                    </label>
-                    <label className="md:col-span-2">
-                      <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Правила квалификации</span>
-                      <textarea
-                        value={businessTuning.qualificationRules}
-                        onChange={(event) => setBusinessTuning((prev) => ({ ...prev, qualificationRules: event.target.value }))}
-                        rows={2}
-                        placeholder="Что обязательно уточнять у клиента до записи"
-                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
-                      />
-                    </label>
-                    <label className="md:col-span-2">
-                      <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Правила эскалации менеджеру</span>
-                      <textarea
-                        value={businessTuning.escalationRules}
-                        onChange={(event) => setBusinessTuning((prev) => ({ ...prev, escalationRules: event.target.value }))}
-                        rows={2}
-                        placeholder="В каких случаях сразу передавать менеджеру"
-                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
-                      />
-                    </label>
-                    <label className="md:col-span-2">
-                      <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Слова, которые нельзя использовать</span>
-                      <input
-                        value={businessTuning.forbiddenWords}
-                        onChange={(event) => setBusinessTuning((prev) => ({ ...prev, forbiddenWords: event.target.value }))}
-                        placeholder="Через запятую"
-                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
-                      />
-                    </label>
-                  </div>
-
-                  <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                     <button
                       onClick={() => {
-                        setBusinessTuning((prev) => ({ ...prev, updatedAt: new Date().toISOString() }));
-                        triggerNotice("Донастройка сохранена и применяется в ответах.");
+                        setSubscription((prev) => ({ ...prev, onboardingCompleted: false }));
+                        resetSettingsSetup();
+                        triggerNotice("Мастер настройки перезапущен.");
                       }}
-                      className="w-full rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white sm:w-auto"
+                      className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
                     >
-                      Применить донастройку
-                    </button>
-                    <button
-                      onClick={() => {
-                        setBusinessTuning(loadBusinessTuning());
-                        triggerNotice("Текущие сохраненные настройки загружены.");
-                      }}
-                      className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 sm:w-auto"
-                    >
-                      Обновить из сохраненного
+                      Перезапустить мастер
                     </button>
                   </div>
-
-                  <div className="mt-3 rounded-2xl border border-cyan-200 bg-cyan-50 p-3 text-xs text-cyan-900">
-                    Контекст для ответов обновлен
-                    {businessTuning.updatedAt ? ` • Последнее сохранение: ${new Date(businessTuning.updatedAt).toLocaleString("ru-RU")}` : ""}
+                  <div className="mt-3 rounded-2xl border border-cyan-200 bg-cyan-50 p-3 text-sm text-cyan-900">
+                    {subscription.onboardingData?.profileSummary?.trim()
+                      ? subscription.onboardingData.profileSummary
+                      : "Профиль пока не сформирован. Запустите мастер настройки."}
                   </div>
                 </section>
 
@@ -4689,7 +4840,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                           <button onClick={() => setOnboardingStep(2)} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
                             Назад
                           </button>
-                          <button onClick={finishOnboarding} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white">
+                          <button onClick={() => finishOnboarding()} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white">
                             Завершить запуск
                           </button>
                         </div>
@@ -4697,6 +4848,8 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                     ) : null}
                   </section>
                 ) : null}
+                  </>
+                )}
               </div>
             ) : (
               <div className="space-y-6">
