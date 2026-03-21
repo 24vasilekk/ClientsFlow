@@ -2169,7 +2169,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
   }, [standaloneSites, activeNav]);
 
   const selectedCheckoutPlan = planDefinitions.find((plan) => plan.id === checkoutPlanId) ?? null;
-  const navNeedsLiveData = ["Обзор", "Диалоги", "Лиды", "Аналитика", "Потерянные", "AI рекомендации"].includes(activeNav);
+  const navNeedsLiveData = ["Обзор", "Аналитика", "Потерянные", "AI рекомендации"].includes(activeNav);
   const showSettingsSetupWizard = activeNav === "Настройки" && !standaloneSites && !subscription.onboardingCompleted;
   const currentSettingsQuestion = SETTINGS_QUESTIONS[settingsQuestionIndex];
   const answeredSettingsQuestions = SETTINGS_QUESTIONS.filter((item) => settingsBusinessAnswers[item.id]?.trim()).length;
