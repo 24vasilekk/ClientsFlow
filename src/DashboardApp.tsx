@@ -150,6 +150,26 @@ type GeneratedSiteContent = {
   contactLine: string;
 };
 
+type SitesSectionKey =
+  | "about"
+  | "valueProps"
+  | "services"
+  | "process"
+  | "outcomes"
+  | "showcase"
+  | "gallery"
+  | "testimonials"
+  | "packages"
+  | "faq"
+  | "contacts"
+  | "map";
+
+type SitesSectionConfig = {
+  key: SitesSectionKey;
+  title: string;
+  description: string;
+};
+
 type ServiceEvent = {
   id: string;
   leadId: string;
@@ -958,6 +978,38 @@ const defaultSitesAnswers: Record<string, string> = {
   tone: "Премиально и спокойно"
 };
 
+const sitesSectionLibrary: SitesSectionConfig[] = [
+  { key: "about", title: "О компании", description: "Краткий блок о бизнесе и позиционировании." },
+  { key: "valueProps", title: "Преимущества", description: "Почему клиент выбирает именно вас." },
+  { key: "services", title: "Услуги", description: "Ключевые направления и формат работы." },
+  { key: "process", title: "Как это работает", description: "Пошаговый путь клиента до записи." },
+  { key: "outcomes", title: "Результат для клиента", description: "Польза, скорость и понятный финал." },
+  { key: "showcase", title: "Операционный блок", description: "Визуальный блок с логикой обработки заявок." },
+  { key: "gallery", title: "Галерея", description: "До 5 фотографий бизнеса, команды или кейсов." },
+  { key: "testimonials", title: "Отзывы", description: "Социальное доказательство и доверие." },
+  { key: "packages", title: "Пакеты / цены", description: "Тарифные уровни или пакетные предложения." },
+  { key: "faq", title: "FAQ", description: "Ответы на частые вопросы перед обращением." },
+  { key: "contacts", title: "Контакты", description: "Город, каналы связи и кнопки действия." },
+  { key: "map", title: "Карта", description: "Блок локации, если важен офлайн-визит." }
+];
+
+const defaultSitesSections: Record<SitesSectionKey, boolean> = {
+  about: true,
+  valueProps: true,
+  services: true,
+  process: true,
+  outcomes: true,
+  showcase: true,
+  gallery: true,
+  testimonials: true,
+  packages: true,
+  faq: true,
+  contacts: true,
+  map: false
+};
+
+const defaultSitesSectionOrder: SitesSectionKey[] = sitesSectionLibrary.map((item) => item.key);
+
 function buildFallbackSiteContent(
   template: SitesTemplate,
   answers: Record<string, string>
@@ -1043,6 +1095,7 @@ const TELEGRAM_OFFSET_KEY = "clientsflow_telegram_offset_v1";
 const TELEGRAM_PROFILES_KEY = "clientsflow_telegram_profiles_v1";
 const BUSINESS_BRIEF_KEY = "clientsflow_business_brief_v1";
 const BUSINESS_TUNING_KEY = "clientsflow_business_tuning_v1";
+const SITES_BUILDER_PREFS_KEY = "clientsflow_sites_builder_prefs_v1";
 const TELEGRAM_ONBOARDING_QUESTIONS = [
   "Чтобы настроить ответы под ваш бизнес, задам 4 коротких вопроса. Первый: в какой нише вы работаете?",
   "Отлично. Какая у вас ключевая услуга или предложение?",
@@ -1077,6 +1130,50 @@ const BUSINESS_BRIEF_FALLBACK_QUESTIONS = [
   "Какие услуги или категории приоритетны для продвижения сейчас?",
   "В каких случаях диалог нужно сразу передавать менеджеру?"
 ];
+
+function loadSitesSections(): Record<SitesSectionKey, boolean> {
+  if (typeof window === "undefined") return defaultSitesSections;
+  try {
+    const raw = localStorage.getItem(SITES_BUILDER_PREFS_KEY);
+    if (!raw) return defaultSitesSections;
+    const parsed = JSON.parse(raw) as { sections?: Partial<Record<SitesSectionKey, boolean>> };
+    const next: Record<SitesSectionKey, boolean> = { ...defaultSitesSections };
+    for (const key of defaultSitesSectionOrder) {
+      const value = parsed.sections?.[key];
+      if (typeof value === "boolean") next[key] = value;
+    }
+    return next;
+  } catch {
+    return defaultSitesSections;
+  }
+}
+
+function loadSitesSectionOrder(): SitesSectionKey[] {
+  if (typeof window === "undefined") return defaultSitesSectionOrder;
+  try {
+    const raw = localStorage.getItem(SITES_BUILDER_PREFS_KEY);
+    if (!raw) return defaultSitesSectionOrder;
+    const parsed = JSON.parse(raw) as { order?: unknown };
+    if (!Array.isArray(parsed.order)) return defaultSitesSectionOrder;
+    const normalized = parsed.order.filter((item): item is SitesSectionKey => defaultSitesSectionOrder.includes(item as SitesSectionKey));
+    const unique = Array.from(new Set(normalized));
+    const missing = defaultSitesSectionOrder.filter((key) => !unique.includes(key));
+    return [...unique, ...missing];
+  } catch {
+    return defaultSitesSectionOrder;
+  }
+}
+
+function saveSitesBuilderPrefs(sections: Record<SitesSectionKey, boolean>, order: SitesSectionKey[]): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(
+    SITES_BUILDER_PREFS_KEY,
+    JSON.stringify({
+      sections,
+      order
+    })
+  );
+}
 
 function loadServiceConnection(): ServiceConnection {
   if (typeof window === "undefined") {
@@ -1344,6 +1441,9 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
   const [sitesLastGenerationMode, setSitesLastGenerationMode] = useState<"ai" | "fallback" | null>(null);
   const [sitesLogoUrl, setSitesLogoUrl] = useState<string>("");
   const [sitesGalleryUrls, setSitesGalleryUrls] = useState<string[]>([]);
+  const [sitesSections, setSitesSections] = useState<Record<SitesSectionKey, boolean>>(() => loadSitesSections());
+  const [sitesSectionOrder, setSitesSectionOrder] = useState<SitesSectionKey[]>(() => loadSitesSectionOrder());
+  const [draggedSitesSection, setDraggedSitesSection] = useState<SitesSectionKey | null>(null);
   const sitesLogoInputRef = useRef<HTMLInputElement | null>(null);
   const sitesGalleryInputRef = useRef<HTMLInputElement | null>(null);
   const [mobileInboxView, setMobileInboxView] = useState<"list" | "detail">("list");
@@ -1678,6 +1778,10 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
 
   const lostRevenueSnapshot = lostRevenueByPeriodLive[lostRevenuePeriod];
   const selectedSitesTemplate = sitesTemplates.find((item) => item.id === sitesTemplateId) ?? sitesTemplates[0];
+  const enabledSitesSectionsCount = Object.values(sitesSections).filter(Boolean).length;
+  const orderedSitesSectionLibrary = sitesSectionOrder
+    .map((key) => sitesSectionLibrary.find((item) => item.key === key))
+    .filter((item): item is SitesSectionConfig => Boolean(item));
   const generatedSitesHeadline = sitesGeneratedContent.heroTitle;
   const generatedSitesSubheadline = sitesGeneratedContent.heroSubtitle;
   const chartTooltipStyle = {
@@ -1884,6 +1988,219 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
     setSitesAnswers((prev) => ({ ...prev, [fieldId]: value }));
   }
 
+  function toggleSitesSection(key: SitesSectionKey): void {
+    setSitesSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
+
+  function reorderSitesSections(sourceKey: SitesSectionKey, targetKey: SitesSectionKey): void {
+    if (sourceKey === targetKey) return;
+    setSitesSectionOrder((prev) => {
+      const sourceIndex = prev.indexOf(sourceKey);
+      const targetIndex = prev.indexOf(targetKey);
+      if (sourceIndex < 0 || targetIndex < 0) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(sourceIndex, 1);
+      next.splice(targetIndex, 0, moved);
+      return next;
+    });
+  }
+
+  function renderSitesPreviewSection(key: SitesSectionKey): JSX.Element | null {
+    if (!sitesSections[key]) return null;
+
+    if (key === "about") {
+      return (
+        <div className="rounded-xl border border-slate-200 bg-white p-3">
+          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">About</p>
+          <p className="mt-2 text-xs leading-5 text-slate-700">{sitesGeneratedContent.about}</p>
+        </div>
+      );
+    }
+
+    if (key === "valueProps") {
+      return (
+        <div className="rounded-xl border border-slate-200 bg-white p-3">
+          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Value Propositions</p>
+          <div className="mt-2 grid gap-2 sm:grid-cols-3">
+            {sitesGeneratedContent.valueProps.map((item) => (
+              <div key={item} className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700">{item}</div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    if (key === "services") {
+      return (
+        <div className="rounded-xl border border-slate-200 bg-white p-3">
+          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Services</p>
+          <div className="mt-2 grid gap-2 sm:grid-cols-3">
+            {sitesGeneratedContent.services.map((service) => (
+              <div key={service} className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs font-semibold text-slate-700">
+                {service}
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    if (key === "process") {
+      return (
+        <div className="rounded-xl border border-slate-200 bg-white p-3">
+          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">How It Works</p>
+          <div className="mt-2 grid gap-2 sm:grid-cols-3">
+            {sitesGeneratedContent.processSteps.map((step, index) => (
+              <div key={step} className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700">
+                <span className="font-semibold text-slate-900">{index + 1}. </span>{step}
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    if (key === "outcomes") {
+      return (
+        <div className="rounded-xl border border-slate-200 bg-white p-3">
+          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Business Outcomes</p>
+          <div className="mt-2 grid gap-2 sm:grid-cols-3">
+            {sitesGeneratedContent.outcomes.map((item) => (
+              <div key={item} className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700">{item}</div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    if (key === "showcase") {
+      return (
+        <div className="rounded-xl border border-slate-200 bg-white p-3">
+          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">{sitesGeneratedContent.showcaseTitle}</p>
+          <p className="mt-1 text-xs text-slate-600">{sitesGeneratedContent.showcaseText}</p>
+          <div className="mt-2 grid gap-2 sm:grid-cols-3">
+            {["Новые лиды", "Квалифицировано", "Ожидают записи"].map((label, index) => (
+              <div key={label} className="rounded-lg border border-slate-200 bg-slate-50 p-2">
+                <p className="text-[11px] text-slate-500">{label}</p>
+                <p className="text-sm font-bold text-slate-900">{index === 0 ? "24" : index === 1 ? "17" : "9"}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    if (key === "gallery") {
+      if (sitesGalleryUrls.length === 0) return null;
+      return (
+        <div className="rounded-xl border border-slate-200 bg-white p-3">
+          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Gallery</p>
+          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {sitesGalleryUrls.map((url, index) => (
+              <div key={`${url}-${index}`} className="overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+                <img src={url} alt={`Фото ${index + 1}`} className="h-24 w-full object-cover" />
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    if (key === "testimonials") {
+      return (
+        <div className="rounded-xl border border-slate-200 bg-white p-3">
+          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Testimonials</p>
+          <div className="mt-2 grid gap-2 sm:grid-cols-3">
+            {sitesGeneratedContent.testimonials.map((item) => (
+              <div key={item.name} className="rounded-lg border border-slate-200 bg-slate-50 p-2">
+                <p className="text-xs font-semibold text-slate-900">{item.name}</p>
+                <p className="text-[11px] text-slate-500">{item.role}</p>
+                <p className="mt-1 text-xs text-slate-700">{item.text}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    if (key === "packages") {
+      return (
+        <div className="rounded-xl border border-slate-200 bg-white p-3">
+          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Packages</p>
+          <div className="mt-2 grid gap-2 sm:grid-cols-3">
+            {sitesGeneratedContent.packages.map((item) => (
+              <div
+                key={item.name}
+                className={`rounded-lg border p-2 ${item.recommended ? "border-cyan-300 bg-cyan-50" : "border-slate-200 bg-slate-50"}`}
+              >
+                <p className="text-xs font-semibold text-slate-900">{item.name}</p>
+                <p className="text-xs text-slate-600">{item.price}</p>
+                <div className="mt-1 space-y-0.5">
+                  {item.features.map((feature) => (
+                    <p key={feature} className="text-[11px] text-slate-700">• {feature}</p>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    if (key === "faq") {
+      return (
+        <div className="rounded-xl border border-slate-200 bg-white p-3">
+          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">FAQ</p>
+          <div className="mt-2 space-y-2">
+            {sitesGeneratedContent.faq.map((item) => (
+              <div key={item.q} className="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+                <p className="text-xs font-semibold text-slate-900">{item.q}</p>
+                <p className="mt-1 text-xs text-slate-600">{item.a}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    if (key === "contacts") {
+      return (
+        <div className="rounded-xl border border-slate-200 bg-white p-3">
+          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Contacts</p>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-700">
+              <p className="text-[11px] font-semibold text-slate-500">Город</p>
+              <p className="mt-1 font-semibold text-slate-900">{sitesAnswers.city || "Укажите город"}</p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-700">
+              <p className="text-[11px] font-semibold text-slate-500">Каналы связи</p>
+              <p className="mt-1 font-semibold text-slate-900">{sitesAnswers.channels || "Укажите каналы связи"}</p>
+            </div>
+          </div>
+          <p className="mt-2 text-[11px] text-slate-600">{sitesGeneratedContent.contactLine}</p>
+        </div>
+      );
+    }
+
+    if (key === "map") {
+      return (
+        <div className="rounded-xl border border-slate-200 bg-white p-3">
+          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Map</p>
+          <div className="mt-2 rounded-lg border border-slate-200 bg-gradient-to-br from-slate-100 to-cyan-50 p-3">
+            <div className="grid grid-cols-5 gap-1">
+              {Array.from({ length: 25 }).map((_, index) => (
+                <div key={index} className="h-5 rounded bg-white/70" />
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-slate-700">Локация: {sitesAnswers.city || "уточняется"}</p>
+          </div>
+        </div>
+      );
+    }
+
+    return null;
+  }
+
   function readFileAsDataUrl(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -2073,6 +2390,10 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
       "Структура JSON:",
       "{\"heroTitle\":\"\",\"heroSubtitle\":\"\",\"primaryCta\":\"\",\"secondaryCta\":\"\",\"trustStats\":[{\"label\":\"\",\"value\":\"\"},{\"label\":\"\",\"value\":\"\"},{\"label\":\"\",\"value\":\"\"}],\"valueProps\":[\"\",\"\",\"\"],\"services\":[\"\",\"\",\"\"],\"about\":\"\",\"processSteps\":[\"\",\"\",\"\"],\"outcomes\":[\"\",\"\",\"\"],\"showcaseTitle\":\"\",\"showcaseText\":\"\",\"testimonials\":[{\"name\":\"\",\"role\":\"\",\"text\":\"\"},{\"name\":\"\",\"role\":\"\",\"text\":\"\"},{\"name\":\"\",\"role\":\"\",\"text\":\"\"}],\"packages\":[{\"name\":\"\",\"price\":\"\",\"features\":[\"\",\"\"],\"recommended\":true},{\"name\":\"\",\"price\":\"\",\"features\":[\"\",\"\"]},{\"name\":\"\",\"price\":\"\",\"features\":[\"\",\"\"]}],\"faq\":[{\"q\":\"\",\"a\":\"\"},{\"q\":\"\",\"a\":\"\"},{\"q\":\"\",\"a\":\"\"}],\"finalCtaTitle\":\"\",\"finalCtaText\":\"\",\"contactLine\":\"\"}",
       `Шаблон: ${selectedSitesTemplate.name}. Стиль: ${selectedSitesTemplate.styleLabel}.`,
+      `Включенные секции конструктора: ${sitesSectionLibrary
+        .filter((item) => sitesSections[item.key])
+        .map((item) => item.title)
+        .join(", ") || "базовая структура"}.`,
       `Данные бизнеса: ${JSON.stringify(sitesAnswers, null, 2)}`
     ].join("\n");
 
@@ -2147,6 +2468,10 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
   useEffect(() => {
     saveBusinessTuning(businessTuning);
   }, [businessTuning]);
+
+  useEffect(() => {
+    saveSitesBuilderPrefs(sitesSections, sitesSectionOrder);
+  }, [sitesSections, sitesSectionOrder]);
 
   useEffect(() => {
     if (sitesFlowStatus !== "idle") return;
@@ -3904,6 +4229,61 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                     <p className="mt-2 text-sm text-slate-600">
                       На основе этих ответов сервис перепишет тексты сайта под ваш бизнес и выбранный шаблон.
                     </p>
+                    <div className="mt-4 rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-cyan-50/70 p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Конструктор секций</p>
+                          <h4 className="mt-1 text-base font-bold tracking-tight text-slate-900">Соберите структуру сайта под ваш бизнес</h4>
+                        </div>
+                        <span className="rounded-full border border-cyan-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-cyan-700">
+                          Включено: {enabledSitesSectionsCount} секций
+                        </span>
+                      </div>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        {orderedSitesSectionLibrary.map((section) => {
+                          const enabled = sitesSections[section.key];
+                          const needsGallery = section.key === "gallery" && sitesGalleryUrls.length === 0;
+                          return (
+                            <button
+                              key={section.key}
+                              draggable
+                              onDragStart={() => setDraggedSitesSection(section.key)}
+                              onDragOver={(event) => event.preventDefault()}
+                              onDrop={(event) => {
+                                event.preventDefault();
+                                if (!draggedSitesSection) return;
+                                reorderSitesSections(draggedSitesSection, section.key);
+                                setDraggedSitesSection(null);
+                              }}
+                              onDragEnd={() => setDraggedSitesSection(null)}
+                              onClick={() => toggleSitesSection(section.key)}
+                              className={`rounded-xl border px-3 py-2.5 text-left transition ${
+                                enabled
+                                  ? "border-cyan-300 bg-cyan-50 shadow-sm"
+                                  : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-slate-400">⋮⋮</span>
+                                  <p className={`text-sm font-semibold ${enabled ? "text-cyan-900" : "text-slate-900"}`}>{section.title}</p>
+                                </div>
+                                <span
+                                  className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] ${
+                                    enabled ? "bg-cyan-100 text-cyan-800" : "bg-slate-100 text-slate-600"
+                                  }`}
+                                >
+                                  {enabled ? "Вкл" : "Выкл"}
+                                </span>
+                              </div>
+                              <p className={`mt-1 text-xs ${enabled ? "text-cyan-800/90" : "text-slate-500"}`}>{section.description}</p>
+                              <p className="mt-1 text-[11px] text-slate-400">Перетащите карточку, чтобы изменить порядок блока на сайте.</p>
+                              {needsGallery ? <p className="mt-1 text-[11px] text-slate-500">Добавьте фото, чтобы секция выглядела полноценно.</p> : null}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
                       <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
                         <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Логотип (обязательно)</p>
@@ -4011,12 +4391,16 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                       <button
                         onClick={() => {
                           setSitesAnswers(defaultSitesAnswers);
+                          setSitesSections(defaultSitesSections);
+                          setSitesSectionOrder(defaultSitesSectionOrder);
+                          setSitesGalleryUrls([]);
+                          setSitesLogoUrl("");
                           const fallback = buildFallbackSiteContent(selectedSitesTemplate, defaultSitesAnswers);
                           setSitesGeneratedContent(fallback);
                           setSitesFlowStatus("idle");
                           setSitesGenerationProgress(0);
                           setSitesLastGenerationMode(null);
-                          setSitesActionMessage("Бриф сброшен к стартовым данным. Можно собрать новый вариант.");
+                          setSitesActionMessage("Конструктор и бриф сброшены к стартовым данным. Можно собрать новый вариант.");
                         }}
                         className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-500 sm:w-auto"
                       >
@@ -4082,117 +4466,11 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                         </div>
 
                         <div className="space-y-3 p-4">
-                          <div className="rounded-xl border border-slate-200 bg-white p-3">
-                            <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Value Propositions</p>
-                            <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                              {sitesGeneratedContent.valueProps.map((item) => (
-                                <div key={item} className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700">{item}</div>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div className="rounded-xl border border-slate-200 bg-white p-3">
-                            <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Services</p>
-                            <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                              {sitesGeneratedContent.services.map((service) => (
-                                <div key={service} className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs font-semibold text-slate-700">
-                                  {service}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div className="rounded-xl border border-slate-200 bg-white p-3">
-                            <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">How It Works</p>
-                            <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                              {sitesGeneratedContent.processSteps.map((step, index) => (
-                                <div key={step} className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700">
-                                  <span className="font-semibold text-slate-900">{index + 1}. </span>{step}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div className="rounded-xl border border-slate-200 bg-white p-3">
-                            <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Business Outcomes</p>
-                            <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                              {sitesGeneratedContent.outcomes.map((item) => (
-                                <div key={item} className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700">{item}</div>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div className="rounded-xl border border-slate-200 bg-white p-3">
-                            <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">{sitesGeneratedContent.showcaseTitle}</p>
-                            <p className="mt-1 text-xs text-slate-600">{sitesGeneratedContent.showcaseText}</p>
-                            <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                              {["Новые лиды", "Квалифицировано", "Ожидают записи"].map((label, index) => (
-                                <div key={label} className="rounded-lg border border-slate-200 bg-slate-50 p-2">
-                                  <p className="text-[11px] text-slate-500">{label}</p>
-                                  <p className="text-sm font-bold text-slate-900">{index === 0 ? "24" : index === 1 ? "17" : "9"}</p>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-
-                          {sitesGalleryUrls.length > 0 ? (
-                            <div className="rounded-xl border border-slate-200 bg-white p-3">
-                              <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Gallery</p>
-                              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                                {sitesGalleryUrls.map((url, index) => (
-                                  <div key={`${url}-${index}`} className="overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
-                                    <img src={url} alt={`Фото ${index + 1}`} className="h-24 w-full object-cover" />
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          ) : null}
-
-                          <div className="rounded-xl border border-slate-200 bg-white p-3">
-                            <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Testimonials</p>
-                            <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                              {sitesGeneratedContent.testimonials.map((item) => (
-                                <div key={item.name} className="rounded-lg border border-slate-200 bg-slate-50 p-2">
-                                  <p className="text-xs font-semibold text-slate-900">{item.name}</p>
-                                  <p className="text-[11px] text-slate-500">{item.role}</p>
-                                  <p className="mt-1 text-xs text-slate-700">{item.text}</p>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div className="rounded-xl border border-slate-200 bg-white p-3">
-                            <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Packages</p>
-                            <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                              {sitesGeneratedContent.packages.map((item) => (
-                                <div
-                                  key={item.name}
-                                  className={`rounded-lg border p-2 ${item.recommended ? "border-cyan-300 bg-cyan-50" : "border-slate-200 bg-slate-50"}`}
-                                >
-                                  <p className="text-xs font-semibold text-slate-900">{item.name}</p>
-                                  <p className="text-xs text-slate-600">{item.price}</p>
-                                  <div className="mt-1 space-y-0.5">
-                                    {item.features.map((feature) => (
-                                      <p key={feature} className="text-[11px] text-slate-700">• {feature}</p>
-                                    ))}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div className="rounded-xl border border-slate-200 bg-white p-3">
-                            <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">FAQ</p>
-                            <div className="mt-2 space-y-2">
-                              {sitesGeneratedContent.faq.map((item) => (
-                                <div key={item.q} className="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
-                                  <p className="text-xs font-semibold text-slate-900">{item.q}</p>
-                                  <p className="mt-1 text-xs text-slate-600">{item.a}</p>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-
+                          {sitesSectionOrder.map((key) => {
+                            const content = renderSitesPreviewSection(key);
+                            if (!content) return null;
+                            return <div key={key}>{content}</div>;
+                          })}
                           <div className="rounded-xl border border-cyan-200 bg-cyan-50 p-3">
                             <p className="text-sm font-semibold text-slate-900">{sitesGeneratedContent.finalCtaTitle}</p>
                             <p className="mt-1 text-xs text-slate-700">{sitesGeneratedContent.finalCtaText}</p>
