@@ -22,6 +22,37 @@ type ApiChatMessage = {
 const AUTH_KEY = "clientsflow_demo_auth_v1";
 const WORKBENCH_AUTH_KEY = "clientsflow_workbench_auth_v1";
 
+function BrandWordmark({
+  cClass = "text-cyan-500",
+  flowClass = "text-slate-900"
+}: {
+  cClass?: string;
+  flowClass?: string;
+}) {
+  return (
+    <span className="inline-flex items-baseline font-extrabold tracking-tight">
+      <span className={cClass}>C</span>
+      <span className={flowClass}>Flow</span>
+    </span>
+  );
+}
+
+function SitesWordmark() {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <BrandWordmark cClass="text-slate-900" flowClass="text-cyan-600" />
+      <span className="text-slate-300">/</span>
+      <motion.span
+        animate={{ color: ["#0f172a", "#0891b2", "#0f172a"] }}
+        transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+        className="font-semibold"
+      >
+        Sites
+      </motion.span>
+    </span>
+  );
+}
+
 const navLinks = [
   { id: "how", label: "Как работает" },
   { id: "features", label: "Возможности" },
@@ -51,7 +82,7 @@ const integrations = [
 const powerCards = [
   {
     title: "Всегда отвечает",
-    text: "ClientsFlow даёт стабильный первый ответ за секунды, даже в пиковые часы и ночью.",
+    text: "CFlow даёт стабильный первый ответ за секунды, даже в пиковые часы и ночью.",
     chip: "24/7",
     meta: "SLA ответа < 60 сек"
   },
@@ -111,7 +142,7 @@ const howItWorksSlides = [
     badge: "Шаг 2"
   },
   {
-    title: "ClientsFlow обрабатывает обращения",
+    title: "CFlow обрабатывает обращения",
     text: "Система отвечает, уточняет задачу, ведет к записи и не теряет контекст клиента.",
     badge: "Шаг 3"
   },
@@ -137,11 +168,11 @@ const faqItems = [
   },
   {
     q: "Это чат-бот или полноценная система?",
-    a: "ClientsFlow — это платформа клиентских операций: каналы, воронка, аналитика, recovery и рекомендации."
+    a: "CFlow — это платформа клиентских операций: каналы, воронка, аналитика, recovery и рекомендации."
   },
   {
     q: "Что будет в личном кабинете?",
-    a: "AI Inbox, лиды, аналитика, блок потерянной выручки, AI-рекомендации и модуль ClientsFlow Sites."
+    a: "AI Inbox, лиды, аналитика, блок потерянной выручки, AI-рекомендации и модуль CFlow Sites."
   },
   {
     q: "Можно ли подключить Telegram и WhatsApp?",
@@ -296,7 +327,7 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
     {
       id: uid(),
       role: "assistant",
-      text: "Здравствуйте, на связи команда ClientsFlow. Покажу, как выстроить стабильную обработку входящих и доведение до записи.\nСледующий шаг: выберите один из вариантов ниже.",
+      text: "Здравствуйте, на связи команда CFlow. Покажу, как выстроить стабильную обработку входящих и доведение до записи.\nСледующий шаг: выберите один из вариантов ниже.",
       kind: "text"
     }
   ]);
@@ -356,7 +387,7 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
       return "На вопрос о цене даем аккуратный сценарий: понятный диапазон, что входит в услугу и два ближайших слота на запись.";
     }
     if (text.includes("директ") || text.includes("теряю") || text.includes("лид")) {
-      return "ClientsFlow фиксирует входящий лид, отвечает без задержек, квалифицирует обращение и запускает повторное касание, если клиент замолчал.";
+      return "CFlow фиксирует входящий лид, отвечает без задержек, квалифицирует обращение и запускает повторное касание, если клиент замолчал.";
     }
     if (text.includes("аналит") || text.includes("ворон") || text.includes("конверс")) {
       return "В кабинете видно конверсию по каналам, причины потерь и недополученную выручку. По каждому узкому месту даем конкретные действия.";
@@ -464,7 +495,7 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
       <header className="sticky top-0 z-40 border-b border-slate-200/90 bg-white/90 backdrop-blur">
         <div className="mx-auto flex max-w-[1240px] items-center justify-between gap-4 px-4 py-4 sm:px-6">
           <button onClick={() => onNavigate("/")} className="text-lg font-extrabold tracking-tight">
-            ClientsFlow
+            <BrandWordmark />
           </button>
           <nav className="hidden items-center gap-6 text-sm font-semibold text-slate-600 lg:flex">
             {navLinks.map((link) => (
@@ -474,8 +505,8 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
             ))}
           </nav>
           <div className="flex items-center gap-2">
-            <button onClick={() => onNavigate("/sites")} className="hidden rounded-full border border-cyan-200 bg-cyan-50 px-3 py-2 text-xs font-semibold text-cyan-800 sm:block">
-              ClientsFlow Sites
+            <button onClick={() => onNavigate("/sites")} className="hidden rounded-full border border-cyan-200 bg-cyan-50 px-3 py-2 text-xs text-slate-800 sm:block">
+              <SitesWordmark />
             </button>
             <button onClick={() => onNavigate("/login")} className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
               Войти
@@ -499,7 +530,7 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
                 AI Client Operations Platform
               </span>
               <h1 className="mt-5 text-4xl font-extrabold leading-[1.05] tracking-tight sm:text-5xl lg:text-6xl">
-                Перестаньте терять лиды. ClientsFlow отвечает, квалифицирует и доводит до записи.
+                Перестаньте терять лиды. CFlow отвечает, квалифицирует и доводит до записи.
               </h1>
               <p className="mt-5 max-w-2xl text-base text-slate-600 sm:text-lg">
                 Платформа автоматизирует входящие обращения, обрабатывает текст, голосовые и изображения, управляет follow-up и даёт прозрачную аналитику по конверсии.
@@ -564,7 +595,7 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
         </section>
 
         <section id="integrations" className="mx-auto max-w-[1240px] px-4 py-16 sm:px-6">
-          <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">ClientsFlow работает там, где уже приходят ваши обращения</h2>
+          <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">CFlow работает там, где уже приходят ваши обращения</h2>
           <p className="mt-3 max-w-3xl text-slate-600">Каналы подключаются в одну операционную ленту: от первого сообщения до записи, оплаты и повторного касания.</p>
           <div className="mt-8 rounded-3xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -607,7 +638,7 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
         </section>
 
         <section id="cases" className="mx-auto max-w-[1240px] overflow-hidden px-4 py-16 sm:px-6">
-          <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Реальные кейсы в работе ClientsFlow</h2>
+          <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Реальные кейсы в работе CFlow</h2>
           <p className="mt-3 max-w-3xl text-slate-600">Мини-сцены показывают, как система ведёт клиента от первого сообщения до записи и оплаты.</p>
           <div className="relative mt-8">
             <motion.div animate={{ x: ["0%", "-50%"] }} transition={{ duration: 28, ease: "linear", repeat: Infinity }} className="flex w-[200%] gap-3">
@@ -703,7 +734,7 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
         <section className="mx-auto max-w-[1240px] px-4 pb-16 sm:px-6">
           <div className="grid gap-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm lg:grid-cols-[1fr_1.1fr] lg:p-8">
             <div>
-              <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Личный кабинет ClientsFlow</h2>
+              <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Личный кабинет CFlow</h2>
               <p className="mt-3 text-slate-600">Внутри: AI Inbox, статусы лидов, аналитика по каналам, потерянная выручка и AI-рекомендации.</p>
               <button onClick={() => onNavigate("/dashboard")} className="mt-5 rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white">
                 Открыть личный кабинет
@@ -768,9 +799,9 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
 
       <footer className="border-t border-slate-200 bg-white">
         <div className="mx-auto flex max-w-[1240px] flex-wrap items-center justify-between gap-3 px-4 py-6 text-sm text-slate-600 sm:px-6">
-          <p className="font-bold text-slate-900">ClientsFlow</p>
+          <p className="font-bold text-slate-900"><BrandWordmark /></p>
           <div className="flex flex-wrap gap-4">
-            <button onClick={() => onNavigate("/sites")} className="hover:text-slate-900">ClientsFlow Sites</button>
+            <button onClick={() => onNavigate("/sites")} className="hover:text-slate-900"><SitesWordmark /></button>
             <button onClick={() => onNavigate("/login")} className="hover:text-slate-900">Войти</button>
             <button onClick={() => onNavigate("/dashboard")} className="hover:text-slate-900">Личный кабинет</button>
             <button onClick={() => onNavigate("/pricing")} className="hover:text-slate-900">Тарифы</button>
@@ -802,7 +833,9 @@ function LoginPage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#f7f8f6] px-4">
       <form onSubmit={submit} className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-        <p className="text-sm font-semibold text-cyan-700">ClientsFlow</p>
+        <p className="text-sm font-semibold text-cyan-700">
+          <BrandWordmark cClass="text-cyan-600" flowClass="text-slate-900" />
+        </p>
         <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900">Рабочий вход</h1>
         <p className="mt-2 text-sm text-slate-600">Доступ в рабочий контур: логин `111`, пароль `111`.</p>
         <label className="mt-5 block">
@@ -833,7 +866,7 @@ function PricingPage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) 
     <div className="min-h-screen bg-[#f7f8f6] px-4 py-10 sm:px-6">
       <div className="mx-auto max-w-[1160px]">
         <div className="flex items-center justify-between gap-3">
-          <h1 className="text-4xl font-extrabold tracking-tight">Тарифы ClientsFlow</h1>
+          <h1 className="text-4xl font-extrabold tracking-tight">Тарифы CFlow</h1>
           <button onClick={() => onNavigate("/")} className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700">На главную</button>
         </div>
         <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -860,7 +893,7 @@ function SitesPage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
       <div className="sticky top-0 z-40 border-b border-blue-900/50 bg-slate-950/90 backdrop-blur">
         <div className="mx-auto flex max-w-[1240px] items-center justify-between gap-3 px-4 py-4 sm:px-6">
           <button onClick={() => onNavigate("/")} className="text-lg font-extrabold tracking-tight text-white">
-            ClientsFlow
+            <BrandWordmark cClass="text-cyan-300" flowClass="text-white" />
           </button>
           <div className="flex items-center gap-2">
             <button onClick={() => onNavigate("/")} className="rounded-full border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200">

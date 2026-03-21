@@ -22,7 +22,7 @@ type NavItem =
   | "Аналитика"
   | "Потерянные"
   | "AI рекомендации"
-  | "ClientsFlow Sites"
+  | "CFlow Sites"
   | "Настройки";
 
 type DashboardAppProps = {
@@ -242,6 +242,21 @@ const navItems: NavItem[] = [
 ];
 
 const mobilePrimaryNav: NavItem[] = ["Обзор", "Диалоги", "Лиды", "Аналитика", "AI рекомендации"];
+
+function BrandWordmark({
+  cClass = "text-cyan-500",
+  flowClass = "text-slate-900"
+}: {
+  cClass?: string;
+  flowClass?: string;
+}) {
+  return (
+    <span className="inline-flex items-baseline font-extrabold tracking-tight">
+      <span className={cClass}>C</span>
+      <span className={flowClass}>Flow</span>
+    </span>
+  );
+}
 
 const planDefinitions: PlanDefinition[] = [
   {
@@ -1008,7 +1023,7 @@ function buildFallbackSiteContent(
       { q: "How do I book?", a: "Submit the form or message us in your preferred channel and we will offer available time slots." }
     ],
     finalCtaTitle: `${template.name}: ready to launch in minutes`,
-    finalCtaText: `Primary website goal: ${answers.goal}. Connect your form and route all leads into ClientsFlow.`,
+    finalCtaText: `Primary website goal: ${answers.goal}. Connect your form and route all leads into CFlow.`,
     contactLine: `${answers.businessName}, ${answers.city} • Channels: ${answers.channels}`
   };
 }
@@ -1304,7 +1319,7 @@ function buildLinePoints(values: number[]): string {
 
 export default function App({ standaloneSites = false, onNavigate }: DashboardAppProps) {
   const serviceImportRef = useRef<HTMLInputElement | null>(null);
-  const [activeNav, setActiveNav] = useState<NavItem>(standaloneSites ? "ClientsFlow Sites" : "Обзор");
+  const [activeNav, setActiveNav] = useState<NavItem>(standaloneSites ? "CFlow Sites" : "Обзор");
   const [statusFilter, setStatusFilter] = useState<LeadStatus | "все">("все");
   const [channelFilter, setChannelFilter] = useState<Channel | "все">("все");
   const [selectedConversationId, setSelectedConversationId] = useState<string>("");
@@ -1852,12 +1867,12 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
   }
 
   function handleNavChange(item: NavItem): void {
-    if (standaloneSites && item !== "ClientsFlow Sites") return;
+    if (standaloneSites && item !== "CFlow Sites") return;
     if (item === "AI рекомендации" && !hasFeature("aiRecommendations")) {
       handleFeatureGuard("aiRecommendations");
       return;
     }
-    if (item === "ClientsFlow Sites" && !hasFeature("sitesBuilder")) {
+    if (item === "CFlow Sites" && !hasFeature("sitesBuilder")) {
       handleFeatureGuard("sitesBuilder");
       return;
     }
@@ -2163,8 +2178,8 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
   }, [selectedConversationId]);
 
   useEffect(() => {
-    if (standaloneSites && activeNav !== "ClientsFlow Sites") {
-      setActiveNav("ClientsFlow Sites");
+    if (standaloneSites && activeNav !== "CFlow Sites") {
+      setActiveNav("CFlow Sites");
     }
   }, [standaloneSites, activeNav]);
 
@@ -2743,7 +2758,9 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
         {!standaloneSites ? (
         <aside className="hidden w-[260px] shrink-0 border-r border-slate-200 bg-white px-4 py-5 lg:block">
           <div className="mb-8 px-2">
-            <p className="text-lg font-extrabold tracking-tight">ClientsFlow</p>
+            <p className="text-lg font-extrabold tracking-tight">
+              <BrandWordmark />
+            </p>
             <p className="mt-1 text-xs text-slate-500">AI Client Operations</p>
           </div>
 
@@ -2779,7 +2796,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
             <div className="flex items-center justify-between gap-4">
               <div>
                 <h1 className={`text-lg font-extrabold tracking-tight sm:text-xl ${standaloneSites ? "text-white" : ""}`}>
-                  {standaloneSites ? "ClientsFlow Sites" : activeNav}
+                  {standaloneSites ? "CFlow Sites" : activeNav}
                 </h1>
                 <p className={`text-xs sm:text-sm ${standaloneSites ? "text-slate-300" : "text-slate-500"}`}>
                   {standaloneSites ? "Конструктор сайтов для бизнеса: шаблон, контент, публикация" : "Рабочая панель управления потоком обращений"}
@@ -3774,12 +3791,12 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                   </>
                 )}
               </div>
-            ) : activeNav === "ClientsFlow Sites" ? (
+            ) : activeNav === "CFlow Sites" ? (
               <div className="space-y-4">
                 {!hasFeature("sitesBuilder") ? (
                   <section className="rounded-3xl border border-cyan-200 bg-cyan-50 p-6 shadow-sm">
                     <p className="text-xs font-bold uppercase tracking-[0.12em] text-cyan-700">Доступ ограничен</p>
-                    <h2 className="mt-2 text-2xl font-extrabold tracking-tight text-slate-900">ClientsFlow Sites доступен на Pro и Business</h2>
+                    <h2 className="mt-2 text-2xl font-extrabold tracking-tight text-slate-900">CFlow Sites доступен на Pro и Business</h2>
                     <p className="mt-2 text-sm text-slate-700">
                       Конструктор сайтов с AI-генерацией контента помогает быстро запускать новые источники лидов.
                     </p>
@@ -3796,10 +3813,10 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Продукт экосистемы</p>
-                      <h2 className="mt-1 text-2xl font-extrabold tracking-tight text-slate-900">ClientsFlow Sites</h2>
+                      <h2 className="mt-1 text-2xl font-extrabold tracking-tight text-slate-900">CFlow Sites</h2>
                       <p className="mt-2 max-w-3xl text-sm text-slate-600">
                         Запустите сайт за 5 минут: выберите один из 4 стилей, заполните бриф из 10 вопросов, получите сгенерированный контент и опубликуйте.
-                        Sites выводит бизнес онлайн, а ClientsFlow берет входящие обращения и доводит до записи.
+                        Sites выводит бизнес онлайн, а CFlow берет входящие обращения и доводит до записи.
                       </p>
                     </div>
                     <div className="rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3">
@@ -4217,11 +4234,11 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
 
                 <section className="rounded-3xl border border-cyan-200 bg-cyan-50 p-5 shadow-sm">
                   <p className="text-xs font-bold uppercase tracking-[0.12em] text-cyan-700">Экосистема</p>
-                  <h3 className="mt-1 text-xl font-extrabold tracking-tight text-slate-900">Как Sites работает вместе с ClientsFlow</h3>
+                  <h3 className="mt-1 text-xl font-extrabold tracking-tight text-slate-900">Как Sites работает вместе с CFlow</h3>
                   <div className="mt-3 grid gap-3 md:grid-cols-4">
                     <div className="rounded-xl border border-cyan-200 bg-white p-3 text-sm text-slate-700">1. Публикуете сайт за 5 минут</div>
                     <div className="rounded-xl border border-cyan-200 bg-white p-3 text-sm text-slate-700">2. Получаете входящие заявки с формы</div>
-                    <div className="rounded-xl border border-cyan-200 bg-white p-3 text-sm text-slate-700">3. ClientsFlow квалифицирует и ведет к записи</div>
+                    <div className="rounded-xl border border-cyan-200 bg-white p-3 text-sm text-slate-700">3. CFlow квалифицирует и ведет к записи</div>
                     <div className="rounded-xl border border-cyan-200 bg-white p-3 text-sm text-slate-700">4. Вся аналитика и конверсия в одном дашборде</div>
                   </div>
                 </section>
@@ -4327,7 +4344,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                       <div className="w-full rounded-3xl border border-slate-700 bg-slate-900/95 p-5 shadow-2xl sm:p-7">
                         <div className="mb-4 flex items-center justify-between gap-3">
                           <div>
-                            <p className="text-xs font-bold uppercase tracking-[0.12em] text-cyan-300">Настройка ClientsFlow</p>
+                            <p className="text-xs font-bold uppercase tracking-[0.12em] text-cyan-300">Настройка CFlow</p>
                             <h2 className="mt-1 text-2xl font-extrabold tracking-tight text-white">Подключение и запуск</h2>
                           </div>
                           <div className="rounded-full border border-slate-600 bg-slate-800 px-3 py-1 text-xs font-semibold text-slate-200">
@@ -4768,7 +4785,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                 {(subscription.subscriptionStatus !== "none" || checkoutState === "success") && !subscription.onboardingCompleted ? (
                   <section className="rounded-3xl border border-cyan-200 bg-cyan-50 p-5 shadow-sm">
                     <p className="text-xs font-bold uppercase tracking-[0.12em] text-cyan-700">Онбординг</p>
-                    <h3 className="mt-1 text-lg font-bold tracking-tight text-slate-900">Запуск AI-системы ClientsFlow</h3>
+                    <h3 className="mt-1 text-lg font-bold tracking-tight text-slate-900">Запуск AI-системы CFlow</h3>
                     <p className="mt-1 text-sm text-slate-700">Шаг {onboardingStep} из 3</p>
 
                     {onboardingStep === 1 ? (
@@ -5013,10 +5030,10 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                     </div>
 
                     <div className="rounded-3xl border border-cyan-200 bg-cyan-50 p-5 shadow-sm">
-                      <p className="text-xs font-bold uppercase tracking-[0.12em] text-cyan-700">ClientsFlow Sites</p>
+                      <p className="text-xs font-bold uppercase tracking-[0.12em] text-cyan-700">CFlow Sites</p>
                       <h3 className="mt-1 text-lg font-bold tracking-tight text-slate-900">Сайт за 5 минут + автоворонка лидов</h3>
                       <p className="mt-2 text-sm text-slate-700">
-                        Клиент выбирает шаблон, заполняет данные бизнеса, получает AI-переписанный сайт и сразу передает лиды в ClientsFlow.
+                        Клиент выбирает шаблон, заполняет данные бизнеса, получает AI-переписанный сайт и сразу передает лиды в CFlow.
                       </p>
                       <div className="mt-3 grid gap-2">
                         <div className="rounded-xl border border-cyan-200 bg-white px-3 py-2 text-xs text-slate-700">1. Шаблон + данные бизнеса</div>
@@ -5028,7 +5045,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                         <button
                           onClick={() => {
                             if (onNavigate) onNavigate("/sites");
-                            else handleNavChange("ClientsFlow Sites");
+                            else handleNavChange("CFlow Sites");
                           }}
                           className="w-full rounded-lg bg-slate-900 px-2.5 py-2 font-semibold text-white transition hover:bg-slate-700 sm:w-auto"
                         >
