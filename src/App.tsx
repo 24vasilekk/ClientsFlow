@@ -99,6 +99,29 @@ const modules = [
   "AI рекомендации"
 ];
 
+const howItWorksSlides = [
+  {
+    title: "Подключаете каналы",
+    text: "Telegram, WhatsApp, Instagram и сайт объединяются в одну операционную ленту.",
+    badge: "Шаг 1"
+  },
+  {
+    title: "Настраиваете сценарии",
+    text: "Определяете правила ответа, квалификацию лидов и условия передачи менеджеру.",
+    badge: "Шаг 2"
+  },
+  {
+    title: "ClientsFlow обрабатывает обращения",
+    text: "Система отвечает, уточняет задачу, ведет к записи и не теряет контекст клиента.",
+    badge: "Шаг 3"
+  },
+  {
+    title: "Управляете ростом по аналитике",
+    text: "Видите конверсию, причины потерь и действия, которые улучшают результат.",
+    badge: "Шаг 4"
+  }
+];
+
 const faqItems = [
   {
     q: "Что умеет AI-ассистент в демо?",
@@ -282,6 +305,7 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
   const [openFaq, setOpenFaq] = useState<string | null>(faqItems[0].q);
   const [showCabinetCta, setShowCabinetCta] = useState(false);
   const [chatMode, setChatMode] = useState<"openrouter" | "mock">("openrouter");
+  const [howStepIndex, setHowStepIndex] = useState(0);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   const interactionCount = useMemo(
@@ -600,27 +624,79 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
 
         <section id="how" className="border-y border-slate-200 bg-white/60">
           <div className="mx-auto max-w-[1240px] px-4 py-16 sm:px-6">
-            <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Как это работает</h2>
-            <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              {["Подключаете каналы", "Настраиваете сценарии", "ClientsFlow обрабатывает обращения", "Вы управляете ростом по аналитике"].map((step, i) => (
-                <div key={step} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                  <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Шаг {i + 1}</p>
-                  <p className="mt-3 text-lg font-bold tracking-tight text-slate-900">{step}</p>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Как это работает</h2>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setHowStepIndex((prev) => (prev - 1 + howItWorksSlides.length) % howItWorksSlides.length)}
+                  className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-500"
+                >
+                  ←
+                </button>
+                <button
+                  onClick={() => setHowStepIndex((prev) => (prev + 1) % howItWorksSlides.length)}
+                  className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-500"
+                >
+                  →
+                </button>
+              </div>
+            </div>
+            <div className="mt-8 grid gap-4 lg:grid-cols-[1.1fr_1fr]">
+              <motion.div
+                key={`how-visual-${howStepIndex}`}
+                initial={{ opacity: 0, x: 16 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.3 }}
+                className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
+              >
+                <div className="h-64 rounded-2xl border border-slate-200 bg-[radial-gradient(80%_70%_at_15%_20%,rgba(125,211,252,0.32),transparent_62%),radial-gradient(55%_60%_at_90%_100%,rgba(59,130,246,0.22),transparent_58%),#f8fafc] p-4 sm:h-72">
+                  <div className="rounded-xl border border-slate-200 bg-white/90 p-3 shadow-sm">
+                    <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">{howItWorksSlides[howStepIndex].badge}</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900">{howItWorksSlides[howStepIndex].title}</p>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <div className="h-20 rounded-xl border border-slate-200 bg-white/80" />
+                    <div className="h-20 rounded-xl border border-slate-200 bg-white/80" />
+                    <div className="h-20 rounded-xl border border-slate-200 bg-white/80" />
+                    <div className="h-20 rounded-xl border border-slate-200 bg-white/80" />
+                  </div>
                 </div>
-              ))}
+              </motion.div>
+              <motion.div
+                key={`how-copy-${howStepIndex}`}
+                initial={{ opacity: 0, x: 12 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.3 }}
+                className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
+              >
+                <span className="inline-flex rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.1em] text-cyan-700">
+                  {howItWorksSlides[howStepIndex].badge}
+                </span>
+                <h3 className="mt-4 text-2xl font-extrabold tracking-tight text-slate-900">{howItWorksSlides[howStepIndex].title}</h3>
+                <p className="mt-3 text-sm leading-relaxed text-slate-600">{howItWorksSlides[howStepIndex].text}</p>
+                <div className="mt-6 flex items-center gap-2">
+                  {howItWorksSlides.map((_, i) => (
+                    <span key={`dot-${i}`} className={`h-1.5 rounded-full transition-all ${i === howStepIndex ? "w-8 bg-slate-900" : "w-3 bg-slate-300"}`} />
+                  ))}
+                </div>
+              </motion.div>
             </div>
           </div>
         </section>
 
-        <section className="mx-auto max-w-[1240px] px-4 py-16 sm:px-6">
-          <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Модули платформы</h2>
-          <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {modules.map((mod) => (
-              <div key={mod} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <p className="font-semibold text-slate-900">{mod}</p>
-                <p className="mt-1 text-sm text-slate-600">Полноценный операционный модуль с рабочими сценариями.</p>
-              </div>
-            ))}
+        <section className="relative overflow-hidden">
+          <div className="absolute inset-0 bg-[radial-gradient(70%_50%_at_15%_100%,rgba(125,211,252,0.24),transparent_70%),radial-gradient(40%_40%_at_90%_65%,rgba(99,102,241,0.18),transparent_70%)]" />
+          <div className="relative mx-auto max-w-[1240px] px-4 py-16 sm:px-6">
+            <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Модули платформы</h2>
+            <p className="mt-3 max-w-3xl text-slate-600">Каждый модуль — отдельный рабочий слой в единой системе обработки лидов и клиентской коммуникации.</p>
+            <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {modules.map((mod) => (
+                <div key={mod} className="rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-sm backdrop-blur">
+                  <p className="font-semibold text-slate-900">{mod}</p>
+                  <p className="mt-1 text-sm text-slate-600">Полноценный операционный модуль с рабочими сценариями.</p>
+                </div>
+              ))}
+            </div>
           </div>
         </section>
 
