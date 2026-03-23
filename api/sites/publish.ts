@@ -31,7 +31,15 @@ export default async function handler(req: any, res: any) {
       sectionOrder: Array.isArray(payload.sectionOrder) ? payload.sectionOrder.map((item) => String(item)) : [],
       galleryUrls: Array.isArray(payload.galleryUrls) ? payload.galleryUrls.slice(0, 20).map((item) => String(item)) : [],
       cabinetEnabled: payload.cabinetEnabled !== false,
-      telegramBot: String(payload.telegramBot || "@clientsflow_support_bot")
+      telegramBot: String(payload.telegramBot || "@clientsflow_support_bot"),
+      socialLinks:
+        payload.socialLinks && typeof payload.socialLinks === "object"
+          ? {
+              telegram: typeof payload.socialLinks.telegram === "string" ? payload.socialLinks.telegram : "",
+              whatsapp: typeof payload.socialLinks.whatsapp === "string" ? payload.socialLinks.whatsapp : "",
+              instagram: typeof payload.socialLinks.instagram === "string" ? payload.socialLinks.instagram : ""
+            }
+          : { telegram: "", whatsapp: "", instagram: "" }
     };
 
     const doc = await createPublishedSite(safePayload);

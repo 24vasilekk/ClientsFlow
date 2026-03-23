@@ -982,7 +982,6 @@ const defaultSitesAnswers: Record<string, string> = {
 
 const sitesSectionLibrary: SitesSectionConfig[] = [
   { key: "about", title: "О компании", description: "Краткий блок о бизнесе и позиционировании." },
-  { key: "valueProps", title: "Преимущества", description: "Почему клиент выбирает именно вас." },
   { key: "services", title: "Услуги", description: "Ключевые направления и формат работы." },
   { key: "process", title: "Как это работает", description: "Пошаговый путь клиента до записи." },
   { key: "gallery", title: "Галерея", description: "До 5 фотографий бизнеса, команды или кейсов." },
@@ -995,7 +994,7 @@ const sitesSectionLibrary: SitesSectionConfig[] = [
 
 const defaultSitesSections: Record<SitesSectionKey, boolean> = {
   about: true,
-  valueProps: true,
+  valueProps: false,
   services: true,
   process: true,
   gallery: true,
@@ -1198,13 +1197,19 @@ function loadSitesBuilderStyle(): {
   baseColor: string;
   cabinetEnabled: boolean;
   telegramBot: string;
+  socialLinks: {
+    telegram: string;
+    whatsapp: string;
+    instagram: string;
+  };
 } {
   if (typeof window === "undefined") {
     return {
       accentColor: "#0f172a",
       baseColor: "#f8fafc",
       cabinetEnabled: true,
-      telegramBot: "@clientsflow_support_bot"
+      telegramBot: "@clientsflow_support_bot",
+      socialLinks: { telegram: "", whatsapp: "", instagram: "" }
     };
   }
   try {
@@ -1214,7 +1219,8 @@ function loadSitesBuilderStyle(): {
         accentColor: "#0f172a",
         baseColor: "#f8fafc",
         cabinetEnabled: true,
-        telegramBot: "@clientsflow_support_bot"
+        telegramBot: "@clientsflow_support_bot",
+        socialLinks: { telegram: "", whatsapp: "", instagram: "" }
       };
     }
     const parsed = JSON.parse(raw) as Partial<{
@@ -1222,20 +1228,31 @@ function loadSitesBuilderStyle(): {
       baseColor: string;
       cabinetEnabled: boolean;
       telegramBot: string;
+      socialLinks: {
+        telegram?: string;
+        whatsapp?: string;
+        instagram?: string;
+      };
     }>;
     const isHex = (value: string | undefined) => Boolean(value && /^#[0-9a-fA-F]{6}$/.test(value));
     return {
       accentColor: isHex(parsed.accentColor) ? (parsed.accentColor as string) : "#0f172a",
       baseColor: isHex(parsed.baseColor) ? (parsed.baseColor as string) : "#f8fafc",
       cabinetEnabled: typeof parsed.cabinetEnabled === "boolean" ? parsed.cabinetEnabled : true,
-      telegramBot: typeof parsed.telegramBot === "string" && parsed.telegramBot.trim() ? parsed.telegramBot.trim() : "@clientsflow_support_bot"
+      telegramBot: typeof parsed.telegramBot === "string" && parsed.telegramBot.trim() ? parsed.telegramBot.trim() : "@clientsflow_support_bot",
+      socialLinks: {
+        telegram: typeof parsed.socialLinks?.telegram === "string" ? parsed.socialLinks.telegram : "",
+        whatsapp: typeof parsed.socialLinks?.whatsapp === "string" ? parsed.socialLinks.whatsapp : "",
+        instagram: typeof parsed.socialLinks?.instagram === "string" ? parsed.socialLinks.instagram : ""
+      }
     };
   } catch {
     return {
       accentColor: "#0f172a",
       baseColor: "#f8fafc",
       cabinetEnabled: true,
-      telegramBot: "@clientsflow_support_bot"
+      telegramBot: "@clientsflow_support_bot",
+      socialLinks: { telegram: "", whatsapp: "", instagram: "" }
     };
   }
 }
@@ -1245,6 +1262,11 @@ function saveSitesBuilderStyle(style: {
   baseColor: string;
   cabinetEnabled: boolean;
   telegramBot: string;
+  socialLinks: {
+    telegram: string;
+    whatsapp: string;
+    instagram: string;
+  };
 }): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(SITES_BUILDER_STYLE_KEY, JSON.stringify(style));
@@ -1505,6 +1527,14 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${safeAlpha})`;
 }
 
+function normalizeContactLink(value: string): string {
+  const raw = (value || "").trim();
+  if (!raw) return "";
+  if (/^(https?:\/\/|tg:\/\/|mailto:|tel:)/i.test(raw)) return raw;
+  if (raw.startsWith("@")) return `https://t.me/${raw.slice(1)}`;
+  return `https://${raw}`;
+}
+
 function buildLinePoints(values: number[]): string {
   const max = Math.max(...values);
   const min = Math.min(...values);
@@ -1567,6 +1597,9 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
   const [sitesBaseColor, setSitesBaseColor] = useState<string>(initialSitesStyle.baseColor);
   const [sitesCabinetEnabled, setSitesCabinetEnabled] = useState<boolean>(initialSitesStyle.cabinetEnabled);
   const [sitesTelegramBot, setSitesTelegramBot] = useState<string>(initialSitesStyle.telegramBot);
+  const [sitesSocialLinks, setSitesSocialLinks] = useState<{ telegram: string; whatsapp: string; instagram: string }>(
+    initialSitesStyle.socialLinks
+  );
   const [sitesPreviewTab, setSitesPreviewTab] = useState<"home" | "services" | "reviews" | "cabinet">("home");
   const [sitesFaqOpen, setSitesFaqOpen] = useState<string | null>(null);
   const [sitesOpenedProductId, setSitesOpenedProductId] = useState<string | null>(null);
@@ -2105,6 +2138,10 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
 
   function handleNavChange(item: NavItem): void {
     if (standaloneSites && item !== "CFlow Sites") return;
+    if (item === "CFlow Sites" && onNavigate) {
+      onNavigate("/sites");
+      return;
+    }
     if (item === "AI рекомендации" && !hasFeature("aiRecommendations")) {
       handleFeatureGuard("aiRecommendations");
       return;
@@ -2212,7 +2249,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
   function renderSitesPreviewSection(key: SitesSectionKey): JSX.Element | null {
     if (!sitesSections[key]) return null;
     const visibleByTab: Record<typeof sitesPreviewTab, SitesSectionKey[]> = {
-      home: ["about", "valueProps", "process", "gallery", "contacts", "map"],
+      home: ["about", "services", "process", "gallery", "contacts", "map"],
       services: ["services"],
       reviews: ["testimonials", "faq"],
       cabinet: ["cabinet"]
@@ -2221,20 +2258,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
 
     if (key === "about") return null;
 
-    if (key === "valueProps") {
-      return (
-        <div className="rounded-xl border border-slate-200 bg-white p-3">
-          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Преимущества</p>
-          <div className="mt-2 grid gap-2 sm:grid-cols-3">
-            {sitesGeneratedContent.valueProps.map((item) => (
-              <div key={item} className="aspect-square rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm font-semibold text-slate-800">
-                {item}
-              </div>
-            ))}
-          </div>
-        </div>
-      );
-    }
+    if (key === "valueProps") return null;
 
     if (key === "services") {
       return (
@@ -2372,7 +2396,11 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
   }
 
   const openedSitesProduct = sitesProducts.find((item) => item.id === sitesOpenedProductId) || null;
-  const contactsIcons = ["TG", "WA", "IG"];
+  const previewSocialButtons = [
+    { key: "telegram", label: "TG", href: normalizeContactLink(sitesSocialLinks.telegram) },
+    { key: "whatsapp", label: "WA", href: normalizeContactLink(sitesSocialLinks.whatsapp) },
+    { key: "instagram", label: "IG", href: normalizeContactLink(sitesSocialLinks.instagram) }
+  ] as const;
   const previewTabs: Array<{ id: "home" | "services" | "reviews" | "cabinet"; label: string }> = [
     { id: "home", label: "Дом" },
     { id: "services", label: "Услуги" },
@@ -2664,9 +2692,10 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
       accentColor: sitesAccentColor,
       baseColor: sitesBaseColor,
       cabinetEnabled: sitesCabinetEnabled,
-      telegramBot: sitesTelegramBot
+      telegramBot: sitesTelegramBot,
+      socialLinks: sitesSocialLinks
     });
-  }, [sitesAccentColor, sitesBaseColor, sitesCabinetEnabled, sitesTelegramBot]);
+  }, [sitesAccentColor, sitesBaseColor, sitesCabinetEnabled, sitesTelegramBot, sitesSocialLinks]);
 
   useEffect(() => {
     saveSitesBuilderPayment(sitesPayment);
@@ -4571,6 +4600,50 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                             className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700"
                           />
                         </label>
+                        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                          <label className="block">
+                            <span className="text-xs font-semibold text-slate-600">Ссылка Telegram</span>
+                            <input
+                              value={sitesSocialLinks.telegram}
+                              onChange={(event) =>
+                                setSitesSocialLinks((prev) => ({
+                                  ...prev,
+                                  telegram: event.target.value
+                                }))
+                              }
+                              placeholder="https://t.me/username"
+                              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-700"
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="text-xs font-semibold text-slate-600">Ссылка WhatsApp</span>
+                            <input
+                              value={sitesSocialLinks.whatsapp}
+                              onChange={(event) =>
+                                setSitesSocialLinks((prev) => ({
+                                  ...prev,
+                                  whatsapp: event.target.value
+                                }))
+                              }
+                              placeholder="https://wa.me/79991234567"
+                              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-700"
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="text-xs font-semibold text-slate-600">Ссылка Instagram</span>
+                            <input
+                              value={sitesSocialLinks.instagram}
+                              onChange={(event) =>
+                                setSitesSocialLinks((prev) => ({
+                                  ...prev,
+                                  instagram: event.target.value
+                                }))
+                              }
+                              placeholder="https://instagram.com/username"
+                              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-700"
+                            />
+                          </label>
+                        </div>
                       </div>
                     </div>
                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -4883,47 +4956,77 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                               <span className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700">
                                 {sitesAnswers.city || "Город"}
                               </span>
-                              {contactsIcons.map((icon) => (
-                                <span key={icon} className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-300 bg-white text-[10px] font-bold text-slate-600">
-                                  {icon}
-                                </span>
-                              ))}
+                              {previewSocialButtons.map((item) =>
+                                item.href ? (
+                                  <a
+                                    key={item.key}
+                                    href={item.href}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-300 bg-white text-[10px] font-bold text-slate-700 transition hover:border-slate-500"
+                                  >
+                                    {item.label}
+                                  </a>
+                                ) : (
+                                  <span
+                                    key={item.key}
+                                    className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-[10px] font-bold text-slate-400"
+                                  >
+                                    {item.label}
+                                  </span>
+                                )
+                              )}
                             </div>
                           </div>
                         </div>
 
-                        <div className="px-4 py-6" style={{ backgroundColor: sitesHeroBackground }}>
-                          <p className="text-xs font-semibold text-slate-700">{selectedSitesTemplate.heroPattern}</p>
-                          <h4 className="mt-2 text-2xl font-extrabold tracking-tight text-slate-900">{generatedSitesHeadline}</h4>
-                          <p className="mt-2 max-w-xl text-sm text-slate-700">{generatedSitesSubheadline}</p>
-                          {sitesSections.about && sitesPreviewTab === "home" ? (
-                            <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
-                              <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500">About</p>
-                              <p className="mt-1 text-sm leading-6 text-slate-700">{sitesGeneratedContent.about}</p>
-                            </div>
-                          ) : null}
-                          <div className="mt-4 flex flex-wrap gap-2">
-                            <button className="rounded-full px-4 py-2 text-xs font-semibold text-white" style={{ backgroundColor: sitesAccentPreview }}>
-                              {sitesGeneratedContent.primaryCta}
-                            </button>
-                            <button className="rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700">
-                              {sitesGeneratedContent.secondaryCta}
-                            </button>
-                            {sitesCabinetEnabled ? (
-                              <button className="rounded-full border px-4 py-2 text-xs font-semibold text-white" style={{ backgroundColor: sitesAccentPreview, borderColor: sitesAccentPreview }}>
-                                Войти через Telegram
-                              </button>
-                            ) : null}
-                          </div>
-                          <div className="mt-4 grid gap-2 sm:grid-cols-3">
-                            {sitesGeneratedContent.trustStats.map((item) => (
-                              <div key={item.label} className="rounded-xl border border-white/60 bg-white/80 p-2.5">
-                                <p className="text-[11px] text-slate-500">{item.label}</p>
-                                <p className="text-sm font-bold text-slate-900">{item.value}</p>
+                        {sitesPreviewTab === "home" ? (
+                          <div className="px-4 py-6" style={{ backgroundColor: sitesHeroBackground }}>
+                            <p className="text-xs font-semibold text-slate-700">{selectedSitesTemplate.heroPattern}</p>
+                            <h4 className="mt-2 text-2xl font-extrabold tracking-tight text-slate-900">{generatedSitesHeadline}</h4>
+                            <p className="mt-2 max-w-xl text-sm text-slate-700">{generatedSitesSubheadline}</p>
+                            {sitesSections.about ? (
+                              <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
+                                <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500">About</p>
+                                <p className="mt-1 text-sm leading-6 text-slate-700">{sitesGeneratedContent.about}</p>
                               </div>
-                            ))}
+                            ) : null}
+                            <div className="mt-4 flex flex-wrap gap-2">
+                              <button className="rounded-full px-4 py-2 text-xs font-semibold text-white" style={{ backgroundColor: sitesAccentPreview }}>
+                                {sitesGeneratedContent.primaryCta}
+                              </button>
+                              <button className="rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700">
+                                {sitesGeneratedContent.secondaryCta}
+                              </button>
+                              {sitesCabinetEnabled ? (
+                                <button className="rounded-full border px-4 py-2 text-xs font-semibold text-white" style={{ backgroundColor: sitesAccentPreview, borderColor: sitesAccentPreview }}>
+                                  Войти через Telegram
+                                </button>
+                              ) : null}
+                            </div>
+                            <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                              {sitesGeneratedContent.trustStats.map((item) => (
+                                <div key={item.label} className="rounded-xl border border-white/60 bg-white/80 p-2.5">
+                                  <p className="text-[11px] text-slate-500">{item.label}</p>
+                                  <p className="text-sm font-bold text-slate-900">{item.value}</p>
+                                </div>
+                              ))}
+                            </div>
                           </div>
-                        </div>
+                        ) : (
+                          <div className="border-b border-slate-200 bg-white px-4 py-5">
+                            <h4 className="text-xl font-extrabold tracking-tight text-slate-900">
+                              {sitesPreviewTab === "services" && "Услуги и каталог"}
+                              {sitesPreviewTab === "reviews" && "Отзывы и частые вопросы"}
+                              {sitesPreviewTab === "cabinet" && "Личный кабинет клиента"}
+                            </h4>
+                            <p className="mt-1 text-sm text-slate-600">
+                              {sitesPreviewTab === "services" && "Выберите нужную услугу, откройте карточку и оставьте заявку."}
+                              {sitesPreviewTab === "reviews" && "Покажите доверие через реальные кейсы и понятные ответы на вопросы."}
+                              {sitesPreviewTab === "cabinet" && "Отдельная зона для входа через Telegram и клиентских уведомлений."}
+                            </p>
+                          </div>
+                        )}
 
                         {openedSitesProduct ? (
                           <div className="mx-4 mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -4996,7 +5099,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                           setSitesPublishing(true);
                           setSitesPublishRedirectScreen(true);
                           setSitesActionMessage("Публикуем сайт на домене...");
-                          const publishPayload = {
+                            const publishPayload = {
                             businessName: sitesAnswers.businessName || "CFlow Site",
                             city: sitesAnswers.city,
                             logoUrl: sitesLogoUrl,
@@ -5015,11 +5118,12 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                             contactLine: sitesGeneratedContent.contactLine,
                             products: sitesProducts,
                             sections: sitesSections,
-                            sectionOrder: sitesSectionOrder,
-                            galleryUrls: sitesGalleryUrls,
-                            cabinetEnabled: sitesCabinetEnabled,
-                            telegramBot: sitesTelegramBot
-                          };
+                              sectionOrder: sitesSectionOrder,
+                              galleryUrls: sitesGalleryUrls,
+                              cabinetEnabled: sitesCabinetEnabled,
+                              telegramBot: sitesTelegramBot,
+                              socialLinks: sitesSocialLinks
+                            };
                           const runRedirect = (targetPath: string, targetUrl: string) => {
                             setSitesFlowStatus("published");
                             setSitesGenerationProgress(100);

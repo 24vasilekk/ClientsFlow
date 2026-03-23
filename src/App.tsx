@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import DashboardApp from "./DashboardApp";
+import SitesBuilderPage from "./sites/SitesBuilderPage";
 import WorkbenchApp from "./WorkbenchApp";
 
 type RoutePath = "/" | "/login" | "/dashboard" | "/pricing" | "/workbench" | "/sites" | `/s/${string}`;
@@ -207,6 +208,11 @@ type PublishedSiteData = {
     galleryUrls: string[];
     cabinetEnabled: boolean;
     telegramBot: string;
+    socialLinks?: {
+      telegram?: string;
+      whatsapp?: string;
+      instagram?: string;
+    };
   };
 };
 
@@ -922,24 +928,7 @@ function PricingPage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) 
 
 function SitesPage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
   return (
-    <div className="min-h-screen bg-[radial-gradient(70%_80%_at_10%_10%,rgba(56,189,248,0.18),transparent_60%),radial-gradient(50%_60%_at_90%_0%,rgba(59,130,246,0.2),transparent_60%),#020617]">
-      <div className="sticky top-0 z-40 border-b border-blue-900/50 bg-slate-950/90 backdrop-blur">
-        <div className="mx-auto flex max-w-[1240px] items-center justify-between gap-3 px-4 py-4 sm:px-6">
-          <button onClick={() => onNavigate("/")} className="text-lg font-extrabold tracking-tight text-white">
-            <BrandWordmark cClass="text-cyan-300" flowClass="text-white" />
-          </button>
-          <div className="flex items-center gap-2">
-            <button onClick={() => onNavigate("/")} className="rounded-full border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200">
-              Главная
-            </button>
-            <button onClick={() => onNavigate("/login")} className="rounded-full bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950">
-              Личный кабинет
-            </button>
-          </div>
-        </div>
-      </div>
-      <DashboardApp standaloneSites onNavigate={onNavigate} />
-    </div>
+    <SitesBuilderPage onNavigate={onNavigate as (path: string) => void} />
   );
 }
 
@@ -1005,6 +994,7 @@ function PublishedSitePage({ path, onNavigate }: { path: `/s/${string}`; onNavig
   const p = data.payload;
   const sections = p.sections || {};
   const openedProduct = p.products.find((item) => item.id === openedProductId) || null;
+  const socialLinks = p.socialLinks || {};
   const tabs: Array<{ id: "home" | "services" | "reviews" | "cabinet"; label: string }> = [
     { id: "home", label: "Дом" },
     { id: "services", label: "Услуги" },
@@ -1012,12 +1002,30 @@ function PublishedSitePage({ path, onNavigate }: { path: `/s/${string}`; onNavig
     { id: "cabinet", label: "Личный кабинет" }
   ];
   const visibleByTab: Record<typeof activeTab, string[]> = {
-    home: ["valueProps", "process", "gallery", "map"],
+    home: ["services", "process", "gallery", "map"],
     services: ["services"],
     reviews: ["testimonials", "faq"],
     cabinet: ["cabinet"]
   };
   const show = (key: string) => sections[key] !== false && visibleByTab[activeTab].includes(key);
+  const toHref = (value?: string) => {
+    const raw = (value || "").trim();
+    if (!raw) return "";
+    if (/^(https?:\/\/|tg:\/\/|mailto:|tel:)/i.test(raw)) return raw;
+    if (raw.startsWith("@")) return `https://t.me/${raw.slice(1)}`;
+    return `https://${raw}`;
+  };
+  const socialButtons = [
+    { key: "telegram", label: "TG", href: toHref(socialLinks.telegram) },
+    { key: "whatsapp", label: "WA", href: toHref(socialLinks.whatsapp) },
+    { key: "instagram", label: "IG", href: toHref(socialLinks.instagram) }
+  ] as const;
+  const tabIntro = {
+    home: { title: p.heroTitle, subtitle: p.heroSubtitle },
+    services: { title: "Услуги и направления", subtitle: "Выберите подходящую услугу, формат работы и удобный способ записи." },
+    reviews: { title: "Отзывы и ответы на вопросы", subtitle: "Реальные впечатления клиентов и ключевая информация перед обращением." },
+    cabinet: { title: "Личный кабинет клиента", subtitle: "Доступ к записям, статусам и персональной коммуникации." }
+  } as const;
 
   return (
     <div className="min-h-screen text-slate-900" style={{ backgroundColor: p.baseColor || "#f8fafc" }}>
@@ -1031,35 +1039,59 @@ function PublishedSitePage({ path, onNavigate }: { path: `/s/${string}`; onNavig
           </div>
           <div className="flex items-center gap-2 text-xs">
             <span className="rounded-full border border-slate-300 bg-white px-2.5 py-1">{p.city || "Город"}</span>
-            {["TG", "WA", "IG"].map((icon) => (
-              <span key={icon} className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-300 bg-white font-bold text-slate-600">{icon}</span>
-            ))}
+            {socialButtons.map((item) =>
+              item.href ? (
+                <a
+                  key={item.key}
+                  href={item.href}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-300 bg-white font-bold text-slate-700 transition hover:border-slate-500"
+                >
+                  {item.label}
+                </a>
+              ) : (
+                <span
+                  key={item.key}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-slate-100 font-bold text-slate-400"
+                >
+                  {item.label}
+                </span>
+              )
+            )}
           </div>
         </div>
       </div>
 
       <div className="mx-auto max-w-[1100px] px-4 pb-24 pt-5">
-        <div className="rounded-2xl border border-slate-200 px-4 py-6" style={{ backgroundColor: p.baseColor || "#f8fafc" }}>
-          <h1 className="text-3xl font-extrabold tracking-tight">{p.heroTitle}</h1>
-          <p className="mt-2 max-w-3xl text-sm text-slate-700">{p.heroSubtitle}</p>
-          <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
-            <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500">About</p>
-            <p className="mt-1 text-sm leading-6 text-slate-700">{p.about}</p>
+        {activeTab === "home" ? (
+          <div className="rounded-2xl border border-slate-200 px-4 py-6" style={{ backgroundColor: p.baseColor || "#f8fafc" }}>
+            <h1 className="text-3xl font-extrabold tracking-tight">{tabIntro.home.title}</h1>
+            <p className="mt-2 max-w-3xl text-sm text-slate-700">{tabIntro.home.subtitle}</p>
+            <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
+              <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500">About</p>
+              <p className="mt-1 text-sm leading-6 text-slate-700">{p.about}</p>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button className="rounded-full px-4 py-2 text-xs font-semibold text-white" style={{ backgroundColor: p.accentColor }}>{p.primaryCta}</button>
+              <button className="rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700">{p.secondaryCta}</button>
+              {p.cabinetEnabled ? <button className="rounded-full px-4 py-2 text-xs font-semibold text-white" style={{ backgroundColor: p.accentColor }}>Войти через Telegram</button> : null}
+            </div>
+            <div className="mt-4 grid gap-2 sm:grid-cols-3">
+              {p.trustStats?.slice(0, 3).map((item) => (
+                <div key={item.label} className="rounded-xl border border-slate-200 bg-white p-2.5">
+                  <p className="text-[11px] text-slate-500">{item.label}</p>
+                  <p className="text-sm font-bold text-slate-900">{item.value}</p>
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button className="rounded-full px-4 py-2 text-xs font-semibold text-white" style={{ backgroundColor: p.accentColor }}>{p.primaryCta}</button>
-            <button className="rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700">{p.secondaryCta}</button>
-            {p.cabinetEnabled ? <button className="rounded-full px-4 py-2 text-xs font-semibold text-white" style={{ backgroundColor: p.accentColor }}>Войти через Telegram</button> : null}
+        ) : (
+          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-6">
+            <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">{tabIntro[activeTab].title}</h1>
+            <p className="mt-2 max-w-3xl text-sm text-slate-600">{tabIntro[activeTab].subtitle}</p>
           </div>
-          <div className="mt-4 grid gap-2 sm:grid-cols-3">
-            {p.trustStats?.slice(0, 3).map((item) => (
-              <div key={item.label} className="rounded-xl border border-slate-200 bg-white p-2.5">
-                <p className="text-[11px] text-slate-500">{item.label}</p>
-                <p className="text-sm font-bold text-slate-900">{item.value}</p>
-              </div>
-            ))}
-          </div>
-        </div>
+        )}
 
         {openedProduct ? (
           <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -1077,15 +1109,6 @@ function PublishedSitePage({ path, onNavigate }: { path: `/s/${string}`; onNavig
         ) : null}
 
         <div className="mt-4 space-y-3">
-          {show("valueProps") ? (
-            <div className="rounded-xl border border-slate-200 bg-white p-3">
-              <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Преимущества</p>
-              <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                {p.valueProps?.slice(0, 3).map((item) => <div key={item} className="aspect-square rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm font-semibold text-slate-800">{item}</div>)}
-              </div>
-            </div>
-          ) : null}
-
           {show("services") ? (
             <div className="rounded-xl border border-slate-200 bg-white p-3">
               <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Услуги и товары</p>

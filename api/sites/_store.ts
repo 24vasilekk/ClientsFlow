@@ -21,6 +21,11 @@ export type PublishedSitePayload = {
   galleryUrls: string[];
   cabinetEnabled: boolean;
   telegramBot: string;
+  socialLinks?: {
+    telegram?: string;
+    whatsapp?: string;
+    instagram?: string;
+  };
 };
 
 export type PublishedSiteDoc = {
@@ -105,4 +110,3 @@ export async function getPublishedSite(slug: string): Promise<PublishedSiteDoc |
     return null;
   }
 }
-
