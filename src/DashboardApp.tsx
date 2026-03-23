@@ -1548,6 +1548,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
   const [sitesActionMessage, setSitesActionMessage] = useState<string | null>(null);
   const [sitesPublishedUrl, setSitesPublishedUrl] = useState<string>("");
   const [sitesPublishing, setSitesPublishing] = useState(false);
+  const [sitesPublishRedirectScreen, setSitesPublishRedirectScreen] = useState(false);
   const [sitesPayment, setSitesPayment] = useState<{ paid: boolean; paidAt: string | null }>(() => loadSitesBuilderPayment());
   const [sitesPaymentModalOpen, setSitesPaymentModalOpen] = useState(false);
   const [sitesPaymentState, setSitesPaymentState] = useState<"idle" | "processing" | "success">("idle");
@@ -4992,6 +4993,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                         onClick={async () => {
                           if (sitesPublishing) return;
                           setSitesPublishing(true);
+                          setSitesPublishRedirectScreen(true);
                           setSitesActionMessage("Публикуем сайт на домене...");
                           try {
                             const response = await fetch("/api/sites/publish", {
@@ -5029,10 +5031,13 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                             setSitesFlowStatus("published");
                             setSitesGenerationProgress(100);
                             setSitesPublishedUrl(data.url);
-                            setSitesActionMessage(`Сайт опубликован: ${data.url}`);
-                            window.open(data.url, "_blank", "noopener,noreferrer");
+                            setSitesActionMessage("Сайт опубликован. Перенаправляем...");
+                            window.setTimeout(() => {
+                              window.location.assign(data.url as string);
+                            }, 800);
                           } catch (error: any) {
                             setSitesActionMessage(error?.message || "Ошибка публикации сайта");
+                            setSitesPublishRedirectScreen(false);
                           } finally {
                             setSitesPublishing(false);
                           }
@@ -5164,6 +5169,18 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                           : "Оплатить 3 500 ₽"}
                       </button>
                     </div>
+                  </div>
+                </div>
+              ) : null}
+              {sitesPublishRedirectScreen ? (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/75 px-4 backdrop-blur-sm">
+                  <div className="w-full max-w-md rounded-3xl border border-cyan-200/50 bg-slate-900/95 p-6 text-center shadow-2xl">
+                    <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-cyan-200/40 border-t-cyan-300" />
+                    <p className="mt-4 text-xs font-bold uppercase tracking-[0.12em] text-cyan-300">CFlow Sites</p>
+                    <h3 className="mt-1 text-xl font-extrabold tracking-tight text-white">Публикуем ваш сайт</h3>
+                    <p className="mt-2 text-sm text-slate-300">
+                      Подготавливаем ссылку и переносим вас на готовую страницу.
+                    </p>
                   </div>
                 </div>
               ) : null}
