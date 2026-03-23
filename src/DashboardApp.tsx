@@ -114,10 +114,9 @@ type SitesTemplate = {
   suitableFor: string[];
   styleLabel: string;
   previewTheme: {
-    gradientFrom: string;
-    gradientTo: string;
-    accent: string;
+    accentColor: string;
     surface: string;
+    softSurface: string;
   };
   heroPattern: string;
 };
@@ -161,6 +160,7 @@ type SitesSectionKey =
   | "testimonials"
   | "packages"
   | "faq"
+  | "cabinet"
   | "contacts"
   | "map";
 
@@ -894,10 +894,9 @@ const sitesTemplates: SitesTemplate[] = [
     suitableFor: ["Салоны", "Клиники", "Локальные сервисы", "Консультанты"],
     styleLabel: "Светлый / деловой",
     previewTheme: {
-      gradientFrom: "from-cyan-100/70",
-      gradientTo: "to-slate-100",
-      accent: "bg-cyan-600",
-      surface: "bg-white"
+      accentColor: "#0891b2",
+      surface: "bg-white",
+      softSurface: "bg-slate-50"
     },
     heroPattern: "Акцент на конверсии и прозрачной записи"
   },
@@ -908,10 +907,9 @@ const sitesTemplates: SitesTemplate[] = [
     suitableFor: ["Барбершопы", "Автосервисы", "Ремонт", "Локальный сервис"],
     styleLabel: "Контрастный / операционный",
     previewTheme: {
-      gradientFrom: "from-slate-200",
-      gradientTo: "to-cyan-100/70",
-      accent: "bg-slate-900",
-      surface: "bg-slate-50"
+      accentColor: "#0f172a",
+      surface: "bg-slate-50",
+      softSurface: "bg-white"
     },
     heroPattern: "Фокус на скорости ответа и маршруте клиента"
   },
@@ -922,10 +920,9 @@ const sitesTemplates: SitesTemplate[] = [
     suitableFor: ["Клиники", "Стоматология", "Психология", "Wellness"],
     styleLabel: "Нейтральный / экспертный",
     previewTheme: {
-      gradientFrom: "from-blue-100/80",
-      gradientTo: "to-white",
-      accent: "bg-blue-700",
-      surface: "bg-white"
+      accentColor: "#1d4ed8",
+      surface: "bg-white",
+      softSurface: "bg-slate-50"
     },
     heroPattern: "Акцент на компетентности и безопасной коммуникации"
   },
@@ -936,10 +933,9 @@ const sitesTemplates: SitesTemplate[] = [
     suitableFor: ["Эксперты", "Консультанты", "Онлайн-услуги", "Авторские студии"],
     styleLabel: "Минималистичный / premium",
     previewTheme: {
-      gradientFrom: "from-violet-100/60",
-      gradientTo: "to-rose-100/60",
-      accent: "bg-violet-700",
-      surface: "bg-white"
+      accentColor: "#5b21b6",
+      surface: "bg-white",
+      softSurface: "bg-slate-50"
     },
     heroPattern: "Сильный личный бренд и точный оффер"
   }
@@ -989,6 +985,7 @@ const sitesSectionLibrary: SitesSectionConfig[] = [
   { key: "testimonials", title: "Отзывы", description: "Социальное доказательство и доверие." },
   { key: "packages", title: "Пакеты / цены", description: "Тарифные уровни или пакетные предложения." },
   { key: "faq", title: "FAQ", description: "Ответы на частые вопросы перед обращением." },
+  { key: "cabinet", title: "Личный кабинет", description: "Блок входа клиента в кабинет через Telegram." },
   { key: "contacts", title: "Контакты", description: "Город, каналы связи и кнопки действия." },
   { key: "map", title: "Карта", description: "Блок локации, если важен офлайн-визит." }
 ];
@@ -1004,6 +1001,7 @@ const defaultSitesSections: Record<SitesSectionKey, boolean> = {
   testimonials: true,
   packages: true,
   faq: true,
+  cabinet: true,
   contacts: true,
   map: false
 };
@@ -1096,6 +1094,7 @@ const TELEGRAM_PROFILES_KEY = "clientsflow_telegram_profiles_v1";
 const BUSINESS_BRIEF_KEY = "clientsflow_business_brief_v1";
 const BUSINESS_TUNING_KEY = "clientsflow_business_tuning_v1";
 const SITES_BUILDER_PREFS_KEY = "clientsflow_sites_builder_prefs_v1";
+const SITES_BUILDER_STYLE_KEY = "clientsflow_sites_builder_style_v1";
 const TELEGRAM_ONBOARDING_QUESTIONS = [
   "Чтобы настроить ответы под ваш бизнес, задам 4 коротких вопроса. Первый: в какой нише вы работаете?",
   "Отлично. Какая у вас ключевая услуга или предложение?",
@@ -1173,6 +1172,63 @@ function saveSitesBuilderPrefs(sections: Record<SitesSectionKey, boolean>, order
       order
     })
   );
+}
+
+function loadSitesBuilderStyle(): {
+  accentColor: string;
+  baseColor: string;
+  cabinetEnabled: boolean;
+  telegramBot: string;
+} {
+  if (typeof window === "undefined") {
+    return {
+      accentColor: "#0f172a",
+      baseColor: "#f8fafc",
+      cabinetEnabled: true,
+      telegramBot: "@clientsflow_support_bot"
+    };
+  }
+  try {
+    const raw = localStorage.getItem(SITES_BUILDER_STYLE_KEY);
+    if (!raw) {
+      return {
+        accentColor: "#0f172a",
+        baseColor: "#f8fafc",
+        cabinetEnabled: true,
+        telegramBot: "@clientsflow_support_bot"
+      };
+    }
+    const parsed = JSON.parse(raw) as Partial<{
+      accentColor: string;
+      baseColor: string;
+      cabinetEnabled: boolean;
+      telegramBot: string;
+    }>;
+    const isHex = (value: string | undefined) => Boolean(value && /^#[0-9a-fA-F]{6}$/.test(value));
+    return {
+      accentColor: isHex(parsed.accentColor) ? (parsed.accentColor as string) : "#0f172a",
+      baseColor: isHex(parsed.baseColor) ? (parsed.baseColor as string) : "#f8fafc",
+      cabinetEnabled: typeof parsed.cabinetEnabled === "boolean" ? parsed.cabinetEnabled : true,
+      telegramBot: typeof parsed.telegramBot === "string" && parsed.telegramBot.trim() ? parsed.telegramBot.trim() : "@clientsflow_support_bot"
+    };
+  } catch {
+    return {
+      accentColor: "#0f172a",
+      baseColor: "#f8fafc",
+      cabinetEnabled: true,
+      telegramBot: "@clientsflow_support_bot"
+    };
+  }
+}
+
+function saveSitesBuilderStyle(style: {
+  accentColor: string;
+  baseColor: string;
+  cabinetEnabled: boolean;
+  telegramBot: string;
+}): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(SITES_BUILDER_STYLE_KEY, JSON.stringify(style));
 }
 
 function loadServiceConnection(): ServiceConnection {
@@ -1400,6 +1456,16 @@ function formatRub(value: number): string {
   return `${new Intl.NumberFormat("ru-RU").format(value)} руб.`;
 }
 
+function hexToRgba(hex: string, alpha: number): string {
+  const safeAlpha = Math.max(0, Math.min(1, alpha));
+  const normalized = hex.replace("#", "");
+  if (!/^[0-9a-fA-F]{6}$/.test(normalized)) return `rgba(15,23,42,${safeAlpha})`;
+  const r = Number.parseInt(normalized.slice(0, 2), 16);
+  const g = Number.parseInt(normalized.slice(2, 4), 16);
+  const b = Number.parseInt(normalized.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${safeAlpha})`;
+}
+
 function buildLinePoints(values: number[]): string {
   const max = Math.max(...values);
   const min = Math.min(...values);
@@ -1415,6 +1481,7 @@ function buildLinePoints(values: number[]): string {
 }
 
 export default function App({ standaloneSites = false, onNavigate }: DashboardAppProps) {
+  const initialSitesStyle = useMemo(() => loadSitesBuilderStyle(), []);
   const serviceImportRef = useRef<HTMLInputElement | null>(null);
   const [activeNav, setActiveNav] = useState<NavItem>(standaloneSites ? "CFlow Sites" : "Обзор");
   const [statusFilter, setStatusFilter] = useState<LeadStatus | "все">("все");
@@ -1444,6 +1511,10 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
   const [sitesSections, setSitesSections] = useState<Record<SitesSectionKey, boolean>>(() => loadSitesSections());
   const [sitesSectionOrder, setSitesSectionOrder] = useState<SitesSectionKey[]>(() => loadSitesSectionOrder());
   const [draggedSitesSection, setDraggedSitesSection] = useState<SitesSectionKey | null>(null);
+  const [sitesAccentColor, setSitesAccentColor] = useState<string>(initialSitesStyle.accentColor);
+  const [sitesBaseColor, setSitesBaseColor] = useState<string>(initialSitesStyle.baseColor);
+  const [sitesCabinetEnabled, setSitesCabinetEnabled] = useState<boolean>(initialSitesStyle.cabinetEnabled);
+  const [sitesTelegramBot, setSitesTelegramBot] = useState<string>(initialSitesStyle.telegramBot);
   const sitesLogoInputRef = useRef<HTMLInputElement | null>(null);
   const sitesGalleryInputRef = useRef<HTMLInputElement | null>(null);
   const [mobileInboxView, setMobileInboxView] = useState<"list" | "detail">("list");
@@ -1782,6 +1853,10 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
   const orderedSitesSectionLibrary = sitesSectionOrder
     .map((key) => sitesSectionLibrary.find((item) => item.key === key))
     .filter((item): item is SitesSectionConfig => Boolean(item));
+  const sitesAccentPreview = sitesAccentColor || selectedSitesTemplate.previewTheme.accentColor;
+  const sitesHeroBackground = hexToRgba(sitesBaseColor, 0.9);
+  const sitesSoftBackground = hexToRgba(sitesAccentPreview, 0.08);
+  const sitesAccentBorder = hexToRgba(sitesAccentPreview, 0.28);
   const generatedSitesHeadline = sitesGeneratedContent.heroTitle;
   const generatedSitesSubheadline = sitesGeneratedContent.heroSubtitle;
   const chartTooltipStyle = {
@@ -2163,6 +2238,25 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
       );
     }
 
+    if (key === "cabinet") {
+      if (!sitesCabinetEnabled) return null;
+      return (
+        <div className="rounded-xl border border-slate-200 bg-white p-3">
+          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Личный кабинет</p>
+          <div className="mt-2 rounded-lg border p-3" style={{ borderColor: sitesAccentBorder, backgroundColor: sitesSoftBackground }}>
+            <p className="text-xs font-semibold text-slate-900">Доступ к записям, статусам и уведомлениям</p>
+            <p className="mt-1 text-xs text-slate-600">Вход через Telegram в один клик.</p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <button className="rounded-full px-3 py-1.5 text-[11px] font-semibold text-white" style={{ backgroundColor: sitesAccentPreview }}>
+                Войти через Telegram
+              </button>
+              <span className="text-[11px] text-slate-600">{sitesTelegramBot}</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     if (key === "contacts") {
       return (
         <div className="rounded-xl border border-slate-200 bg-white p-3">
@@ -2186,10 +2280,10 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
       return (
         <div className="rounded-xl border border-slate-200 bg-white p-3">
           <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Map</p>
-          <div className="mt-2 rounded-lg border border-slate-200 bg-gradient-to-br from-slate-100 to-cyan-50 p-3">
+          <div className="mt-2 rounded-lg border border-slate-200 p-3" style={{ backgroundColor: sitesHeroBackground }}>
             <div className="grid grid-cols-5 gap-1">
               {Array.from({ length: 25 }).map((_, index) => (
-                <div key={index} className="h-5 rounded bg-white/70" />
+                <div key={index} className="h-5 rounded border border-slate-200 bg-white" />
               ))}
             </div>
             <p className="mt-2 text-xs text-slate-700">Локация: {sitesAnswers.city || "уточняется"}</p>
@@ -2383,6 +2477,9 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
       "Создай контент для премиального production-looking template website для малого/среднего сервисного бизнеса.",
       "Сайт должен адаптироваться под ниши: beauty, auto service, clinic, dental, local agency, consulting, repair, cleaning, real estate и схожие.",
       "Это единый универсальный шаблон, меняется только стиль и наполнение.",
+      "На шаблонном сайте не использовать градиенты: только чистые однотонные поверхности и аккуратные бордеры.",
+      "В структуре предусмотреть навигацию: Дом, Услуги, Личный кабинет.",
+      "Личный кабинет на сайте должен иметь вход через Telegram.",
       "Верни строго JSON без markdown.",
       "Тон: премиально, спокойно, профессионально, без хайпа.",
       "Избегай слов: AI, ИИ, нейросеть, революция, магия.",
@@ -2394,6 +2491,8 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
         .filter((item) => sitesSections[item.key])
         .map((item) => item.title)
         .join(", ") || "базовая структура"}.`,
+      `Цвет акцента: ${sitesAccentPreview}. Базовый фон: ${sitesBaseColor}.`,
+      `Личный кабинет на сайте: ${sitesCabinetEnabled ? "включен" : "выключен"}. Telegram: ${sitesTelegramBot}.`,
       `Данные бизнеса: ${JSON.stringify(sitesAnswers, null, 2)}`
     ].join("\n");
 
@@ -2472,6 +2571,15 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
   useEffect(() => {
     saveSitesBuilderPrefs(sitesSections, sitesSectionOrder);
   }, [sitesSections, sitesSectionOrder]);
+
+  useEffect(() => {
+    saveSitesBuilderStyle({
+      accentColor: sitesAccentColor,
+      baseColor: sitesBaseColor,
+      cabinetEnabled: sitesCabinetEnabled,
+      telegramBot: sitesTelegramBot
+    });
+  }, [sitesAccentColor, sitesBaseColor, sitesCabinetEnabled, sitesTelegramBot]);
 
   useEffect(() => {
     if (sitesFlowStatus !== "idle") return;
@@ -4163,7 +4271,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                               selected ? "border-slate-900 bg-slate-900 text-white shadow-sm" : "border-slate-200 bg-slate-50 hover:bg-slate-100"
                             }`}
                           >
-                            <div className={`h-24 rounded-xl ${selected ? "bg-white/10" : "bg-gradient-to-br from-cyan-100 to-slate-100"} p-3`}>
+                            <div className={`h-24 rounded-xl ${selected ? "bg-white/10" : template.previewTheme.softSurface} p-3`}>
                               <div className={`h-2.5 w-20 rounded-full ${selected ? "bg-white/40" : "bg-slate-300"}`} />
                               <div className={`mt-2 h-2 w-28 rounded-full ${selected ? "bg-white/30" : "bg-slate-300/80"}`} />
                               <div className={`mt-4 h-12 rounded-lg ${selected ? "bg-white/20" : "bg-white"} border ${selected ? "border-white/20" : "border-slate-200"}`} />
@@ -4229,7 +4337,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                     <p className="mt-2 text-sm text-slate-600">
                       На основе этих ответов сервис перепишет тексты сайта под ваш бизнес и выбранный шаблон.
                     </p>
-                    <div className="mt-4 rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-cyan-50/70 p-4">
+                    <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
                           <p className="text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Конструктор секций</p>
@@ -4282,6 +4390,78 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                             </button>
                           );
                         })}
+                      </div>
+                    </div>
+                    <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <p className="text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Стиль сайта</p>
+                      <h4 className="mt-1 text-base font-bold tracking-tight text-slate-900">Цвета и кабинет на сайте</h4>
+                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                        <label className="rounded-xl border border-slate-200 bg-white p-3">
+                          <span className="block text-xs font-semibold text-slate-600">Основной цвет кнопок</span>
+                          <div className="mt-2 flex items-center gap-2">
+                            <input
+                              type="color"
+                              value={sitesAccentColor}
+                              onChange={(event) => setSitesAccentColor(event.target.value)}
+                              className="h-9 w-12 rounded border border-slate-200 bg-white p-0.5"
+                            />
+                            <input
+                              value={sitesAccentColor}
+                              onChange={(event) => setSitesAccentColor(event.target.value)}
+                              className="h-9 flex-1 rounded-lg border border-slate-300 px-2 text-xs font-semibold text-slate-700"
+                            />
+                          </div>
+                        </label>
+                        <label className="rounded-xl border border-slate-200 bg-white p-3">
+                          <span className="block text-xs font-semibold text-slate-600">Цвет фона сайта</span>
+                          <div className="mt-2 flex items-center gap-2">
+                            <input
+                              type="color"
+                              value={sitesBaseColor}
+                              onChange={(event) => setSitesBaseColor(event.target.value)}
+                              className="h-9 w-12 rounded border border-slate-200 bg-white p-0.5"
+                            />
+                            <input
+                              value={sitesBaseColor}
+                              onChange={(event) => setSitesBaseColor(event.target.value)}
+                              className="h-9 flex-1 rounded-lg border border-slate-300 px-2 text-xs font-semibold text-slate-700"
+                            />
+                          </div>
+                        </label>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {["#0f172a", "#0369a1", "#1d4ed8", "#166534", "#7c2d12"].map((preset) => (
+                          <button
+                            key={preset}
+                            onClick={() => setSitesAccentColor(preset)}
+                            className="h-8 w-8 rounded-full border border-white shadow"
+                            style={{ backgroundColor: preset }}
+                            aria-label={`Цвет ${preset}`}
+                          />
+                        ))}
+                      </div>
+                      <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900">Включить на сайте кнопку «Личный кабинет»</p>
+                            <p className="text-xs text-slate-600">Переход с сайта в кабинет через Telegram-авторизацию.</p>
+                          </div>
+                          <button
+                            onClick={() => setSitesCabinetEnabled((prev) => !prev)}
+                            className={`rounded-full px-3 py-1 text-xs font-bold ${sitesCabinetEnabled ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}
+                          >
+                            {sitesCabinetEnabled ? "Включено" : "Выключено"}
+                          </button>
+                        </div>
+                        <label className="mt-2 block">
+                          <span className="text-xs font-semibold text-slate-600">Telegram бот для входа</span>
+                          <input
+                            value={sitesTelegramBot}
+                            onChange={(event) => setSitesTelegramBot(event.target.value)}
+                            placeholder="@your_business_bot"
+                            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700"
+                          />
+                        </label>
                       </div>
                     </div>
                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -4395,6 +4575,10 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                           setSitesSectionOrder(defaultSitesSectionOrder);
                           setSitesGalleryUrls([]);
                           setSitesLogoUrl("");
+                          setSitesAccentColor("#0f172a");
+                          setSitesBaseColor("#f8fafc");
+                          setSitesCabinetEnabled(true);
+                          setSitesTelegramBot("@clientsflow_support_bot");
                           const fallback = buildFallbackSiteContent(selectedSitesTemplate, defaultSitesAnswers);
                           setSitesGeneratedContent(fallback);
                           setSitesFlowStatus("idle");
@@ -4420,10 +4604,10 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                       </span>
                     </div>
 
-                    <div className={`mt-4 overflow-hidden rounded-2xl border border-slate-200 ${selectedSitesTemplate.previewTheme.surface}`}>
+                    <div className={`mt-4 overflow-hidden rounded-2xl border border-slate-200 ${selectedSitesTemplate.previewTheme.surface}`} style={{ backgroundColor: sitesBaseColor }}>
                       <div className="h-[760px] overflow-y-auto">
-                        <div className="border-b border-slate-200 bg-white/95 px-4 py-3">
-                          <div className="flex items-center justify-between gap-3">
+                        <div className="border-b border-slate-200 bg-white px-4 py-3">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
                             <div className="flex items-center gap-2">
                               <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-white">
                                 {sitesLogoUrl ? (
@@ -4437,23 +4621,37 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                                 <p className="text-sm font-bold text-slate-900">{sitesAnswers.businessName}</p>
                               </div>
                             </div>
-                            <button className={`rounded-full ${selectedSitesTemplate.previewTheme.accent} px-3 py-1.5 text-[11px] font-semibold text-white`}>
-                              {sitesGeneratedContent.primaryCta}
-                            </button>
+                            <div className="flex flex-wrap items-center gap-2">
+                              {["Дом", "Услуги", "Отзывы"].map((item) => (
+                                <button key={item} className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700">
+                                  {item}
+                                </button>
+                              ))}
+                              {sitesCabinetEnabled ? (
+                                <button className="rounded-full border px-3 py-1.5 text-[11px] font-semibold text-white" style={{ backgroundColor: sitesAccentPreview, borderColor: sitesAccentPreview }}>
+                                  Личный кабинет
+                                </button>
+                              ) : null}
+                            </div>
                           </div>
                         </div>
 
-                        <div className={`bg-gradient-to-r ${selectedSitesTemplate.previewTheme.gradientFrom} ${selectedSitesTemplate.previewTheme.gradientTo} px-4 py-6`}>
+                        <div className="px-4 py-6" style={{ backgroundColor: sitesHeroBackground }}>
                           <p className="text-xs font-semibold text-slate-700">{selectedSitesTemplate.heroPattern}</p>
                           <h4 className="mt-2 text-2xl font-extrabold tracking-tight text-slate-900">{generatedSitesHeadline}</h4>
                           <p className="mt-2 max-w-xl text-sm text-slate-700">{generatedSitesSubheadline}</p>
                           <div className="mt-4 flex flex-wrap gap-2">
-                            <button className={`rounded-full ${selectedSitesTemplate.previewTheme.accent} px-4 py-2 text-xs font-semibold text-white`}>
+                            <button className="rounded-full px-4 py-2 text-xs font-semibold text-white" style={{ backgroundColor: sitesAccentPreview }}>
                               {sitesGeneratedContent.primaryCta}
                             </button>
                             <button className="rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700">
                               {sitesGeneratedContent.secondaryCta}
                             </button>
+                            {sitesCabinetEnabled ? (
+                              <button className="rounded-full border px-4 py-2 text-xs font-semibold text-white" style={{ backgroundColor: sitesAccentPreview, borderColor: sitesAccentPreview }}>
+                                Войти через Telegram
+                              </button>
+                            ) : null}
                           </div>
                           <div className="mt-4 grid gap-2 sm:grid-cols-3">
                             {sitesGeneratedContent.trustStats.map((item) => (
