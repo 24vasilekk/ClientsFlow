@@ -1112,6 +1112,7 @@ const BUSINESS_BRIEF_KEY = "clientsflow_business_brief_v1";
 const BUSINESS_TUNING_KEY = "clientsflow_business_tuning_v1";
 const SITES_BUILDER_PREFS_KEY = "clientsflow_sites_builder_prefs_v1";
 const SITES_BUILDER_STYLE_KEY = "clientsflow_sites_builder_style_v1";
+const SITES_BUILDER_PAYMENT_KEY = "clientsflow_sites_builder_payment_v1";
 const TELEGRAM_ONBOARDING_QUESTIONS = [
   "Чтобы настроить ответы под ваш бизнес, задам 4 коротких вопроса. Первый: в какой нише вы работаете?",
   "Отлично. Какая у вас ключевая услуга или предложение?",
@@ -1246,6 +1247,26 @@ function saveSitesBuilderStyle(style: {
 }): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(SITES_BUILDER_STYLE_KEY, JSON.stringify(style));
+}
+
+function loadSitesBuilderPayment(): { paid: boolean; paidAt: string | null } {
+  if (typeof window === "undefined") return { paid: false, paidAt: null };
+  try {
+    const raw = localStorage.getItem(SITES_BUILDER_PAYMENT_KEY);
+    if (!raw) return { paid: false, paidAt: null };
+    const parsed = JSON.parse(raw) as Partial<{ paid: boolean; paidAt: string | null }>;
+    return {
+      paid: parsed.paid === true,
+      paidAt: typeof parsed.paidAt === "string" ? parsed.paidAt : null
+    };
+  } catch {
+    return { paid: false, paidAt: null };
+  }
+}
+
+function saveSitesBuilderPayment(state: { paid: boolean; paidAt: string | null }): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(SITES_BUILDER_PAYMENT_KEY, JSON.stringify(state));
 }
 
 function loadServiceConnection(): ServiceConnection {
@@ -1526,6 +1547,13 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
   const [sitesGenerationProgress, setSitesGenerationProgress] = useState(0);
   const [sitesActionMessage, setSitesActionMessage] = useState<string | null>(null);
   const [sitesPublishedUrl, setSitesPublishedUrl] = useState<string>("");
+  const [sitesPayment, setSitesPayment] = useState<{ paid: boolean; paidAt: string | null }>(() => loadSitesBuilderPayment());
+  const [sitesPaymentModalOpen, setSitesPaymentModalOpen] = useState(false);
+  const [sitesPaymentState, setSitesPaymentState] = useState<"idle" | "processing" | "success">("idle");
+  const [sitesPaymentName, setSitesPaymentName] = useState("Иван Петров");
+  const [sitesPaymentCard, setSitesPaymentCard] = useState("4242 4242 4242 4242");
+  const [sitesPaymentExpiry, setSitesPaymentExpiry] = useState("12/29");
+  const [sitesPaymentCvv, setSitesPaymentCvv] = useState("123");
   const [sitesLastGenerationMode, setSitesLastGenerationMode] = useState<"ai" | "fallback" | null>(null);
   const [sitesLogoUrl, setSitesLogoUrl] = useState<string>("");
   const [sitesGalleryUrls, setSitesGalleryUrls] = useState<string[]>([]);
@@ -2151,6 +2179,20 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
     setSitesProductUploadIndex(null);
   }
 
+  function startSitesPayment(): void {
+    if (!sitesPaymentName.trim() || !sitesPaymentCard.trim() || !sitesPaymentExpiry.trim() || !sitesPaymentCvv.trim()) {
+      setSitesActionMessage("Заполните платежные поля, чтобы продолжить.");
+      return;
+    }
+    setSitesPaymentState("processing");
+    window.setTimeout(() => {
+      setSitesPaymentState("success");
+      setSitesPayment({ paid: true, paidAt: new Date().toISOString() });
+      setSitesActionMessage("Оплата 3 500 ₽ успешно подтверждена. Теперь можно публиковать сайт.");
+      window.setTimeout(() => setSitesPaymentModalOpen(false), 700);
+    }, 1200);
+  }
+
   function reorderSitesSections(sourceKey: SitesSectionKey, targetKey: SitesSectionKey): void {
     if (sourceKey === targetKey) return;
     setSitesSectionOrder((prev) => {
@@ -2622,6 +2664,10 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
       telegramBot: sitesTelegramBot
     });
   }, [sitesAccentColor, sitesBaseColor, sitesCabinetEnabled, sitesTelegramBot]);
+
+  useEffect(() => {
+    saveSitesBuilderPayment(sitesPayment);
+  }, [sitesPayment]);
 
   useEffect(() => {
     if (sitesFlowStatus !== "idle") return;
@@ -4265,6 +4311,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                 )}
               </div>
             ) : activeNav === "CFlow Sites" ? (
+              <>
               <div className="space-y-4">
                 {!hasFeature("sitesBuilder") ? (
                   <section className="rounded-3xl border border-cyan-200 bg-cyan-50 p-6 shadow-sm">
@@ -4292,17 +4339,26 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                         Sites выводит бизнес онлайн, а CFlow берет входящие обращения и доводит до записи.
                       </p>
                     </div>
-                    <div className="rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3">
+                    <button
+                      onClick={() => {
+                        setSitesPaymentModalOpen(true);
+                        setSitesPaymentState("idle");
+                      }}
+                      className="rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-left transition hover:border-cyan-400"
+                    >
                       <p className="text-xs font-bold uppercase tracking-[0.12em] text-cyan-700">Фиксированная стоимость</p>
                       <p className="mt-1 text-2xl font-extrabold tracking-tight text-slate-900">3 500 ₽</p>
                       <p className="text-xs text-slate-600">за 1 сайт</p>
+                      <p className={`mt-1 text-xs font-semibold ${sitesPayment.paid ? "text-emerald-700" : "text-amber-700"}`}>
+                        {sitesPayment.paid ? "Оплачено" : "Нажмите, чтобы оплатить на этой странице"}
+                      </p>
                       <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 py-2">
                         <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-emerald-700">Бонус при оплате</p>
                         <p className="mt-1 text-xs font-semibold text-emerald-900">
                           Бесплатная настройка и привязка к Telegram-боту через менеджера.
                         </p>
                       </div>
-                    </div>
+                    </button>
                   </div>
                 </section>
 
@@ -4920,10 +4976,26 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                     </div>
 
                     <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                      {!sitesPayment.paid ? (
+                        <button
+                          onClick={() => {
+                            setSitesPaymentModalOpen(true);
+                            setSitesPaymentState("idle");
+                          }}
+                          className="w-full rounded-xl border border-cyan-300 bg-cyan-50 px-4 py-2.5 text-sm font-semibold text-cyan-900 transition hover:border-cyan-500 sm:w-auto"
+                        >
+                          Оплатить 3 500 ₽
+                        </button>
+                      ) : null}
                       <button
                         onClick={async () => {
                           if (!sitesLogoUrl) {
                             setSitesActionMessage("Публикация невозможна без логотипа. Загрузите логотип в брифе.");
+                            return;
+                          }
+                          if (!sitesPayment.paid) {
+                            setSitesActionMessage("Сначала оплатите 3 500 ₽ в карточке стоимости, затем публикация станет доступна.");
+                            setSitesPaymentModalOpen(true);
                             return;
                           }
                           setSitesActionMessage("Публикуем сайт на домене...");
@@ -4969,7 +5041,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                             setSitesActionMessage(error?.message || "Ошибка публикации сайта");
                           }
                         }}
-                        disabled={!sitesLogoUrl || (sitesFlowStatus !== "ready" && sitesFlowStatus !== "published")}
+                        disabled={!sitesLogoUrl || !sitesPayment.paid || (sitesFlowStatus !== "ready" && sitesFlowStatus !== "published")}
                         className="w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                       >
                         Опубликовать и передать менеджеру
@@ -4984,6 +5056,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                     <p className="mt-2 text-xs font-semibold text-emerald-700">
                       При оплате сайта за 3 500 ₽ менеджер бесплатно подключит и настроит привязку к Telegram-боту.
                     </p>
+                    {!sitesPayment.paid ? <p className="mt-1 text-xs font-semibold text-amber-700">Публикация откроется сразу после оплаты.</p> : null}
                     {sitesPublishedUrl ? (
                       <a href={sitesPublishedUrl} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs font-semibold text-cyan-700 underline">
                         Открыть опубликованный сайт
@@ -5005,6 +5078,100 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                   </>
                 )}
               </div>
+              {sitesPaymentModalOpen ? (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4">
+                  <div className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-5 shadow-2xl">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Оплата CFlow Sites</p>
+                        <h3 className="mt-1 text-xl font-extrabold tracking-tight text-slate-900">3 500 ₽ за 1 сайт</h3>
+                        <p className="mt-1 text-sm text-slate-600">Оплата открывает публикацию и передачу проекта менеджеру.</p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          if (sitesPaymentState === "processing") return;
+                          setSitesPaymentModalOpen(false);
+                        }}
+                        className="rounded-lg border border-slate-200 px-2.5 py-1 text-sm font-semibold text-slate-500 hover:border-slate-300"
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
+                      <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-emerald-700">Бонус при оплате</p>
+                      <p className="mt-1 text-sm font-semibold text-emerald-900">
+                        Бесплатная настройка и привязка к Telegram-боту через менеджера.
+                      </p>
+                    </div>
+
+                    <div className="mt-4 grid gap-3">
+                      <label className="text-sm font-semibold text-slate-700">
+                        Имя владельца карты
+                        <input
+                          value={sitesPaymentName}
+                          onChange={(event) => setSitesPaymentName(event.target.value)}
+                          className="mt-1 h-10 w-full rounded-xl border border-slate-300 px-3 text-sm text-slate-900 outline-none transition focus:border-cyan-500"
+                          placeholder="Иван Петров"
+                        />
+                      </label>
+                      <label className="text-sm font-semibold text-slate-700">
+                        Номер карты
+                        <input
+                          value={sitesPaymentCard}
+                          onChange={(event) => setSitesPaymentCard(event.target.value)}
+                          className="mt-1 h-10 w-full rounded-xl border border-slate-300 px-3 text-sm text-slate-900 outline-none transition focus:border-cyan-500"
+                          placeholder="4242 4242 4242 4242"
+                        />
+                      </label>
+                      <div className="grid grid-cols-2 gap-3">
+                        <label className="text-sm font-semibold text-slate-700">
+                          Срок
+                          <input
+                            value={sitesPaymentExpiry}
+                            onChange={(event) => setSitesPaymentExpiry(event.target.value)}
+                            className="mt-1 h-10 w-full rounded-xl border border-slate-300 px-3 text-sm text-slate-900 outline-none transition focus:border-cyan-500"
+                            placeholder="12/29"
+                          />
+                        </label>
+                        <label className="text-sm font-semibold text-slate-700">
+                          CVV
+                          <input
+                            value={sitesPaymentCvv}
+                            onChange={(event) => setSitesPaymentCvv(event.target.value)}
+                            className="mt-1 h-10 w-full rounded-xl border border-slate-300 px-3 text-sm text-slate-900 outline-none transition focus:border-cyan-500"
+                            placeholder="123"
+                          />
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                      <button
+                        onClick={() => {
+                          if (sitesPaymentState === "processing") return;
+                          setSitesPaymentModalOpen(false);
+                        }}
+                        className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-500"
+                      >
+                        Отмена
+                      </button>
+                      <button
+                        onClick={startSitesPayment}
+                        disabled={sitesPaymentState === "processing" || sitesPaymentState === "success"}
+                        className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {sitesPaymentState === "processing"
+                          ? "Обрабатываем..."
+                          : sitesPaymentState === "success"
+                          ? "Оплата прошла успешно"
+                          : "Оплатить 3 500 ₽"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+              </>
             ) : activeNav === "Потерянные" ? (
               <div className="space-y-4">
                 {hasFeature("lostRecovery") ? (
