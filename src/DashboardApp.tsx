@@ -149,16 +149,22 @@ type GeneratedSiteContent = {
   contactLine: string;
 };
 
+type SitesProduct = {
+  id: string;
+  title: string;
+  price: string;
+  description: string;
+  ctaText: string;
+  images: string[];
+};
+
 type SitesSectionKey =
   | "about"
   | "valueProps"
   | "services"
   | "process"
-  | "outcomes"
-  | "showcase"
   | "gallery"
   | "testimonials"
-  | "packages"
   | "faq"
   | "cabinet"
   | "contacts"
@@ -979,11 +985,8 @@ const sitesSectionLibrary: SitesSectionConfig[] = [
   { key: "valueProps", title: "Преимущества", description: "Почему клиент выбирает именно вас." },
   { key: "services", title: "Услуги", description: "Ключевые направления и формат работы." },
   { key: "process", title: "Как это работает", description: "Пошаговый путь клиента до записи." },
-  { key: "outcomes", title: "Результат для клиента", description: "Польза, скорость и понятный финал." },
-  { key: "showcase", title: "Операционный блок", description: "Визуальный блок с логикой обработки заявок." },
   { key: "gallery", title: "Галерея", description: "До 5 фотографий бизнеса, команды или кейсов." },
   { key: "testimonials", title: "Отзывы", description: "Социальное доказательство и доверие." },
-  { key: "packages", title: "Пакеты / цены", description: "Тарифные уровни или пакетные предложения." },
   { key: "faq", title: "FAQ", description: "Ответы на частые вопросы перед обращением." },
   { key: "cabinet", title: "Личный кабинет", description: "Блок входа клиента в кабинет через Telegram." },
   { key: "contacts", title: "Контакты", description: "Город, каналы связи и кнопки действия." },
@@ -995,11 +998,8 @@ const defaultSitesSections: Record<SitesSectionKey, boolean> = {
   valueProps: true,
   services: true,
   process: true,
-  outcomes: true,
-  showcase: true,
   gallery: true,
   testimonials: true,
-  packages: true,
   faq: true,
   cabinet: true,
   contacts: true,
@@ -1076,6 +1076,23 @@ function buildFallbackSiteContent(
     finalCtaText: `Primary website goal: ${answers.goal}. Connect your form and route all leads into CFlow.`,
     contactLine: `${answers.businessName}, ${answers.city} • Channels: ${answers.channels}`
   };
+}
+
+function createDefaultSitesProducts(content: GeneratedSiteContent, galleryUrls: string[]): SitesProduct[] {
+  const images = galleryUrls.slice(0, 5);
+  return content.services.slice(0, 3).map((service, index) => ({
+    id: `product-${index + 1}`,
+    title: service,
+    price: content.packages[index]?.price || "по запросу",
+    description:
+      index === 0
+        ? "Базовый пакет услуги с быстрым стартом и понятными условиями."
+        : index === 1
+          ? "Расширенный формат с дополнительными опциями и поддержкой."
+          : "Индивидуальный пакет под задачи бизнеса и нужный уровень сервиса.",
+    ctaText: "Связаться с менеджером",
+    images: images.length ? [images[index % images.length]] : []
+  }));
 }
 
 const analyticsPalette = {
@@ -1502,6 +1519,9 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
   const [sitesGeneratedContent, setSitesGeneratedContent] = useState<GeneratedSiteContent>(() =>
     buildFallbackSiteContent(sitesTemplates[0], defaultSitesAnswers)
   );
+  const [sitesProducts, setSitesProducts] = useState<SitesProduct[]>(() =>
+    createDefaultSitesProducts(buildFallbackSiteContent(sitesTemplates[0], defaultSitesAnswers), [])
+  );
   const [sitesFlowStatus, setSitesFlowStatus] = useState<"idle" | "generating" | "ready" | "published">("idle");
   const [sitesGenerationProgress, setSitesGenerationProgress] = useState(0);
   const [sitesActionMessage, setSitesActionMessage] = useState<string | null>(null);
@@ -1515,6 +1535,9 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
   const [sitesBaseColor, setSitesBaseColor] = useState<string>(initialSitesStyle.baseColor);
   const [sitesCabinetEnabled, setSitesCabinetEnabled] = useState<boolean>(initialSitesStyle.cabinetEnabled);
   const [sitesTelegramBot, setSitesTelegramBot] = useState<string>(initialSitesStyle.telegramBot);
+  const [sitesPreviewTab, setSitesPreviewTab] = useState<"home" | "services" | "reviews" | "cabinet">("home");
+  const [sitesFaqOpen, setSitesFaqOpen] = useState<string | null>(null);
+  const [sitesOpenedProductId, setSitesOpenedProductId] = useState<string | null>(null);
   const sitesLogoInputRef = useRef<HTMLInputElement | null>(null);
   const sitesGalleryInputRef = useRef<HTMLInputElement | null>(null);
   const [mobileInboxView, setMobileInboxView] = useState<"list" | "detail">("list");
@@ -2067,6 +2090,36 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
     setSitesSections((prev) => ({ ...prev, [key]: !prev[key] }));
   }
 
+  function updateGeneratedContent<K extends keyof GeneratedSiteContent>(key: K, value: GeneratedSiteContent[K]): void {
+    setSitesGeneratedContent((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function updateValueProp(index: number, value: string): void {
+    setSitesGeneratedContent((prev) => {
+      const next = [...prev.valueProps];
+      next[index] = value;
+      return { ...prev, valueProps: next };
+    });
+  }
+
+  function updateFaqItem(index: number, field: "q" | "a", value: string): void {
+    setSitesGeneratedContent((prev) => {
+      const next = [...prev.faq];
+      if (!next[index]) return prev;
+      next[index] = { ...next[index], [field]: value };
+      return { ...prev, faq: next };
+    });
+  }
+
+  function updateSitesProduct(index: number, field: keyof SitesProduct, value: string): void {
+    setSitesProducts((prev) => {
+      const next = [...prev];
+      if (!next[index]) return prev;
+      next[index] = { ...next[index], [field]: value };
+      return next;
+    });
+  }
+
   function reorderSitesSections(sourceKey: SitesSectionKey, targetKey: SitesSectionKey): void {
     if (sourceKey === targetKey) return;
     setSitesSectionOrder((prev) => {
@@ -2082,23 +2135,25 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
 
   function renderSitesPreviewSection(key: SitesSectionKey): JSX.Element | null {
     if (!sitesSections[key]) return null;
+    const visibleByTab: Record<typeof sitesPreviewTab, SitesSectionKey[]> = {
+      home: ["about", "valueProps", "process", "gallery", "contacts", "map"],
+      services: ["services"],
+      reviews: ["testimonials", "faq"],
+      cabinet: ["cabinet"]
+    };
+    if (!visibleByTab[sitesPreviewTab].includes(key)) return null;
 
-    if (key === "about") {
-      return (
-        <div className="rounded-xl border border-slate-200 bg-white p-3">
-          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">About</p>
-          <p className="mt-2 text-xs leading-5 text-slate-700">{sitesGeneratedContent.about}</p>
-        </div>
-      );
-    }
+    if (key === "about") return null;
 
     if (key === "valueProps") {
       return (
         <div className="rounded-xl border border-slate-200 bg-white p-3">
-          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Value Propositions</p>
+          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Преимущества</p>
           <div className="mt-2 grid gap-2 sm:grid-cols-3">
             {sitesGeneratedContent.valueProps.map((item) => (
-              <div key={item} className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700">{item}</div>
+              <div key={item} className="aspect-square rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm font-semibold text-slate-800">
+                {item}
+              </div>
             ))}
           </div>
         </div>
@@ -2108,12 +2163,20 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
     if (key === "services") {
       return (
         <div className="rounded-xl border border-slate-200 bg-white p-3">
-          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Services</p>
+          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Услуги и товары</p>
           <div className="mt-2 grid gap-2 sm:grid-cols-3">
-            {sitesGeneratedContent.services.map((service) => (
-              <div key={service} className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs font-semibold text-slate-700">
-                {service}
-              </div>
+            {sitesProducts.map((product) => (
+              <button
+                key={product.id}
+                onClick={() => setSitesOpenedProductId(product.id)}
+                className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-left transition hover:border-slate-400"
+              >
+                <div className="h-20 overflow-hidden rounded-md border border-slate-200 bg-white">
+                  {product.images[0] ? <img src={product.images[0]} alt={product.title} className="h-full w-full object-cover" /> : <div className="h-full w-full bg-slate-100" />}
+                </div>
+                <p className="mt-2 text-xs font-semibold text-slate-900">{product.title}</p>
+                <p className="text-xs text-slate-600">{product.price}</p>
+              </button>
             ))}
           </div>
         </div>
@@ -2123,7 +2186,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
     if (key === "process") {
       return (
         <div className="rounded-xl border border-slate-200 bg-white p-3">
-          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">How It Works</p>
+          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Как это работает</p>
           <div className="mt-2 grid gap-2 sm:grid-cols-3">
             {sitesGeneratedContent.processSteps.map((step, index) => (
               <div key={step} className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700">
@@ -2135,41 +2198,11 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
       );
     }
 
-    if (key === "outcomes") {
-      return (
-        <div className="rounded-xl border border-slate-200 bg-white p-3">
-          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Business Outcomes</p>
-          <div className="mt-2 grid gap-2 sm:grid-cols-3">
-            {sitesGeneratedContent.outcomes.map((item) => (
-              <div key={item} className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700">{item}</div>
-            ))}
-          </div>
-        </div>
-      );
-    }
-
-    if (key === "showcase") {
-      return (
-        <div className="rounded-xl border border-slate-200 bg-white p-3">
-          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">{sitesGeneratedContent.showcaseTitle}</p>
-          <p className="mt-1 text-xs text-slate-600">{sitesGeneratedContent.showcaseText}</p>
-          <div className="mt-2 grid gap-2 sm:grid-cols-3">
-            {["Новые лиды", "Квалифицировано", "Ожидают записи"].map((label, index) => (
-              <div key={label} className="rounded-lg border border-slate-200 bg-slate-50 p-2">
-                <p className="text-[11px] text-slate-500">{label}</p>
-                <p className="text-sm font-bold text-slate-900">{index === 0 ? "24" : index === 1 ? "17" : "9"}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      );
-    }
-
     if (key === "gallery") {
       if (sitesGalleryUrls.length === 0) return null;
       return (
         <div className="rounded-xl border border-slate-200 bg-white p-3">
-          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Gallery</p>
+          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Галерея</p>
           <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
             {sitesGalleryUrls.map((url, index) => (
               <div key={`${url}-${index}`} className="overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
@@ -2184,7 +2217,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
     if (key === "testimonials") {
       return (
         <div className="rounded-xl border border-slate-200 bg-white p-3">
-          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Testimonials</p>
+          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Отзывы</p>
           <div className="mt-2 grid gap-2 sm:grid-cols-3">
             {sitesGeneratedContent.testimonials.map((item) => (
               <div key={item.name} className="rounded-lg border border-slate-200 bg-slate-50 p-2">
@@ -2198,41 +2231,26 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
       );
     }
 
-    if (key === "packages") {
-      return (
-        <div className="rounded-xl border border-slate-200 bg-white p-3">
-          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Packages</p>
-          <div className="mt-2 grid gap-2 sm:grid-cols-3">
-            {sitesGeneratedContent.packages.map((item) => (
-              <div
-                key={item.name}
-                className={`rounded-lg border p-2 ${item.recommended ? "border-cyan-300 bg-cyan-50" : "border-slate-200 bg-slate-50"}`}
-              >
-                <p className="text-xs font-semibold text-slate-900">{item.name}</p>
-                <p className="text-xs text-slate-600">{item.price}</p>
-                <div className="mt-1 space-y-0.5">
-                  {item.features.map((feature) => (
-                    <p key={feature} className="text-[11px] text-slate-700">• {feature}</p>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      );
-    }
-
     if (key === "faq") {
       return (
-        <div className="rounded-xl border border-slate-200 bg-white p-3">
-          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">FAQ</p>
-          <div className="mt-2 space-y-2">
-            {sitesGeneratedContent.faq.map((item) => (
-              <div key={item.q} className="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
-                <p className="text-xs font-semibold text-slate-900">{item.q}</p>
-                <p className="mt-1 text-xs text-slate-600">{item.a}</p>
-              </div>
-            ))}
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <div className="grid gap-4 md:grid-cols-[0.8fr_1.2fr]">
+            <h4 className="text-3xl font-extrabold tracking-tight text-slate-900">Частые вопросы</h4>
+            <div className="space-y-0">
+              {sitesGeneratedContent.faq.map((item) => {
+                const open = sitesFaqOpen === item.q;
+                return (
+                  <div key={item.q} className="border-t border-slate-200 py-3">
+                    <button onClick={() => setSitesFaqOpen(open ? null : item.q)} className="flex w-full items-center justify-between gap-2 text-left">
+                      <span className="text-base font-semibold text-slate-900">{item.q}</span>
+                      <span className="text-xl text-slate-500">{open ? "−" : "+"}</span>
+                    </button>
+                    {open ? <p className="mt-2 text-sm text-slate-600">{item.a}</p> : null}
+                  </div>
+                );
+              })}
+              <div className="border-t border-slate-200" />
+            </div>
           </div>
         </div>
       );
@@ -2244,8 +2262,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
         <div className="rounded-xl border border-slate-200 bg-white p-3">
           <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Личный кабинет</p>
           <div className="mt-2 rounded-lg border p-3" style={{ borderColor: sitesAccentBorder, backgroundColor: sitesSoftBackground }}>
-            <p className="text-xs font-semibold text-slate-900">Доступ к записям, статусам и уведомлениям</p>
-            <p className="mt-1 text-xs text-slate-600">Вход через Telegram в один клик.</p>
+            <p className="text-xs font-semibold text-slate-900">Доступ к записям и персональным данным</p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <button className="rounded-full px-3 py-1.5 text-[11px] font-semibold text-white" style={{ backgroundColor: sitesAccentPreview }}>
                 Войти через Telegram
@@ -2257,29 +2274,12 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
       );
     }
 
-    if (key === "contacts") {
-      return (
-        <div className="rounded-xl border border-slate-200 bg-white p-3">
-          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Contacts</p>
-          <div className="mt-2 grid gap-2 sm:grid-cols-2">
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-700">
-              <p className="text-[11px] font-semibold text-slate-500">Город</p>
-              <p className="mt-1 font-semibold text-slate-900">{sitesAnswers.city || "Укажите город"}</p>
-            </div>
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-700">
-              <p className="text-[11px] font-semibold text-slate-500">Каналы связи</p>
-              <p className="mt-1 font-semibold text-slate-900">{sitesAnswers.channels || "Укажите каналы связи"}</p>
-            </div>
-          </div>
-          <p className="mt-2 text-[11px] text-slate-600">{sitesGeneratedContent.contactLine}</p>
-        </div>
-      );
-    }
+    if (key === "contacts") return null;
 
     if (key === "map") {
       return (
         <div className="rounded-xl border border-slate-200 bg-white p-3">
-          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Map</p>
+          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Карта</p>
           <div className="mt-2 rounded-lg border border-slate-200 p-3" style={{ backgroundColor: sitesHeroBackground }}>
             <div className="grid grid-cols-5 gap-1">
               {Array.from({ length: 25 }).map((_, index) => (
@@ -2294,6 +2294,15 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
 
     return null;
   }
+
+  const openedSitesProduct = sitesProducts.find((item) => item.id === sitesOpenedProductId) || null;
+  const contactsIcons = ["TG", "WA", "IG"];
+  const previewTabs: Array<{ id: "home" | "services" | "reviews" | "cabinet"; label: string }> = [
+    { id: "home", label: "Дом" },
+    { id: "services", label: "Услуги" },
+    { id: "reviews", label: "Отзывы" },
+    { id: "cabinet", label: "Личный кабинет" }
+  ];
 
   function readFileAsDataUrl(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -2523,12 +2532,14 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
       const normalized = sanitizeGeneratedContent(parsed, baseFallback);
 
       setSitesGeneratedContent(normalized);
+      setSitesProducts(createDefaultSitesProducts(normalized, sitesGalleryUrls));
       setSitesLastGenerationMode("ai");
       setSitesGenerationProgress(100);
       setSitesFlowStatus("ready");
       setSitesActionMessage("Контент сгенерирован. Проверьте предпросмотр и публикуйте.");
     } catch {
       setSitesGeneratedContent(baseFallback);
+      setSitesProducts(createDefaultSitesProducts(baseFallback, sitesGalleryUrls));
       setSitesLastGenerationMode("fallback");
       setSitesGenerationProgress(100);
       setSitesFlowStatus("ready");
@@ -2583,8 +2594,10 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
 
   useEffect(() => {
     if (sitesFlowStatus !== "idle") return;
-    setSitesGeneratedContent(buildFallbackSiteContent(selectedSitesTemplate, sitesAnswers));
-  }, [sitesAnswers, sitesFlowStatus, selectedSitesTemplate]);
+    const draft = buildFallbackSiteContent(selectedSitesTemplate, sitesAnswers);
+    setSitesGeneratedContent(draft);
+    setSitesProducts(createDefaultSitesProducts(draft, sitesGalleryUrls));
+  }, [sitesAnswers, sitesFlowStatus, selectedSitesTemplate, sitesGalleryUrls]);
 
   useEffect(() => {
     if (!uiNotice) return;
@@ -4581,6 +4594,10 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                           setSitesTelegramBot("@clientsflow_support_bot");
                           const fallback = buildFallbackSiteContent(selectedSitesTemplate, defaultSitesAnswers);
                           setSitesGeneratedContent(fallback);
+                          setSitesProducts(createDefaultSitesProducts(fallback, []));
+                          setSitesPreviewTab("home");
+                          setSitesFaqOpen(null);
+                          setSitesOpenedProductId(null);
                           setSitesFlowStatus("idle");
                           setSitesGenerationProgress(0);
                           setSitesLastGenerationMode(null);
@@ -4590,6 +4607,109 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                       >
                         Сбросить бриф
                       </button>
+                    </div>
+
+                    <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <p className="text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Редактор после генерации</p>
+                      <h4 className="mt-1 text-base font-bold tracking-tight text-slate-900">Отредактируйте тексты вручную</h4>
+                      <div className="mt-3 grid gap-3">
+                        <label className="block">
+                          <span className="text-xs font-semibold text-slate-600">Заголовок</span>
+                          <input
+                            value={sitesGeneratedContent.heroTitle}
+                            onChange={(event) => updateGeneratedContent("heroTitle", event.target.value)}
+                            className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="text-xs font-semibold text-slate-600">Подзаголовок</span>
+                          <textarea
+                            value={sitesGeneratedContent.heroSubtitle}
+                            onChange={(event) => updateGeneratedContent("heroSubtitle", event.target.value)}
+                            rows={3}
+                            className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="text-xs font-semibold text-slate-600">About</span>
+                          <textarea
+                            value={sitesGeneratedContent.about}
+                            onChange={(event) => updateGeneratedContent("about", event.target.value)}
+                            rows={4}
+                            className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                          />
+                        </label>
+                        <div className="grid gap-2 sm:grid-cols-3">
+                          {sitesGeneratedContent.valueProps.slice(0, 3).map((item, index) => (
+                            <label key={`benefit-edit-${index}`} className="block">
+                              <span className="text-xs font-semibold text-slate-600">Преимущество {index + 1}</span>
+                              <input
+                                value={item}
+                                onChange={(event) => updateValueProp(index, event.target.value)}
+                                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                              />
+                            </label>
+                          ))}
+                        </div>
+
+                        <div className="rounded-xl border border-slate-200 bg-white p-3">
+                          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Товары / услуги</p>
+                          <div className="mt-2 space-y-2">
+                            {sitesProducts.map((product, index) => (
+                              <div key={product.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                                <div className="grid gap-2 sm:grid-cols-2">
+                                  <input
+                                    value={product.title}
+                                    onChange={(event) => updateSitesProduct(index, "title", event.target.value)}
+                                    placeholder="Название"
+                                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                                  />
+                                  <input
+                                    value={product.price}
+                                    onChange={(event) => updateSitesProduct(index, "price", event.target.value)}
+                                    placeholder="Цена"
+                                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                                  />
+                                </div>
+                                <textarea
+                                  value={product.description}
+                                  onChange={(event) => updateSitesProduct(index, "description", event.target.value)}
+                                  rows={2}
+                                  placeholder="Описание товара"
+                                  className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                                />
+                                <input
+                                  value={product.ctaText}
+                                  onChange={(event) => updateSitesProduct(index, "ctaText", event.target.value)}
+                                  placeholder="Текст кнопки"
+                                  className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="rounded-xl border border-slate-200 bg-white p-3">
+                          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">FAQ</p>
+                          <div className="mt-2 space-y-2">
+                            {sitesGeneratedContent.faq.map((item, index) => (
+                              <div key={`faq-edit-${index}`} className="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+                                <input
+                                  value={item.q}
+                                  onChange={(event) => updateFaqItem(index, "q", event.target.value)}
+                                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                                />
+                                <textarea
+                                  value={item.a}
+                                  onChange={(event) => updateFaqItem(index, "a", event.target.value)}
+                                  rows={2}
+                                  className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
@@ -4605,7 +4725,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                     </div>
 
                     <div className={`mt-4 overflow-hidden rounded-2xl border border-slate-200 ${selectedSitesTemplate.previewTheme.surface}`} style={{ backgroundColor: sitesBaseColor }}>
-                      <div className="h-[760px] overflow-y-auto">
+                      <div className="relative h-[760px] overflow-y-auto pb-20">
                         <div className="border-b border-slate-200 bg-white px-4 py-3">
                           <div className="flex flex-wrap items-center justify-between gap-3">
                             <div className="flex items-center gap-2">
@@ -4621,17 +4741,15 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                                 <p className="text-sm font-bold text-slate-900">{sitesAnswers.businessName}</p>
                               </div>
                             </div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              {["Дом", "Услуги", "Отзывы"].map((item) => (
-                                <button key={item} className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700">
-                                  {item}
-                                </button>
+                            <div className="flex items-center gap-2">
+                              <span className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700">
+                                {sitesAnswers.city || "Город"}
+                              </span>
+                              {contactsIcons.map((icon) => (
+                                <span key={icon} className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-300 bg-white text-[10px] font-bold text-slate-600">
+                                  {icon}
+                                </span>
                               ))}
-                              {sitesCabinetEnabled ? (
-                                <button className="rounded-full border px-3 py-1.5 text-[11px] font-semibold text-white" style={{ backgroundColor: sitesAccentPreview, borderColor: sitesAccentPreview }}>
-                                  Личный кабинет
-                                </button>
-                              ) : null}
                             </div>
                           </div>
                         </div>
@@ -4640,6 +4758,12 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                           <p className="text-xs font-semibold text-slate-700">{selectedSitesTemplate.heroPattern}</p>
                           <h4 className="mt-2 text-2xl font-extrabold tracking-tight text-slate-900">{generatedSitesHeadline}</h4>
                           <p className="mt-2 max-w-xl text-sm text-slate-700">{generatedSitesSubheadline}</p>
+                          {sitesSections.about && sitesPreviewTab === "home" ? (
+                            <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
+                              <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500">About</p>
+                              <p className="mt-1 text-sm leading-6 text-slate-700">{sitesGeneratedContent.about}</p>
+                            </div>
+                          ) : null}
                           <div className="mt-4 flex flex-wrap gap-2">
                             <button className="rounded-full px-4 py-2 text-xs font-semibold text-white" style={{ backgroundColor: sitesAccentPreview }}>
                               {sitesGeneratedContent.primaryCta}
@@ -4663,6 +4787,27 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                           </div>
                         </div>
 
+                        {openedSitesProduct ? (
+                          <div className="mx-4 mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <p className="text-sm font-bold text-slate-900">{openedSitesProduct.title}</p>
+                                <p className="text-xs text-slate-500">{openedSitesProduct.price}</p>
+                              </div>
+                              <button onClick={() => setSitesOpenedProductId(null)} className="text-sm font-semibold text-slate-500">✕</button>
+                            </div>
+                            {openedSitesProduct.images[0] ? (
+                              <div className="mt-2 overflow-hidden rounded-xl border border-slate-200">
+                                <img src={openedSitesProduct.images[0]} alt={openedSitesProduct.title} className="h-36 w-full object-cover" />
+                              </div>
+                            ) : null}
+                            <p className="mt-2 text-sm text-slate-700">{openedSitesProduct.description}</p>
+                            <button className="mt-3 rounded-full px-4 py-2 text-xs font-semibold text-white" style={{ backgroundColor: sitesAccentPreview }}>
+                              {openedSitesProduct.ctaText}
+                            </button>
+                          </div>
+                        ) : null}
+
                         <div className="space-y-3 p-4">
                           {sitesSectionOrder.map((key) => {
                             const content = renderSitesPreviewSection(key);
@@ -4673,6 +4818,23 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                             <p className="text-sm font-semibold text-slate-900">{sitesGeneratedContent.finalCtaTitle}</p>
                             <p className="mt-1 text-xs text-slate-700">{sitesGeneratedContent.finalCtaText}</p>
                             <p className="mt-2 text-[11px] text-slate-600">{sitesGeneratedContent.contactLine}</p>
+                          </div>
+                        </div>
+
+                        <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center px-4">
+                          <div className="pointer-events-auto flex items-center gap-1 rounded-full border border-slate-200 bg-white/95 p-1 shadow-lg backdrop-blur">
+                            {previewTabs.map((tab) => (
+                              <button
+                                key={tab.id}
+                                onClick={() => setSitesPreviewTab(tab.id)}
+                                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                                  sitesPreviewTab === tab.id ? "text-white" : "text-slate-700"
+                                }`}
+                                style={sitesPreviewTab === tab.id ? { backgroundColor: sitesAccentPreview } : undefined}
+                              >
+                                {tab.label}
+                              </button>
+                            ))}
                           </div>
                         </div>
                       </div>
