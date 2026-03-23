@@ -5032,9 +5032,19 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                             setSitesGenerationProgress(100);
                             setSitesPublishedUrl(data.url);
                             setSitesActionMessage("Сайт опубликован. Перенаправляем...");
+                            const targetUrl = String(data.url);
                             window.setTimeout(() => {
-                              window.location.assign(data.url as string);
-                            }, 800);
+                              try {
+                                window.location.assign(targetUrl);
+                              } catch {
+                                window.location.href = targetUrl;
+                              }
+                              window.setTimeout(() => {
+                                if (window.location.href !== targetUrl) {
+                                  window.open(targetUrl, "_self");
+                                }
+                              }, 450);
+                            }, 400);
                           } catch (error: any) {
                             setSitesActionMessage(error?.message || "Ошибка публикации сайта");
                             setSitesPublishRedirectScreen(false);
@@ -5181,6 +5191,14 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                     <p className="mt-2 text-sm text-slate-300">
                       Подготавливаем ссылку и переносим вас на готовую страницу.
                     </p>
+                    {sitesPublishedUrl ? (
+                      <a
+                        href={sitesPublishedUrl}
+                        className="mt-4 inline-flex rounded-xl bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-900 transition hover:bg-cyan-300"
+                      >
+                        Открыть сайт сейчас
+                      </a>
+                    ) : null}
                   </div>
                 </div>
               ) : null}
