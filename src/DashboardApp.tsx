@@ -1547,6 +1547,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
   const [sitesGenerationProgress, setSitesGenerationProgress] = useState(0);
   const [sitesActionMessage, setSitesActionMessage] = useState<string | null>(null);
   const [sitesPublishedUrl, setSitesPublishedUrl] = useState<string>("");
+  const [sitesPublishing, setSitesPublishing] = useState(false);
   const [sitesPayment, setSitesPayment] = useState<{ paid: boolean; paidAt: string | null }>(() => loadSitesBuilderPayment());
   const [sitesPaymentModalOpen, setSitesPaymentModalOpen] = useState(false);
   const [sitesPaymentState, setSitesPaymentState] = useState<"idle" | "processing" | "success">("idle");
@@ -4989,6 +4990,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                       ) : null}
                       <button
                         onClick={async () => {
+                          if (sitesPublishing) return;
                           if (!sitesLogoUrl) {
                             setSitesActionMessage("Публикация невозможна без логотипа. Загрузите логотип в брифе.");
                             return;
@@ -4998,6 +5000,11 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                             setSitesPaymentModalOpen(true);
                             return;
                           }
+                          if (!sitesAnswers.businessName.trim()) {
+                            setSitesActionMessage("Укажите название бизнеса в брифе, чтобы сформировать публикацию.");
+                            return;
+                          }
+                          setSitesPublishing(true);
                           setSitesActionMessage("Публикуем сайт на домене...");
                           try {
                             const response = await fetch("/api/sites/publish", {
@@ -5039,12 +5046,14 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                             window.open(data.url, "_blank", "noopener,noreferrer");
                           } catch (error: any) {
                             setSitesActionMessage(error?.message || "Ошибка публикации сайта");
+                          } finally {
+                            setSitesPublishing(false);
                           }
                         }}
-                        disabled={!sitesLogoUrl || !sitesPayment.paid || (sitesFlowStatus !== "ready" && sitesFlowStatus !== "published")}
+                        disabled={sitesPublishing}
                         className="w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                       >
-                        Опубликовать и передать менеджеру
+                        {sitesPublishing ? "Публикуем сайт..." : "Опубликовать и передать менеджеру"}
                       </button>
                       <button
                         onClick={() => handleNavChange("Диалоги")}
