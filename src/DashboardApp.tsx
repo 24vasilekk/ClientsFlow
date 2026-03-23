@@ -4996,52 +4996,31 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                           setSitesPublishing(true);
                           setSitesPublishRedirectScreen(true);
                           setSitesActionMessage("Публикуем сайт на домене...");
-                          try {
-                            const publishPayload = {
-                              businessName: sitesAnswers.businessName || "CFlow Site",
-                              city: sitesAnswers.city,
-                              logoUrl: sitesLogoUrl,
-                              accentColor: sitesAccentColor,
-                              baseColor: sitesBaseColor,
-                              heroTitle: sitesGeneratedContent.heroTitle || "Сайт вашего бизнеса",
-                              heroSubtitle: sitesGeneratedContent.heroSubtitle,
-                              about: sitesGeneratedContent.about,
-                              primaryCta: sitesGeneratedContent.primaryCta,
-                              secondaryCta: sitesGeneratedContent.secondaryCta,
-                              trustStats: sitesGeneratedContent.trustStats,
-                              valueProps: sitesGeneratedContent.valueProps,
-                              processSteps: sitesGeneratedContent.processSteps,
-                              testimonials: sitesGeneratedContent.testimonials,
-                              faq: sitesGeneratedContent.faq,
-                              contactLine: sitesGeneratedContent.contactLine,
-                              products: sitesProducts,
-                              sections: sitesSections,
-                              sectionOrder: sitesSectionOrder,
-                              galleryUrls: sitesGalleryUrls,
-                              cabinetEnabled: sitesCabinetEnabled,
-                              telegramBot: sitesTelegramBot
-                            };
-                            const response = await fetch("/api/sites/publish", {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify(publishPayload)
-                            });
-                            const data = (await response.json()) as { slug?: string; path?: string; url?: string; error?: string };
-                            const targetPath = data.path || (data.slug ? `/s/${data.slug}` : "");
-                            const targetUrl = data.url || (targetPath ? `${window.location.origin}${targetPath}` : "");
-                            if (!response.ok || !targetPath) {
-                              throw new Error(data.error || "Не удалось опубликовать сайт");
-                            }
-                            if (data.slug) {
-                              try {
-                                localStorage.setItem(
-                                  `${LOCAL_PUBLISHED_SITE_PREFIX}${data.slug}`,
-                                  JSON.stringify({ slug: data.slug, payload: publishPayload })
-                                );
-                              } catch {
-                                // no-op
-                              }
-                            }
+                          const publishPayload = {
+                            businessName: sitesAnswers.businessName || "CFlow Site",
+                            city: sitesAnswers.city,
+                            logoUrl: sitesLogoUrl,
+                            accentColor: sitesAccentColor,
+                            baseColor: sitesBaseColor,
+                            heroTitle: sitesGeneratedContent.heroTitle || "Сайт вашего бизнеса",
+                            heroSubtitle: sitesGeneratedContent.heroSubtitle,
+                            about: sitesGeneratedContent.about,
+                            primaryCta: sitesGeneratedContent.primaryCta,
+                            secondaryCta: sitesGeneratedContent.secondaryCta,
+                            trustStats: sitesGeneratedContent.trustStats,
+                            valueProps: sitesGeneratedContent.valueProps,
+                            processSteps: sitesGeneratedContent.processSteps,
+                            testimonials: sitesGeneratedContent.testimonials,
+                            faq: sitesGeneratedContent.faq,
+                            contactLine: sitesGeneratedContent.contactLine,
+                            products: sitesProducts,
+                            sections: sitesSections,
+                            sectionOrder: sitesSectionOrder,
+                            galleryUrls: sitesGalleryUrls,
+                            cabinetEnabled: sitesCabinetEnabled,
+                            telegramBot: sitesTelegramBot
+                          };
+                          const runRedirect = (targetPath: string, targetUrl: string) => {
                             setSitesFlowStatus("published");
                             setSitesGenerationProgress(100);
                             setSitesPublishedUrl(targetUrl);
@@ -5058,10 +5037,60 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                                   window.location.href = targetUrl;
                                 }
                               }, 450);
-                            }, 400);
+                            }, 300);
+                          };
+                          const saveLocalSite = (slug: string) => {
+                            const compactPayload = {
+                              ...publishPayload,
+                              galleryUrls: (publishPayload.galleryUrls || []).map((item) =>
+                                typeof item === "string" && item.startsWith("data:") && item.length > 220000 ? "" : item
+                              ),
+                              products: (publishPayload.products || []).map((product) => ({
+                                ...product,
+                                images: (product.images || []).map((item) =>
+                                  typeof item === "string" && item.startsWith("data:") && item.length > 220000 ? "" : item
+                                )
+                              }))
+                            };
+                            localStorage.setItem(
+                              `${LOCAL_PUBLISHED_SITE_PREFIX}${slug}`,
+                              JSON.stringify({ slug, payload: compactPayload })
+                            );
+                          };
+                          try {
+                            const response = await fetch("/api/sites/publish", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify(publishPayload)
+                            });
+                            const data = (await response.json()) as { slug?: string; path?: string; url?: string; error?: string };
+                            const targetPath = data.path || (data.slug ? `/s/${data.slug}` : "");
+                            const targetUrl = data.url || (targetPath ? `${window.location.origin}${targetPath}` : "");
+                            if (!response.ok || !targetPath) {
+                              throw new Error(data.error || "Не удалось опубликовать сайт");
+                            }
+                            if (data.slug) {
+                              try {
+                                saveLocalSite(data.slug);
+                              } catch {
+                                // no-op
+                              }
+                            }
+                            runRedirect(targetPath, targetUrl);
                           } catch (error: any) {
-                            setSitesActionMessage(error?.message || "Ошибка публикации сайта");
-                            setSitesPublishRedirectScreen(false);
+                            try {
+                              const localSlug = `local-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+                              saveLocalSite(localSlug);
+                              const localPath = `/s/${localSlug}`;
+                              const localUrl = `${window.location.origin}${localPath}`;
+                              setSitesActionMessage("Облачная публикация недоступна. Открываем локальную публикацию в демо-режиме.");
+                              runRedirect(localPath, localUrl);
+                            } catch (fallbackError: any) {
+                              setSitesActionMessage(
+                                error?.message || fallbackError?.message || "Ошибка публикации сайта. Попробуйте ещё раз."
+                              );
+                              setSitesPublishRedirectScreen(false);
+                            }
                           } finally {
                             setSitesPublishing(false);
                           }
