@@ -35,8 +35,9 @@ export default async function handler(req: any, res: any) {
     };
 
     const doc = await createPublishedSite(safePayload);
+    const path = `/s/${doc.slug}`;
     const host = req.headers?.host ? `https://${req.headers.host}` : process.env.OPENROUTER_SITE_URL || "https://clients-flow-ten.vercel.app";
-    res.status(200).json({ slug: doc.slug, url: `${host}/s/${doc.slug}` });
+    res.status(200).json({ slug: doc.slug, path, url: `${host}${path}` });
   } catch (error: any) {
     res.status(500).json({ error: error?.message || "Publish failed" });
   }

@@ -5024,30 +5024,26 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                                 telegramBot: sitesTelegramBot
                               })
                             });
-                            const data = (await response.json()) as { slug?: string; url?: string; error?: string };
-                            if (!response.ok || !data.url) {
+                            const data = (await response.json()) as { slug?: string; path?: string; url?: string; error?: string };
+                            const targetPath = data.path || (data.slug ? `/s/${data.slug}` : "");
+                            const targetUrl = data.url || (targetPath ? `${window.location.origin}${targetPath}` : "");
+                            if (!response.ok || !targetPath) {
                               throw new Error(data.error || "Не удалось опубликовать сайт");
                             }
                             setSitesFlowStatus("published");
                             setSitesGenerationProgress(100);
-                            setSitesPublishedUrl(data.url);
+                            setSitesPublishedUrl(targetUrl);
                             setSitesActionMessage("Сайт опубликован. Перенаправляем...");
-                            const targetUrl = String(data.url);
                             window.setTimeout(() => {
                               try {
-                                const parsed = new URL(targetUrl, window.location.origin);
-                                if (parsed.origin === window.location.origin && parsed.pathname.startsWith("/s/")) {
-                                  window.history.pushState({}, "", `${parsed.pathname}${parsed.search}${parsed.hash}`);
-                                  window.dispatchEvent(new PopStateEvent("popstate"));
-                                  return;
-                                }
-                                window.location.assign(targetUrl);
+                                window.history.pushState({}, "", targetPath);
+                                window.dispatchEvent(new PopStateEvent("popstate"));
                               } catch {
                                 window.location.href = targetUrl;
                               }
                               window.setTimeout(() => {
-                                if (window.location.href !== targetUrl) {
-                                  window.open(targetUrl, "_self");
+                                if (!window.location.pathname.startsWith("/s/")) {
+                                  window.location.href = targetUrl;
                                 }
                               }, 450);
                             }, 400);
