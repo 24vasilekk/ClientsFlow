@@ -728,223 +728,126 @@ export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) 
             ) : null}
 
             {state.step === "concepts" ? (
-              <div>
-                <h2 className={sitesTokens.title}>Концепты сайта</h2>
-                <div className="mt-3 grid gap-2 lg:grid-cols-2">
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h2 className={sitesTokens.title}>Генерация страницы</h2>
+                    <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-700">
+                      Система собирает блоки по вашему брифу, логотипу, фото и примерам. Дальше вы сможете
+                      заменить блоки, отредактировать тексты и перейти в визуальный редактор.
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleMockGenerate}
+                    disabled={!canGenerateConcepts || state.conceptsStatus === "loading"}
+                    className="inline-flex items-center rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    ✦ Заменить все блоки
+                  </button>
+                </div>
+
+                <div className="grid gap-2 lg:grid-cols-4">
                   {state.concepts.map((item) => (
                     <button
                       key={item.id}
                       onClick={() => dispatch({ type: "select_concept", id: item.id })}
-                      className={`rounded-xl border p-3 text-left ${
-                        state.selectedConceptId === item.id ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-slate-50"
+                      className={`rounded-xl border p-3 text-left transition ${
+                        state.selectedConceptId === item.id
+                          ? "border-slate-900 bg-slate-900 text-white"
+                          : "border-slate-200 bg-white text-slate-800 hover:border-slate-300"
                       }`}
                     >
-                      <p className="font-semibold">{item.name}</p>
-                      <p className="mt-1 text-sm">{item.description}</p>
+                      <p className="text-base font-semibold">{item.name}</p>
+                      <p className={`mt-1 text-sm ${state.selectedConceptId === item.id ? "text-slate-200" : "text-slate-600"}`}>
+                        {item.description}
+                      </p>
                     </button>
                   ))}
                 </div>
+
                 {selectedConcept ? (
-                  <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                    <div className="relative h-[680px] overflow-y-auto pb-24" style={{ backgroundColor: selectedConceptPalette.base }}>
-                      <div className="border-b border-slate-200 bg-white px-4 py-3">
+                  <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                    <div className="relative h-[760px] overflow-y-auto bg-[#f5f6fb] px-4 pb-36 pt-4 sm:px-6">
+                      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
                         <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <p className="text-xs font-semibold text-slate-500">{selectedConcept.name}</p>
-                            <p className="text-sm font-bold text-slate-900">{state.brief.businessName || "Название бизнеса"}</p>
+                          <p className="text-xl font-extrabold text-slate-900">{state.brief.businessName || "Ваш бизнес"}</p>
+                          <p className="text-base font-semibold text-slate-900">{selectedConcept.contacts.phone}</p>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
+                        <div className="grid min-h-[360px] md:grid-cols-2">
+                          <div className="bg-slate-200">
+                            {state.photos[0] ? (
+                              <img src={state.photos[0]} alt="hero" className="h-full w-full object-cover grayscale" />
+                            ) : (
+                              <div className="h-full w-full animate-pulse bg-slate-300" />
+                            )}
                           </div>
-                          <div className="flex items-center gap-1.5">
-                            {(social || []).map((item) =>
-                              item.href ? (
-                                <a key={item.id} href={item.href} target="_blank" rel="noreferrer" className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-300 bg-white text-[10px] font-bold text-slate-700">
-                                  {item.label}
-                                </a>
-                              ) : (
-                                <span key={item.id} className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-[10px] font-bold text-slate-400">
-                                  {item.label}
-                                </span>
-                              )
+                          <div className="flex flex-col justify-center px-8 py-8">
+                            <h3 className="text-4xl font-extrabold leading-[1.04] tracking-tight text-slate-700">{selectedConcept.hero.title}</h3>
+                            <p className="mt-4 text-lg text-slate-500">{selectedConcept.hero.subtitle}</p>
+                            <button className="mt-6 w-fit rounded-lg bg-slate-500 px-7 py-3 text-base font-semibold text-white">
+                              {selectedConcept.hero.primaryCta} →
+                            </button>
+                            <p className="mt-5 text-sm text-slate-500">Лучшее решение под задачу вашего бизнеса.</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
+                        <div className="grid min-h-[300px] md:grid-cols-2">
+                          <div className="flex flex-col justify-center px-8 py-8">
+                            <h3 className="text-4xl font-extrabold leading-[1.04] tracking-tight text-slate-700">Услуги и цены</h3>
+                            <p className="mt-3 text-lg text-slate-500">
+                              Понятная структура оффера и быстрый путь к заявке для клиента.
+                            </p>
+                          </div>
+                          <div className="bg-slate-200">
+                            {state.photos[1] ? (
+                              <img src={state.photos[1]} alt="services" className="h-full w-full object-cover grayscale" />
+                            ) : (
+                              <div className="h-full w-full animate-pulse bg-slate-300" />
                             )}
                           </div>
                         </div>
                       </div>
 
-                      {previewTab === "home" ? (
-                        <div className="px-4 py-5" style={{ backgroundColor: selectedConceptPalette.hero }}>
-                          <h3 className="text-2xl font-extrabold tracking-tight text-slate-900">{selectedConcept.hero.title}</h3>
-                          <p className="mt-2 text-sm text-slate-700">{selectedConcept.hero.subtitle}</p>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            <button className="rounded-full px-4 py-2 text-xs font-semibold text-white" style={{ backgroundColor: selectedConceptPalette.accent }}>
-                              {selectedConcept.hero.primaryCta}
-                            </button>
-                            <button className="rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700">
-                              {selectedConcept.hero.secondaryCta}
-                            </button>
-                          </div>
-                          <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                            {selectedConcept.hero.stats.map((item) => (
-                              <div key={item.label} className="rounded-xl border border-white/70 bg-white/90 p-2.5">
-                                <p className="text-[11px] text-slate-500">{item.label}</p>
-                                <p className="text-sm font-bold text-slate-900">{item.value}</p>
-                              </div>
-                            ))}
-                          </div>
-                          <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
-                            <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">О компании</p>
-                            <p className="mt-1 text-sm text-slate-700">{state.structuredBrief?.businessBrief || "Краткое описание бизнеса появится после интервью."}</p>
-                          </div>
+                      <div className="mt-3 rounded-xl border border-slate-200 bg-white p-6">
+                        <h4 className="text-3xl font-extrabold text-slate-900">Наши услуги</h4>
+                        <p className="mt-2 text-sm text-slate-600">Собранная витрина из выбранного концепта</p>
+                        <div className="mt-5 divide-y divide-slate-200">
+                          {selectedConcept.services.map((srv) => (
+                            <div key={srv.id} className="flex items-center justify-between gap-4 py-3">
+                              <p className="text-base text-slate-700">{srv.title}</p>
+                              <p className="text-base font-bold text-indigo-600">{srv.price}</p>
+                            </div>
+                          ))}
                         </div>
-                      ) : (
-                        <div className="border-b border-slate-200 bg-white px-4 py-4">
-                          <h3 className="text-xl font-extrabold tracking-tight text-slate-900">
-                            {previewTab === "services" && "Услуги и цены"}
-                            {previewTab === "reviews" && "Отзывы и FAQ"}
-                            {previewTab === "cabinet" && "Личный кабинет"}
-                          </h3>
-                          <p className="mt-1 text-sm text-slate-600">
-                            {previewTab === "services" && "Каталог услуг с ценами и кратким описанием."}
-                            {previewTab === "reviews" && "Блок доверия и ответы на частые вопросы."}
-                            {previewTab === "cabinet" && "Отдельный раздел для входа и статусов клиента."}
-                          </p>
-                        </div>
-                      )}
-
-                      <div className="space-y-3 p-4">
-                        {previewTab === "home" ? (
-                          <>
-                            <div className="rounded-xl border border-slate-200 bg-white p-3">
-                              <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">О компании</p>
-                              <p className="mt-1 text-sm text-slate-700">{state.structuredBrief?.businessBrief || "Краткое описание бизнеса появится после интервью."}</p>
-                            </div>
-                            <div className="rounded-xl border border-slate-200 bg-white p-3">
-                              <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Услуги</p>
-                              <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                                {selectedConcept.services.map((srv, idx) => (
-                                  <div key={srv.id} className="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
-                                    {state.photos[idx] ? <img src={state.photos[idx]} alt={srv.title} className="mb-2 h-16 w-full rounded-md object-cover" /> : null}
-                                    <p className="text-xs font-semibold text-slate-900">{srv.title}</p>
-                                    <p className="mt-0.5 text-[11px] text-slate-600">{srv.price}</p>
-                                    <p className="mt-1 line-clamp-2 text-[11px] text-slate-600">{srv.description}</p>
-                                    <div className="mt-2 flex items-center justify-between">
-                                      <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-500">45–60 мин</span>
-                                      <span className="text-[10px] font-semibold text-cyan-700">Заказать</span>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                            <div className="rounded-xl border border-slate-200 bg-white p-3">
-                              <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Контакты</p>
-                              <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                                <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
-                                  <p className="text-xs font-semibold text-slate-900">{selectedConcept.contacts.phone}</p>
-                                  <p className="text-[11px] text-slate-600">{selectedConcept.contacts.email}</p>
-                                  <p className="mt-1 text-[11px] text-slate-600">{selectedConcept.contacts.address}</p>
-                                </div>
-                                <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
-                                  <p className="text-[11px] text-slate-600">Канал связи</p>
-                                  <p className="mt-1 text-xs font-semibold text-slate-900">{selectedConcept.contacts.messengerLabel}</p>
-                                </div>
-                              </div>
-                            </div>
-                          </>
-                        ) : null}
-
-                        {previewTab === "services" ? (
-                          <>
-                            <div className="rounded-xl border border-slate-200 bg-white p-3">
-                              <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Каталог услуг</p>
-                              <div className="mt-2 space-y-2">
-                                {selectedConcept.services.map((srv, idx) => (
-                                  <div key={srv.id} className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 p-2.5">
-                                    <div className="min-w-0 flex-1">
-                                      <p className="text-xs font-semibold text-slate-900">{srv.title}</p>
-                                      <p className="mt-1 text-[11px] text-slate-600">{srv.description}</p>
-                                      {state.photos[idx] ? <img src={state.photos[idx]} alt={srv.title} className="mt-2 h-16 w-full rounded-md object-cover sm:w-40" /> : null}
-                                    </div>
-                                    <div className="shrink-0 rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-900">{srv.price}</div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                            <div className="rounded-xl border border-slate-200 bg-white p-3">
-                              <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Footer</p>
-                              <div className="mt-2 flex flex-wrap gap-2">
-                                {selectedConcept.footer.links.map((link) => (
-                                  <span key={link} className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] text-slate-600">{link}</span>
-                                ))}
-                              </div>
-                              <p className="mt-2 text-[11px] text-slate-500">{selectedConcept.footer.legal}</p>
-                            </div>
-                          </>
-                        ) : null}
-
-                        {previewTab === "reviews" ? (
-                          <>
-                            <div className="rounded-xl border border-slate-200 bg-white p-3">
-                              <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Отзывы</p>
-                              <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                                {selectedConcept.testimonials.map((item) => (
-                                  <div key={item.id} className="rounded-lg border border-slate-200 bg-slate-50 p-2">
-                                    <p className="text-xs font-semibold text-slate-900">{item.author}</p>
-                                    <p className="text-[11px] text-slate-500">{item.role}</p>
-                                    <p className="mt-1 text-xs text-slate-700">{item.text}</p>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                            <div className="rounded-xl border border-slate-200 bg-white p-3">
-                              <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">FAQ</p>
-                              <div className="mt-2 space-y-2">
-                                {selectedConcept.faq.map((item) => (
-                                  <div key={item.id} className="rounded-lg border border-slate-200 bg-slate-50 p-2">
-                                    <p className="text-xs font-semibold text-slate-900">{item.q}</p>
-                                    <p className="mt-1 text-xs text-slate-700">{item.a}</p>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          </>
-                        ) : null}
-
-                        {previewTab === "cabinet" ? (
-                          <>
-                            <div className="rounded-xl border border-slate-200 bg-white p-3">
-                              <p className="text-sm font-semibold text-slate-900">{selectedConcept.cabinet.title}</p>
-                              <p className="mt-1 text-xs text-slate-700">{selectedConcept.cabinet.text}</p>
-                              <button className="mt-3 rounded-full px-3 py-1.5 text-xs font-semibold text-white" style={{ backgroundColor: selectedConceptPalette.accent }}>
-                                {selectedConcept.cabinet.cta}
-                              </button>
-                            </div>
-                            <div className="rounded-xl border border-slate-200 bg-white p-3">
-                              <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Контакты и support</p>
-                              <p className="mt-1 text-xs text-slate-700">{selectedConcept.contacts.phone} · {selectedConcept.contacts.email}</p>
-                              <p className="mt-1 text-[11px] text-slate-600">{selectedConcept.contacts.address}</p>
-                            </div>
-                          </>
-                        ) : null}
                       </div>
 
-                      <div className="sticky bottom-3 z-20 flex justify-center px-4">
-                        <div className="flex items-center gap-1 rounded-full border border-slate-200 bg-white/95 p-1 shadow-lg backdrop-blur">
-                          {previewTabs.map((tab) => (
-                            <button
-                              key={tab.id}
-                              onClick={() => setPreviewTab(tab.id)}
-                              className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                                previewTab === tab.id ? "text-white" : "text-slate-700"
-                              }`}
-                              style={previewTab === tab.id ? { backgroundColor: selectedConceptPalette.accent } : undefined}
-                            >
-                              {tab.label}
-                            </button>
-                          ))}
+                      <div className="sticky bottom-3 z-30 mt-4">
+                        <div className="mx-auto grid max-w-4xl grid-cols-[1fr_auto] items-center gap-3 rounded-[28px] border border-slate-200 bg-white/95 p-3 shadow-xl backdrop-blur">
+                          <button
+                            onClick={() => dispatch({ type: "set_step", step: "brief" })}
+                            className="rounded-2xl px-4 py-3 text-left text-2xl font-semibold text-slate-900 transition hover:bg-slate-100"
+                          >
+                            ← Изменить описание
+                          </button>
+                          <div className="min-w-[220px] rounded-[24px] bg-slate-200 px-7 py-3 text-center text-3xl font-bold text-slate-600">
+                            {Math.min(98, Math.max(55, Math.round((answeredCount / Math.max(interviewQuestions.length, 1)) * 100) + (state.conceptsStatus === "success" ? 12 : 0)))}%
+                          </div>
                         </div>
                       </div>
                     </div>
                   </div>
-                ) : null}
-                <div className="mt-3 flex gap-2">
+                ) : (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-700">
+                    Сначала соберите structured brief и сгенерируйте концепты.
+                  </div>
+                )}
+
+                <div className="flex flex-wrap gap-2">
                   <button
                     onClick={() => dispatch({ type: "set_step", step: "editor" })}
                     disabled={!selectedConcept}
@@ -952,7 +855,9 @@ export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) 
                   >
                     Открыть редактор
                   </button>
-                  <button onClick={() => dispatch({ type: "set_step", step: "brief" })} className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700">К брифу</button>
+                  <button onClick={() => dispatch({ type: "set_step", step: "brief" })} className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700">
+                    К брифу
+                  </button>
                 </div>
               </div>
             ) : null}
