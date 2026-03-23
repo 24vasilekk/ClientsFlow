@@ -8,18 +8,14 @@ export default async function handler(req: any, res: any) {
 
   try {
     const payload = (req.body || {}) as Partial<PublishedSitePayload>;
-    if (!payload.businessName || !payload.logoUrl || !payload.heroTitle) {
-      res.status(400).json({ error: "Missing required fields" });
-      return;
-    }
 
     const safePayload: PublishedSitePayload = {
-      businessName: String(payload.businessName || "Business"),
+      businessName: String(payload.businessName || "CFlow Site"),
       city: String(payload.city || ""),
       logoUrl: String(payload.logoUrl || ""),
       accentColor: String(payload.accentColor || "#0f172a"),
       baseColor: String(payload.baseColor || "#f8fafc"),
-      heroTitle: String(payload.heroTitle || ""),
+      heroTitle: String(payload.heroTitle || "Сайт вашего бизнеса"),
       heroSubtitle: String(payload.heroSubtitle || ""),
       about: String(payload.about || ""),
       primaryCta: String(payload.primaryCta || "Связаться"),
@@ -45,4 +41,3 @@ export default async function handler(req: any, res: any) {
     res.status(500).json({ error: error?.message || "Publish failed" });
   }
 }
-

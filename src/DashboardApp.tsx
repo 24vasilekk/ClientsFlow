@@ -4991,19 +4991,6 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                       <button
                         onClick={async () => {
                           if (sitesPublishing) return;
-                          if (!sitesLogoUrl) {
-                            setSitesActionMessage("Публикация невозможна без логотипа. Загрузите логотип в брифе.");
-                            return;
-                          }
-                          if (!sitesPayment.paid) {
-                            setSitesActionMessage("Сначала оплатите 3 500 ₽ в карточке стоимости, затем публикация станет доступна.");
-                            setSitesPaymentModalOpen(true);
-                            return;
-                          }
-                          if (!sitesAnswers.businessName.trim()) {
-                            setSitesActionMessage("Укажите название бизнеса в брифе, чтобы сформировать публикацию.");
-                            return;
-                          }
                           setSitesPublishing(true);
                           setSitesActionMessage("Публикуем сайт на домене...");
                           try {
@@ -5011,12 +4998,12 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                               method: "POST",
                               headers: { "Content-Type": "application/json" },
                               body: JSON.stringify({
-                                businessName: sitesAnswers.businessName,
+                                businessName: sitesAnswers.businessName || "CFlow Site",
                                 city: sitesAnswers.city,
                                 logoUrl: sitesLogoUrl,
                                 accentColor: sitesAccentColor,
                                 baseColor: sitesBaseColor,
-                                heroTitle: sitesGeneratedContent.heroTitle,
+                                heroTitle: sitesGeneratedContent.heroTitle || "Сайт вашего бизнеса",
                                 heroSubtitle: sitesGeneratedContent.heroSubtitle,
                                 about: sitesGeneratedContent.about,
                                 primaryCta: sitesGeneratedContent.primaryCta,
@@ -5053,7 +5040,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                         disabled={sitesPublishing}
                         className="w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                       >
-                        {sitesPublishing ? "Публикуем сайт..." : "Опубликовать и передать менеджеру"}
+                        {sitesPublishing ? "Публикуем сайт..." : "Опубликовать сайт"}
                       </button>
                       <button
                         onClick={() => handleNavChange("Диалоги")}
@@ -5065,7 +5052,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                     <p className="mt-2 text-xs font-semibold text-emerald-700">
                       При оплате сайта за 3 500 ₽ менеджер бесплатно подключит и настроит привязку к Telegram-боту.
                     </p>
-                    {!sitesPayment.paid ? <p className="mt-1 text-xs font-semibold text-amber-700">Публикация откроется сразу после оплаты.</p> : null}
+                    {!sitesPayment.paid ? <p className="mt-1 text-xs font-semibold text-amber-700">Оплата не обязательна для публикации в демо-режиме.</p> : null}
                     {sitesPublishedUrl ? (
                       <a href={sitesPublishedUrl} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs font-semibold text-cyan-700 underline">
                         Открыть опубликованный сайт
