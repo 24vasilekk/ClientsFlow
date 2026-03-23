@@ -1,6 +1,6 @@
 import { SitesBuilderAction, SitesBuilderState } from "./types";
 
-const SITES_BUILDER_STATE_KEY = "clientsflow_sites_builder_v2_state";
+const SITES_BUILDER_STATE_KEY = "clientsflow_sites_builder_v3_state";
 const VALID_STEPS = new Set(["intro", "brief", "concepts", "editor", "publish"]);
 
 const initialReference = {
@@ -69,7 +69,7 @@ export function loadSitesBuilderState(): SitesBuilderState {
           }))
         : initialSitesBuilderState.references,
       logos: Array.isArray(parsed.logos) ? parsed.logos.slice(0, 1) : [],
-      photos: Array.isArray(parsed.photos) ? parsed.photos.slice(0, 5) : []
+      photos: Array.isArray(parsed.photos) ? parsed.photos.slice(0, 10) : []
     };
   } catch {
     return initialSitesBuilderState;
@@ -135,7 +135,7 @@ export function sitesBuilderReducer(state: SitesBuilderState, action: SitesBuild
     case "set_logos":
       return { ...state, logos: action.logos.slice(0, 1) };
     case "set_photos":
-      return { ...state, photos: action.photos.slice(0, 5) };
+      return { ...state, photos: action.photos.slice(0, 10) };
     case "structured_brief_loading":
       return { ...state, structuredBriefStatus: "loading", structuredBriefError: null };
     case "set_structured_brief":

@@ -11,6 +11,15 @@ export type ReferenceItem = {
   likesOffer: boolean;
 };
 
+export type StructuredBrief = {
+  businessBrief: string;
+  offerBrief: string;
+  styleBrief: string;
+  contentBrief: string;
+  sectionPlan: string;
+  visualConstraints: string;
+};
+
 export type BriefAnswers = {
   businessName: string;
   niche: string;
@@ -44,6 +53,16 @@ export type SiteConcept = {
   services: Array<{ id: string; title: string; price: string; description: string }>;
   testimonials: Array<{ id: string; author: string; role: string; text: string }>;
   faq: Array<{ id: string; q: string; a: string }>;
+  contacts: {
+    phone: string;
+    email: string;
+    address: string;
+    messengerLabel: string;
+  };
+  footer: {
+    links: string[];
+    legal: string;
+  };
   cabinet: {
     title: string;
     text: string;
@@ -56,11 +75,7 @@ export type SitesBuilderState = {
   brief: BriefAnswers;
   interviewAnswers: Record<string, string>;
   currentQuestionIndex: number;
-  structuredBrief: {
-    businessBrief: string;
-    styleBrief: string;
-    contentBrief: string;
-  } | null;
+  structuredBrief: StructuredBrief | null;
   structuredBriefStatus: AsyncStatus;
   structuredBriefError: string | null;
   references: ReferenceItem[];
@@ -91,7 +106,7 @@ export type SitesBuilderAction =
   | { type: "set_photos"; photos: string[] }
   | {
       type: "set_structured_brief";
-      payload: { businessBrief: string; styleBrief: string; contentBrief: string };
+      payload: StructuredBrief;
     }
   | { type: "structured_brief_loading" }
   | { type: "structured_brief_error"; error: string }

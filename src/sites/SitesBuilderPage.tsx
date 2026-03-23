@@ -1,8 +1,12 @@
+import { motion } from "framer-motion";
 import { ChangeEvent, useEffect, useMemo, useReducer, useState } from "react";
 import { generateConcepts } from "./concepts";
 import { buildInterviewQuestions, buildStructuredBrief } from "./interview";
+import SitesPageShell from "./PageShell";
 import { loadSitesBuilderState, saveSitesBuilderState, sitesBuilderReducer } from "./state";
 import { AsyncStatus, SitesStep } from "./types";
+import { statusTone, sitesTokens } from "./tokens";
+import { SitesBadge, SitesButton, SitesCard, SitesModal, SitesStepper, SitesToast } from "./ui";
 
 type SitesBuilderPageProps = {
   onNavigate: (path: string) => void;
@@ -13,6 +17,8 @@ type EditorPreviewTab = "home" | "services" | "reviews" | "cabinet";
 type EditorService = { id: string; title: string; price: string; description: string; image?: string };
 type EditorTestimonial = { id: string; author: string; role: string; text: string };
 type EditorFaq = { id: string; q: string; a: string };
+type EditorTypography = { headingScale: "normal" | "large"; bodyScale: "normal" | "relaxed"; fontFamily: "sans" | "serif" };
+type EditorButtons = { radius: "pill" | "rounded"; style: "solid" | "soft" | "outline" };
 type EditorDraft = {
   conceptId: string;
   palette: { accent: string; base: string; hero: string };
@@ -27,6 +33,8 @@ type EditorDraft = {
   links: { telegram: string; whatsapp: string; instagram: string };
   sectionOrder: EditorSectionKey[];
   sectionsEnabled: Record<EditorSectionKey, boolean>;
+  typography: EditorTypography;
+  buttons: EditorButtons;
 };
 
 const editorSections: Array<{ key: EditorSectionKey; label: string }> = [
@@ -62,10 +70,7 @@ const stepTitle: Record<SitesStep, string> = {
 };
 
 function statusClass(status: AsyncStatus): string {
-  if (status === "loading") return "bg-amber-50 text-amber-700 border-amber-200";
-  if (status === "success") return "bg-emerald-50 text-emerald-700 border-emerald-200";
-  if (status === "error") return "bg-rose-50 text-rose-700 border-rose-200";
-  return "bg-slate-100 text-slate-700 border-slate-200";
+  return statusTone[status];
 }
 
 function statusLabel(status: AsyncStatus): string {
@@ -73,14 +78,6 @@ function statusLabel(status: AsyncStatus): string {
   if (status === "success") return "успешно";
   if (status === "error") return "ошибка";
   return "ожидание";
-}
-
-function sectionCardClass() {
-  return "rounded-3xl border border-slate-200/90 bg-white p-5 shadow-[0_10px_30px_-20px_rgba(15,23,42,0.35)] sm:p-6";
-}
-
-function sectionTitleClass() {
-  return "text-xl font-extrabold tracking-tight text-slate-900 sm:text-2xl";
 }
 
 export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) {
@@ -91,7 +88,11 @@ export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) 
   const [dragServiceId, setDragServiceId] = useState<string | null>(null);
   const [dragSectionId, setDragSectionId] = useState<EditorSectionKey | null>(null);
   const [aiCommand, setAiCommand] = useState("");
+  const [aiEditStatus, setAiEditStatus] = useState<AsyncStatus>("idle");
+  const [editorFaqOpen, setEditorFaqOpen] = useState<string | null>(null);
   const [publishOverlayMessage, setPublishOverlayMessage] = useState("Публикуем сайт...");
+  const [publishMode, setPublishMode] = useState<"cloud" | "local" | null>(null);
+  const [toast, setToast] = useState<{ tone: "success" | "error" | "info"; message: string } | null>(null);
   const interviewQuestions = useMemo(
     () => buildInterviewQuestions(state.interviewAnswers.niche || state.brief.niche),
     [state.interviewAnswers.niche, state.brief.niche]
@@ -104,11 +105,29 @@ export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) 
     () => interviewQuestions.filter((q) => (state.interviewAnswers[q.id] || "").trim().length > 0).length,
     [interviewQuestions, state.interviewAnswers]
   );
+  const filledReferencesCount = useMemo(
+    () => state.references.filter((item) => item.url.trim().length > 0).length,
+    [state.references]
+  );
   const currentQuestion = interviewQuestions[Math.min(state.currentQuestionIndex, Math.max(interviewQuestions.length - 1, 0))];
 
   useEffect(() => {
     saveSitesBuilderState(state);
   }, [state]);
+  useEffect(() => {
+    if (state.conceptsStatus === "success") setToast({ tone: "success", message: "Готово: выберите концепт и перейдите в редактор." });
+  }, [state.conceptsStatus]);
+  useEffect(() => {
+    if (state.paymentStatus === "success") setToast({ tone: "success", message: "Оплата подтверждена. Публикация уже доступна." });
+  }, [state.paymentStatus]);
+  useEffect(() => {
+    if (state.publishStatus === "error" && state.publishError) setToast({ tone: "error", message: state.publishError });
+  }, [state.publishStatus, state.publishError]);
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(null), 2800);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
 
   const selectedConcept = useMemo(
     () => state.concepts.find((item) => item.id === state.selectedConceptId) ?? null,
@@ -123,6 +142,16 @@ export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) 
     [state.logos, state.selectedConceptId, state.paymentStatus]
   );
   const canPublishNow = publishRequirements.every((item) => item.ok) && state.publishStatus !== "loading";
+  const interviewRequirements = useMemo(
+    () => [
+      { key: "required_answers", ok: answeredRequired, text: "Заполнены обязательные вопросы" },
+      { key: "logo", ok: Boolean(state.logos[0]), text: "Загружен обязательный логотип" },
+      { key: "references", ok: filledReferencesCount >= 1 && filledReferencesCount <= 5, text: "Добавлен минимум 1 сайт-пример" }
+    ],
+    [answeredRequired, state.logos, filledReferencesCount]
+  );
+  const canBuildBrief = interviewRequirements.every((item) => item.ok) && state.structuredBriefStatus !== "loading";
+  const canGenerateConcepts = canBuildBrief && state.structuredBriefStatus === "success" && state.conceptsStatus !== "loading";
 
   useEffect(() => {
     if (!selectedConcept) return;
@@ -157,14 +186,19 @@ export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) 
           cabinet: true,
           gallery: state.photos.length > 0,
           contacts: true
-        }
+        },
+        typography: { headingScale: "normal", bodyScale: "normal", fontFamily: "sans" },
+        buttons: { radius: "pill", style: "solid" }
       };
     });
   }, [selectedConcept, state.structuredBrief?.businessBrief, state.brief.businessName, state.brief.city, state.brief.niche, state.brief.telegramLink, state.brief.whatsappLink, state.brief.instagramLink, state.photos]);
 
   const handleMockGenerate = () => {
-    if (!answeredRequired || !state.logos[0]) {
-      dispatch({ type: "concepts_error", error: "Заполните обязательные вопросы и загрузите логотип." });
+    if (!canGenerateConcepts) {
+      dispatch({
+        type: "concepts_error",
+        error: "Сначала соберите structured brief: обязательные вопросы, логотип и минимум 1 сайт-пример."
+      });
       dispatch({ type: "set_step", step: "brief" });
       return;
     }
@@ -176,7 +210,17 @@ export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) 
         niche: state.interviewAnswers.niche || state.brief.niche,
         goal: state.interviewAnswers.goal || state.brief.goal,
         tone: state.interviewAnswers.tone || state.brief.tone,
-        offer: state.interviewAnswers.main_offer || "ключевая услуга"
+        offer: state.interviewAnswers.main_offer || "ключевая услуга",
+        siteLikeReference: state.interviewAnswers.site_like_reference || "",
+        hasLogo: Boolean(state.logos[0]),
+        photosCount: state.photos.length,
+        references: state.references.map((item) => ({
+          url: item.url,
+          likesStyle: item.likesStyle,
+          likesStructure: item.likesStructure,
+          likesOffer: item.likesOffer
+        })),
+        contentBrief: state.structuredBrief?.contentBrief || ""
       });
       dispatch({ type: "concepts_success", concepts });
       dispatch({ type: "set_step", step: "concepts" });
@@ -184,7 +228,17 @@ export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) 
   };
 
   const handleBuildStructuredBrief = () => {
-    if (!currentQuestion) return;
+    if (!currentQuestion) {
+      dispatch({ type: "structured_brief_error", error: "Вопросы интервью не загружены. Обновите страницу." });
+      return;
+    }
+    if (!canBuildBrief) {
+      dispatch({
+        type: "structured_brief_error",
+        error: "Заполните обязательные поля: логотип, обязательные ответы и минимум один сайт-пример."
+      });
+      return;
+    }
     dispatch({ type: "structured_brief_loading" });
     window.setTimeout(() => {
       try {
@@ -192,7 +246,7 @@ export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) 
         const payload = buildStructuredBrief({
           niche,
           answers: state.interviewAnswers,
-          referencesCount: state.references.filter((item) => item.url.trim()).length,
+          referencesCount: filledReferencesCount,
           logoLoaded: Boolean(state.logos[0]),
           photosCount: state.photos.length
         });
@@ -291,6 +345,7 @@ export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) 
     }
     const payload = buildPublishPayload();
     dispatch({ type: "publish_loading" });
+    setPublishMode(null);
     setPublishOverlayMessage("Публикуем сайт в облаке...");
     try {
       const response = await fetch("/api/sites/publish", {
@@ -301,7 +356,9 @@ export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) 
       const body = (await response.json()) as { path?: string; slug?: string; error?: string };
       const path = body.path || (body.slug ? `/s/${body.slug}` : "");
       if (!response.ok || !path) throw new Error(body.error || "Не удалось опубликовать");
+      setPublishMode("cloud");
       dispatch({ type: "publish_success", path });
+      setToast({ tone: "success", message: `Сайт опубликован в облаке: ${path}` });
       setPublishOverlayMessage("Сайт опубликован. Открываем...");
       window.setTimeout(() => onNavigate(path), PUBLISH_REDIRECT_DELAY_MS);
     } catch (error: any) {
@@ -316,10 +373,13 @@ export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) 
           })
         );
         const localPath = `/s/${localSlug}`;
+        setPublishMode("local");
         dispatch({ type: "publish_success", path: localPath });
+        setToast({ tone: "info", message: `Сайт опубликован через локальный fallback: ${localPath}` });
         setPublishOverlayMessage("Локальная публикация готова. Открываем...");
         window.setTimeout(() => onNavigate(localPath), PUBLISH_REDIRECT_DELAY_MS);
       } catch (fallbackError: any) {
+        setPublishMode(null);
         dispatch({
           type: "publish_error",
           error: `Не удалось опубликовать сайт. Облако: ${error?.message || "недоступно"}. Локальный fallback: ${
@@ -342,7 +402,7 @@ export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) 
       });
     const urls = await Promise.all(Array.from(files).map((file) => asDataUrl(file)));
     if (mode === "logo") dispatch({ type: "set_logos", logos: urls.slice(0, 1) });
-    else if (mode === "photos") dispatch({ type: "set_photos", photos: urls.slice(0, 5) });
+    else if (mode === "photos") dispatch({ type: "set_photos", photos: urls.slice(0, 10) });
     else if (referenceId && urls[0]) dispatch({ type: "update_reference_screenshot", id: referenceId, screenshotUrl: urls[0] });
     event.target.value = "";
   };
@@ -361,9 +421,16 @@ export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) 
     return next;
   };
 
-  const applyAiEdit = (mode: "short" | "premium" | "trust" | "booking" | "command", commandText?: string) => {
+  const applyAiEdit = async (mode: "short" | "premium" | "trust" | "booking" | "command", commandText?: string) => {
     if (!editorDraft) return;
+    if (mode === "command" && !(commandText || aiCommand || "").trim()) {
+      setAiEditStatus("error");
+      setToast({ tone: "error", message: "Введите команду для AI-правки." });
+      return;
+    }
+    setAiEditStatus("loading");
     const cmd = (commandText || aiCommand || "").toLowerCase();
+    await new Promise((resolve) => window.setTimeout(resolve, 260));
     updateDraft((prev) => {
       const next = { ...prev };
       if (mode === "short" || cmd.includes("короче")) {
@@ -380,7 +447,6 @@ export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) 
           ...item,
           text: `${item.text} Подтверждаем результат прозрачным процессом и понятными этапами.`
         }));
-        next.faq = next.faq.map((item) => (item.q.toLowerCase().includes("стоимость") ? item : item));
       }
       if (mode === "booking" || cmd.includes("запис")) {
         next.hero.primaryCta = "Записаться сейчас";
@@ -389,6 +455,9 @@ export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) 
       }
       return next;
     });
+    setAiEditStatus("success");
+    setToast({ tone: "success", message: "AI-правка применена." });
+    window.setTimeout(() => setAiEditStatus("idle"), 900);
   };
 
   const handleServiceImageUpload = async (event: ChangeEvent<HTMLInputElement>, serviceId: string) => {
@@ -422,46 +491,34 @@ export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) 
     { id: "wa", label: "WA", href: state.brief.whatsappLink },
     { id: "ig", label: "IG", href: state.brief.instagramLink }
   ];
+  const editorHeadingClass = editorDraft?.typography.headingScale === "large" ? "text-3xl sm:text-4xl" : "text-2xl";
+  const editorBodyClass = editorDraft?.typography.bodyScale === "relaxed" ? "text-base leading-7" : "text-sm leading-6";
+  const editorFontClass = editorDraft?.typography.fontFamily === "serif" ? "font-serif" : "font-sans";
+  const editorButtonRadiusClass = editorDraft?.buttons.radius === "rounded" ? "rounded-xl" : "rounded-full";
+  const editorButtonToneClass =
+    editorDraft?.buttons.style === "soft"
+      ? "border border-transparent bg-white/80 text-slate-900"
+      : editorDraft?.buttons.style === "outline"
+      ? "border border-slate-300 bg-transparent text-slate-900"
+      : "text-white";
 
   return (
-    <div className="min-h-screen bg-[#f6f8fb]">
-      <div className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
-        <div className="mx-auto flex max-w-[1200px] flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.12em] text-cyan-700">CFlow Sites</p>
-            <h1 className="text-xl font-extrabold tracking-tight text-slate-900">Новый модуль конструктора</h1>
-          </div>
-          <div className="flex w-full items-center gap-2 sm:w-auto">
-            <button onClick={() => onNavigate("/")} className="flex-1 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 sm:flex-none">Главная</button>
-            <button onClick={() => onNavigate("/dashboard")} className="flex-1 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white sm:flex-none">Личный кабинет</button>
-          </div>
-        </div>
-      </div>
-
-      <div className="mx-auto max-w-[1200px] px-4 py-6 sm:px-6 sm:py-8">
-        <div className={sectionCardClass()}>
+    <SitesPageShell onNavigate={onNavigate}>
+        <SitesCard>
           <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Шаги</p>
-          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-            {stepOrder.map((step, index) => (
-              <button
-                key={step}
-                onClick={() => dispatch({ type: "set_step", step })}
-                className={`rounded-xl border px-3 py-2 text-left text-sm font-semibold ${
-                  state.step === step ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-slate-50 text-slate-700"
-                }`}
-              >
-                <span className={`mr-2 inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] ${state.step === step ? "bg-white/20" : "bg-white border border-slate-200 text-slate-500"}`}>{index + 1}</span>
-                {stepTitle[step]}
-              </button>
-            ))}
-          </div>
-        </div>
+          <SitesStepper
+            items={stepOrder.map((step) => ({ key: step, label: stepTitle[step] }))}
+            active={state.step}
+            onSelect={(step) => dispatch({ type: "set_step", step: step as SitesStep })}
+          />
+        </SitesCard>
 
         <div className="mt-4 grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-          <section className={sectionCardClass()}>
+          <section className={sitesTokens.surface}>
+            <motion.div key={state.step} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22 }}>
             {state.step === "intro" ? (
               <div className="space-y-4">
-                <h2 className={sectionTitleClass()}>CFlow Sites: production-ready конструктор</h2>
+                <h2 className={sitesTokens.title}>CFlow Sites: production-ready конструктор</h2>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">Дальше: интервью, генерация 4 концептов, ручная редактура, оплата и публикация на `/s/slug` с cloud/local fallback.</p>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -473,9 +530,7 @@ export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) 
                     <p className="mt-2 text-sm text-slate-700">После публикации можно сразу перейти в кабинет, AI Inbox и сценарии Telegram-коммуникации.</p>
                   </div>
                 </div>
-                <button onClick={() => dispatch({ type: "set_step", step: "brief" })} className="mt-4 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white">
-                  Начать с брифа
-                </button>
+                <SitesButton onClick={() => dispatch({ type: "set_step", step: "brief" })} className="mt-4">Начать с брифа</SitesButton>
               </div>
             ) : null}
 
@@ -483,14 +538,14 @@ export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) 
               <div className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <h2 className={sectionTitleClass()}>AI-интервью для сайта</h2>
+                    <h2 className={sitesTokens.title}>AI-интервью для сайта</h2>
                     <p className="mt-1 text-sm text-slate-600">
                       Динамический бриф: {interviewQuestions.length} вопросов, ветвление по нише, итог — structured brief.
                     </p>
                   </div>
-                  <span className="rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-700">
+                  <SitesBadge className="border-cyan-200 bg-cyan-50 text-cyan-700">
                     Заполнено: {answeredCount}/{interviewQuestions.length}
-                  </span>
+                  </SitesBadge>
                 </div>
 
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -554,16 +609,16 @@ export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) 
                     </p>
                   </label>
                   <label className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
-                    <span className="font-semibold text-slate-700">Фото (до 5, опционально)</span>
+                    <span className="font-semibold text-slate-700">Фото (до 10, опционально)</span>
                     <input type="file" multiple accept="image/*" onChange={(e) => void handleFileList(e, "photos")} className="mt-2 block w-full text-xs" />
-                    <p className="mt-2 text-xs text-slate-500">Добавлено: {state.photos.length}/5</p>
+                    <p className="mt-2 text-xs text-slate-500">Добавлено: {state.photos.length}/10</p>
                   </label>
                 </div>
 
                 <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm font-semibold text-slate-900">Сайты-примеры и скриншоты</p>
-                    <span className="text-xs text-slate-500">{state.references.length}/5</span>
+                    <span className="text-xs text-slate-500">Заполнено: {filledReferencesCount}/5</span>
                   </div>
                   {state.references.map((item) => (
                     <div key={item.id} className="rounded-lg border border-slate-200 bg-white p-3">
@@ -605,19 +660,35 @@ export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) 
                 </div>
 
                 <div className="rounded-xl border border-slate-200 bg-white p-3">
+                  <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Обязательные блокеры</p>
+                  <div className="mt-2 space-y-1.5">
+                    {interviewRequirements.map((item) => (
+                      <p key={item.key} className={`text-xs font-semibold ${item.ok ? "text-emerald-700" : "text-amber-700"}`}>
+                        {item.ok ? "✓" : "•"} {item.text}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 bg-white p-3">
                   <div className="flex flex-wrap gap-2">
                     <button
                       onClick={handleBuildStructuredBrief}
-                      disabled={!answeredRequired}
+                      disabled={!canBuildBrief}
                       className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
                     >
                       Собрать structured brief
                     </button>
-                    <button onClick={handleMockGenerate} className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700">
+                    <button
+                      onClick={handleMockGenerate}
+                      disabled={!canGenerateConcepts}
+                      className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-50"
+                    >
                       Сгенерировать концепты
                     </button>
                   </div>
-                  {!answeredRequired ? <p className="mt-2 text-xs font-semibold text-amber-700">Заполните обязательные ответы, чтобы собрать brief.</p> : null}
+                  {!canBuildBrief ? <p className="mt-2 text-xs font-semibold text-amber-700">Для сборки brief заполните обязательные ответы, загрузите логотип и добавьте минимум 1 сайт-пример.</p> : null}
+                  {!canGenerateConcepts ? <p className="mt-1 text-xs text-slate-500">Генерация концептов доступна после успешной сборки structured brief.</p> : null}
                   {state.structuredBriefStatus === "loading" ? <p className="mt-2 text-xs text-slate-500">Собираем AI-выжимку...</p> : null}
                   {state.structuredBriefError ? <p className="mt-2 text-xs text-rose-600">{state.structuredBriefError}</p> : null}
                 </div>
@@ -631,12 +702,24 @@ export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) 
                         <p className="mt-1 text-sm text-slate-700">{state.structuredBrief.businessBrief}</p>
                       </div>
                       <div className="rounded-xl border border-cyan-200 bg-white p-3">
+                        <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">offerBrief</p>
+                        <p className="mt-1 text-sm text-slate-700">{state.structuredBrief.offerBrief}</p>
+                      </div>
+                      <div className="rounded-xl border border-cyan-200 bg-white p-3">
                         <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">styleBrief</p>
                         <p className="mt-1 text-sm text-slate-700">{state.structuredBrief.styleBrief}</p>
                       </div>
                       <div className="rounded-xl border border-cyan-200 bg-white p-3">
                         <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">contentBrief</p>
                         <p className="mt-1 text-sm text-slate-700">{state.structuredBrief.contentBrief}</p>
+                      </div>
+                      <div className="rounded-xl border border-cyan-200 bg-white p-3">
+                        <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">sectionPlan</p>
+                        <p className="mt-1 text-sm text-slate-700">{state.structuredBrief.sectionPlan}</p>
+                      </div>
+                      <div className="rounded-xl border border-cyan-200 bg-white p-3">
+                        <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">visualConstraints</p>
+                        <p className="mt-1 text-sm text-slate-700">{state.structuredBrief.visualConstraints}</p>
                       </div>
                     </div>
                   </div>
@@ -646,7 +729,7 @@ export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) 
 
             {state.step === "concepts" ? (
               <div>
-                <h2 className={sectionTitleClass()}>Концепты сайта</h2>
+                <h2 className={sitesTokens.title}>Концепты сайта</h2>
                 <div className="mt-3 grid gap-2 lg:grid-cols-2">
                   {state.concepts.map((item) => (
                     <button
@@ -727,37 +810,76 @@ export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) 
                       )}
 
                       <div className="space-y-3 p-4">
-                        {(previewTab === "home" || previewTab === "services") ? (
-                          <div className="rounded-xl border border-slate-200 bg-white p-3">
-                            <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Услуги</p>
-                            <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                              {selectedConcept.services.map((srv) => (
-                                <div key={srv.id} className="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
-                                  <p className="text-xs font-semibold text-slate-900">{srv.title}</p>
-                                  <p className="mt-0.5 text-[11px] text-slate-600">{srv.price}</p>
-                                  <p className="mt-1 line-clamp-2 text-[11px] text-slate-600">{srv.description}</p>
-                                  <div className="mt-2 flex items-center justify-between">
-                                    <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-500">45–60 мин</span>
-                                    <span className="text-[10px] font-semibold text-cyan-700">Заказать</span>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ) : null}
-
                         {previewTab === "home" ? (
-                          <div className="rounded-xl border border-slate-200 bg-white p-3">
-                            <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Как это работает</p>
-                            <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                              {["Оставляете заявку", "Уточняем задачу", "Фиксируем запись"].map((step) => (
-                                <div key={step} className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700">{step}</div>
-                              ))}
+                          <>
+                            <div className="rounded-xl border border-slate-200 bg-white p-3">
+                              <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">О компании</p>
+                              <p className="mt-1 text-sm text-slate-700">{state.structuredBrief?.businessBrief || "Краткое описание бизнеса появится после интервью."}</p>
                             </div>
-                          </div>
+                            <div className="rounded-xl border border-slate-200 bg-white p-3">
+                              <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Услуги</p>
+                              <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                                {selectedConcept.services.map((srv, idx) => (
+                                  <div key={srv.id} className="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+                                    {state.photos[idx] ? <img src={state.photos[idx]} alt={srv.title} className="mb-2 h-16 w-full rounded-md object-cover" /> : null}
+                                    <p className="text-xs font-semibold text-slate-900">{srv.title}</p>
+                                    <p className="mt-0.5 text-[11px] text-slate-600">{srv.price}</p>
+                                    <p className="mt-1 line-clamp-2 text-[11px] text-slate-600">{srv.description}</p>
+                                    <div className="mt-2 flex items-center justify-between">
+                                      <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-500">45–60 мин</span>
+                                      <span className="text-[10px] font-semibold text-cyan-700">Заказать</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                            <div className="rounded-xl border border-slate-200 bg-white p-3">
+                              <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Контакты</p>
+                              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                                <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+                                  <p className="text-xs font-semibold text-slate-900">{selectedConcept.contacts.phone}</p>
+                                  <p className="text-[11px] text-slate-600">{selectedConcept.contacts.email}</p>
+                                  <p className="mt-1 text-[11px] text-slate-600">{selectedConcept.contacts.address}</p>
+                                </div>
+                                <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+                                  <p className="text-[11px] text-slate-600">Канал связи</p>
+                                  <p className="mt-1 text-xs font-semibold text-slate-900">{selectedConcept.contacts.messengerLabel}</p>
+                                </div>
+                              </div>
+                            </div>
+                          </>
                         ) : null}
 
-                        {(previewTab === "reviews") ? (
+                        {previewTab === "services" ? (
+                          <>
+                            <div className="rounded-xl border border-slate-200 bg-white p-3">
+                              <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Каталог услуг</p>
+                              <div className="mt-2 space-y-2">
+                                {selectedConcept.services.map((srv, idx) => (
+                                  <div key={srv.id} className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-xs font-semibold text-slate-900">{srv.title}</p>
+                                      <p className="mt-1 text-[11px] text-slate-600">{srv.description}</p>
+                                      {state.photos[idx] ? <img src={state.photos[idx]} alt={srv.title} className="mt-2 h-16 w-full rounded-md object-cover sm:w-40" /> : null}
+                                    </div>
+                                    <div className="shrink-0 rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-900">{srv.price}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                            <div className="rounded-xl border border-slate-200 bg-white p-3">
+                              <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Footer</p>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {selectedConcept.footer.links.map((link) => (
+                                  <span key={link} className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] text-slate-600">{link}</span>
+                                ))}
+                              </div>
+                              <p className="mt-2 text-[11px] text-slate-500">{selectedConcept.footer.legal}</p>
+                            </div>
+                          </>
+                        ) : null}
+
+                        {previewTab === "reviews" ? (
                           <>
                             <div className="rounded-xl border border-slate-200 bg-white p-3">
                               <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Отзывы</p>
@@ -786,13 +908,20 @@ export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) 
                         ) : null}
 
                         {previewTab === "cabinet" ? (
-                          <div className="rounded-xl border border-slate-200 bg-white p-3">
-                            <p className="text-sm font-semibold text-slate-900">{selectedConcept.cabinet.title}</p>
-                            <p className="mt-1 text-xs text-slate-700">{selectedConcept.cabinet.text}</p>
-                            <button className="mt-3 rounded-full px-3 py-1.5 text-xs font-semibold text-white" style={{ backgroundColor: selectedConceptPalette.accent }}>
-                              {selectedConcept.cabinet.cta}
-                            </button>
-                          </div>
+                          <>
+                            <div className="rounded-xl border border-slate-200 bg-white p-3">
+                              <p className="text-sm font-semibold text-slate-900">{selectedConcept.cabinet.title}</p>
+                              <p className="mt-1 text-xs text-slate-700">{selectedConcept.cabinet.text}</p>
+                              <button className="mt-3 rounded-full px-3 py-1.5 text-xs font-semibold text-white" style={{ backgroundColor: selectedConceptPalette.accent }}>
+                                {selectedConcept.cabinet.cta}
+                              </button>
+                            </div>
+                            <div className="rounded-xl border border-slate-200 bg-white p-3">
+                              <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Контакты и support</p>
+                              <p className="mt-1 text-xs text-slate-700">{selectedConcept.contacts.phone} · {selectedConcept.contacts.email}</p>
+                              <p className="mt-1 text-[11px] text-slate-600">{selectedConcept.contacts.address}</p>
+                            </div>
+                          </>
                         ) : null}
                       </div>
 
@@ -831,7 +960,7 @@ export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) 
             {state.step === "editor" ? (
               <div className="space-y-4">
                 <div>
-                  <h2 className={sectionTitleClass()}>Пост-редактор сайта</h2>
+                  <h2 className={sitesTokens.title}>Пост-редактор сайта</h2>
                   <p className="mt-1 text-sm text-slate-600">Редактируйте тексты, стиль и структуру. AI-правки применяются в 1 клик.</p>
                 </div>
 
@@ -840,10 +969,10 @@ export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) 
                     <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                       <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">AI-правки</p>
                       <div className="mt-2 flex flex-wrap gap-2">
-                        <button onClick={() => applyAiEdit("short")} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700">Сделай короче</button>
-                        <button onClick={() => applyAiEdit("premium")} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700">Сделай премиальнее</button>
-                        <button onClick={() => applyAiEdit("trust")} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700">Добавь больше доверия</button>
-                        <button onClick={() => applyAiEdit("booking")} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700">Сфокусируй на записи</button>
+                        <button disabled={aiEditStatus === "loading"} onClick={() => void applyAiEdit("short")} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-60">Сделай короче</button>
+                        <button disabled={aiEditStatus === "loading"} onClick={() => void applyAiEdit("premium")} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-60">Сделай премиальнее</button>
+                        <button disabled={aiEditStatus === "loading"} onClick={() => void applyAiEdit("trust")} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-60">Добавь больше доверия</button>
+                        <button disabled={aiEditStatus === "loading"} onClick={() => void applyAiEdit("booking")} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-60">Сфокусируй на записи</button>
                       </div>
                       <div className="mt-2 flex gap-2">
                         <input
@@ -852,8 +981,11 @@ export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) 
                           placeholder="AI-команда: например, сделай заголовок спокойнее"
                           className="h-10 flex-1 rounded-lg border border-slate-300 px-3 text-sm"
                         />
-                        <button onClick={() => applyAiEdit("command", aiCommand)} className="rounded-lg bg-slate-900 px-3 text-xs font-semibold text-white">Применить</button>
+                        <button disabled={aiEditStatus === "loading" || aiCommand.trim().length === 0} onClick={() => void applyAiEdit("command", aiCommand)} className="rounded-lg bg-slate-900 px-3 text-xs font-semibold text-white disabled:opacity-60">Применить</button>
                       </div>
+                      <p className={`mt-2 text-xs font-semibold ${aiEditStatus === "loading" ? "text-amber-700" : aiEditStatus === "success" ? "text-emerald-700" : aiEditStatus === "error" ? "text-rose-700" : "text-slate-500"}`}>
+                        {aiEditStatus === "loading" ? "Применяем AI-правку..." : aiEditStatus === "success" ? "Изменения внесены" : aiEditStatus === "error" ? "Нужна корректная команда" : "Выберите пресет или введите команду"}
+                      </p>
                     </div>
 
                     <div className="grid gap-3">
@@ -978,7 +1110,7 @@ export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) 
                       </div>
 
                       <div className="rounded-xl border border-slate-200 bg-white p-3">
-                        <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Цвета и контакты</p>
+                        <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Цвета, типографика, кнопки и контакты</p>
                         <div className="mt-2 grid gap-2 sm:grid-cols-3">
                           <label className="text-xs font-semibold text-slate-600">Accent
                             <input type="color" value={editorDraft.palette.accent} onChange={(e) => updateDraft((prev) => ({ ...prev, palette: { ...prev.palette, accent: e.target.value } }))} className="mt-1 h-9 w-full rounded border border-slate-300" />
@@ -994,6 +1126,61 @@ export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) 
                           <input value={editorDraft.links.telegram} onChange={(e) => updateDraft((prev) => ({ ...prev, links: { ...prev.links, telegram: e.target.value } }))} placeholder="Telegram URL" className="rounded-lg border border-slate-300 px-3 py-2 text-xs" />
                           <input value={editorDraft.links.whatsapp} onChange={(e) => updateDraft((prev) => ({ ...prev, links: { ...prev.links, whatsapp: e.target.value } }))} placeholder="WhatsApp URL" className="rounded-lg border border-slate-300 px-3 py-2 text-xs" />
                           <input value={editorDraft.links.instagram} onChange={(e) => updateDraft((prev) => ({ ...prev, links: { ...prev.links, instagram: e.target.value } }))} placeholder="Instagram URL" className="rounded-lg border border-slate-300 px-3 py-2 text-xs" />
+                        </div>
+                        <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                          <label className="text-xs font-semibold text-slate-600">Заголовки
+                            <select
+                              value={editorDraft.typography.headingScale}
+                              onChange={(e) => updateDraft((prev) => ({ ...prev, typography: { ...prev.typography, headingScale: e.target.value as EditorTypography["headingScale"] } }))}
+                              className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs"
+                            >
+                              <option value="normal">Стандарт</option>
+                              <option value="large">Крупнее</option>
+                            </select>
+                          </label>
+                          <label className="text-xs font-semibold text-slate-600">Текст
+                            <select
+                              value={editorDraft.typography.bodyScale}
+                              onChange={(e) => updateDraft((prev) => ({ ...prev, typography: { ...prev.typography, bodyScale: e.target.value as EditorTypography["bodyScale"] } }))}
+                              className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs"
+                            >
+                              <option value="normal">Плотный</option>
+                              <option value="relaxed">Свободный</option>
+                            </select>
+                          </label>
+                          <label className="text-xs font-semibold text-slate-600">Шрифт
+                            <select
+                              value={editorDraft.typography.fontFamily}
+                              onChange={(e) => updateDraft((prev) => ({ ...prev, typography: { ...prev.typography, fontFamily: e.target.value as EditorTypography["fontFamily"] } }))}
+                              className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs"
+                            >
+                              <option value="sans">Sans</option>
+                              <option value="serif">Serif</option>
+                            </select>
+                          </label>
+                        </div>
+                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                          <label className="text-xs font-semibold text-slate-600">Форма кнопок
+                            <select
+                              value={editorDraft.buttons.radius}
+                              onChange={(e) => updateDraft((prev) => ({ ...prev, buttons: { ...prev.buttons, radius: e.target.value as EditorButtons["radius"] } }))}
+                              className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs"
+                            >
+                              <option value="pill">Pill</option>
+                              <option value="rounded">Rounded</option>
+                            </select>
+                          </label>
+                          <label className="text-xs font-semibold text-slate-600">Стиль кнопок
+                            <select
+                              value={editorDraft.buttons.style}
+                              onChange={(e) => updateDraft((prev) => ({ ...prev, buttons: { ...prev.buttons, style: e.target.value as EditorButtons["style"] } }))}
+                              className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-xs"
+                            >
+                              <option value="solid">Solid</option>
+                              <option value="soft">Soft</option>
+                              <option value="outline">Outline</option>
+                            </select>
+                          </label>
                         </div>
                         <input value={editorDraft.contactLine} onChange={(e) => updateDraft((prev) => ({ ...prev, contactLine: e.target.value }))} className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
                       </div>
@@ -1100,11 +1287,16 @@ export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) 
 
                         {editorPreviewTab === "home" ? (
                           <div className="px-4 py-5" style={{ backgroundColor: editorDraft.palette.hero }}>
-                            <h3 className="text-2xl font-extrabold tracking-tight text-slate-900">{editorDraft.hero.title}</h3>
-                            <p className="mt-2 text-sm text-slate-700">{editorDraft.hero.subtitle}</p>
+                            <h3 className={`${editorHeadingClass} ${editorFontClass} font-extrabold tracking-tight text-slate-900`}>{editorDraft.hero.title}</h3>
+                            <p className={`mt-2 ${editorBodyClass} ${editorFontClass} text-slate-700`}>{editorDraft.hero.subtitle}</p>
                             <div className="mt-3 flex flex-wrap gap-2">
-                              <button className="rounded-full px-4 py-2 text-xs font-semibold text-white" style={{ backgroundColor: editorDraft.palette.accent }}>{editorDraft.hero.primaryCta}</button>
-                              <button className="rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700">{editorDraft.hero.secondaryCta}</button>
+                              <button
+                                className={`${editorButtonRadiusClass} px-4 py-2 text-xs font-semibold ${editorButtonToneClass}`}
+                                style={editorDraft.buttons.style === "solid" ? { backgroundColor: editorDraft.palette.accent } : undefined}
+                              >
+                                {editorDraft.hero.primaryCta}
+                              </button>
+                              <button className={`${editorButtonRadiusClass} border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700`}>{editorDraft.hero.secondaryCta}</button>
                             </div>
                           </div>
                         ) : (
@@ -1124,7 +1316,7 @@ export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) 
                               return (
                                 <div key={sectionKey} className="rounded-xl border border-slate-200 bg-white p-3">
                                   <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">О компании</p>
-                                  <p className="mt-1 text-sm text-slate-700">{editorDraft.about}</p>
+                                  <p className={`mt-1 ${editorBodyClass} ${editorFontClass} text-slate-700`}>{editorDraft.about}</p>
                                 </div>
                               );
                             }
@@ -1139,7 +1331,7 @@ export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) 
                                         <p className="mt-1 text-xs font-semibold text-slate-900">{service.title}</p>
                                         <p className="text-[11px] text-slate-600">{service.price}</p>
                                         <p className="mt-1 line-clamp-2 text-[11px] text-slate-600">{service.description}</p>
-                                        <button className="mt-2 rounded-full border border-slate-300 bg-white px-2 py-1 text-[10px] font-semibold text-slate-700">Подробнее</button>
+                                        <button className={`mt-2 ${editorButtonRadiusClass} border border-slate-300 bg-white px-2 py-1 text-[10px] font-semibold text-slate-700`}>Подробнее</button>
                                       </div>
                                     ))}
                                   </div>
@@ -1177,8 +1369,14 @@ export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) 
                                   <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">FAQ</p>
                                   {editorDraft.faq.map((item) => (
                                     <div key={item.id} className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
-                                      <p className="text-xs font-semibold text-slate-900">{item.q}</p>
-                                      <p className="text-[11px] text-slate-700">{item.a}</p>
+                                      <button
+                                        onClick={() => setEditorFaqOpen((prev) => (prev === item.id ? null : item.id))}
+                                        className="flex w-full items-center justify-between text-left"
+                                      >
+                                        <p className="text-xs font-semibold text-slate-900">{item.q}</p>
+                                        <span className="text-xs font-bold text-slate-500">{editorFaqOpen === item.id ? "−" : "+"}</span>
+                                      </button>
+                                      {editorFaqOpen === item.id ? <p className="mt-2 text-[11px] text-slate-700">{item.a}</p> : null}
                                     </div>
                                   ))}
                                 </div>
@@ -1189,7 +1387,7 @@ export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) 
                                 <div key={sectionKey} className="rounded-xl border border-slate-200 bg-white p-3">
                                   <p className="text-sm font-semibold text-slate-900">{editorDraft.cabinet.title}</p>
                                   <p className="mt-1 text-xs text-slate-700">{editorDraft.cabinet.text}</p>
-                                  <button className="mt-2 rounded-full px-3 py-1.5 text-xs font-semibold text-white" style={{ backgroundColor: editorDraft.palette.accent }}>
+                                  <button className={`mt-2 ${editorButtonRadiusClass} px-3 py-1.5 text-xs font-semibold text-white`} style={{ backgroundColor: editorDraft.palette.accent }}>
                                     {editorDraft.cabinet.cta}
                                   </button>
                                 </div>
@@ -1238,13 +1436,13 @@ export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) 
                 ) : (
                   <p className="text-sm text-slate-600">Сначала выберите концепт на предыдущем шаге.</p>
                 )}
-                <button onClick={() => dispatch({ type: "set_step", step: "publish" })} className="mt-3 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white">Перейти к оплате и публикации</button>
+                <SitesButton onClick={() => dispatch({ type: "set_step", step: "publish" })} className="mt-3">Перейти к оплате и публикации</SitesButton>
               </div>
             ) : null}
 
             {state.step === "publish" ? (
               <div className="space-y-4">
-                <h2 className={sectionTitleClass()}>Оплата и публикация</h2>
+                <h2 className={sitesTokens.title}>Оплата и публикация</h2>
                 <p className="mt-2 text-sm text-slate-600">Надежный flow: оплата на этой странице, затем публикация, fullscreen загрузка и автопереход на готовый сайт.</p>
 
                 <div className="rounded-2xl border border-cyan-200 bg-cyan-50 p-4">
@@ -1254,13 +1452,13 @@ export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) 
                   ) : (
                     <p className="mt-2 text-sm text-slate-700">Перед публикацией оплатите сайт: 3 500 ₽ за один проект.</p>
                   )}
-                  <button
+                  <SitesButton
                     onClick={handleMockPayment}
                     disabled={state.paymentStatus === "loading" || state.paymentStatus === "success"}
-                    className="mt-3 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                    className="mt-3 w-full sm:w-auto"
                   >
                     {state.paymentStatus === "loading" ? "Проверяем оплату..." : state.paymentStatus === "success" ? "Оплачено" : "Оплатить 3 500 ₽"}
-                  </button>
+                  </SitesButton>
                 </div>
 
                 <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
@@ -1273,47 +1471,64 @@ export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) 
                       </p>
                     ))}
                   </div>
-                  <button
+                  <SitesButton
                     onClick={() => void handlePublish()}
                     disabled={!canPublishNow}
-                    className="mt-3 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                    tone="success"
+                    className="mt-3 w-full sm:w-auto"
                   >
                     {state.publishStatus === "loading" ? "Публикуем..." : "Опубликовать сайт"}
-                  </button>
+                  </SitesButton>
                   {!canPublishNow ? (
                     <p className="mt-2 text-xs text-amber-700">Чтобы опубликовать, завершите пункты из списка выше.</p>
                   ) : null}
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Связка с CFlow после публикации</p>
-                  <p className="mt-2 text-sm text-slate-700">Готовый сайт можно сразу подключить к обработке лидов в кабинете и сценариям Telegram.</p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <button onClick={() => onNavigate("/dashboard")} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700">
-                      Открыть кабинет
-                    </button>
-                    <button onClick={() => onNavigate("/workbench")} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700">
-                      Открыть AI Inbox
-                    </button>
-                    {toHref(state.brief.telegramLink) ? (
-                      <a href={toHref(state.brief.telegramLink)} target="_blank" rel="noreferrer" className="rounded-xl border border-cyan-300 bg-cyan-50 px-3 py-2 text-xs font-semibold text-cyan-700">
-                        Telegram канала
-                      </a>
-                    ) : null}
-                  </div>
+                  {state.publishStatus === "success" && publishMode ? (
+                    <p className="mt-2 text-xs font-semibold text-emerald-700">
+                      Режим публикации: {publishMode === "cloud" ? "облачный" : "локальный fallback"}.
+                    </p>
+                  ) : null}
                 </div>
 
                 {state.publishedPath ? (
-                  <button onClick={() => onNavigate(state.publishedPath!)} className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700">
-                    Открыть сайт сейчас
-                  </button>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Подключить к CFlow</p>
+                    <p className="mt-2 text-sm text-slate-700">Сайт опубликован. Следующий шаг — подключить обработку лидов, кабинет и Telegram-канал.</p>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                      <div className="rounded-xl border border-slate-200 bg-white p-3">
+                        <p className="text-xs font-bold text-slate-900">Лиды и статусы</p>
+                        <p className="mt-1 text-[11px] text-slate-600">Перенаправляйте заявки в CFlow для квалификации и воронки.</p>
+                        <SitesButton onClick={() => onNavigate("/dashboard")} tone="secondary" className="mt-2 w-full px-3 py-2 text-xs">Открыть кабинет</SitesButton>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-white p-3">
+                        <p className="text-xs font-bold text-slate-900">AI Inbox</p>
+                        <p className="mt-1 text-[11px] text-slate-600">Контролируйте входящие и follow-up в едином рабочем окне.</p>
+                        <SitesButton onClick={() => onNavigate("/workbench")} tone="secondary" className="mt-2 w-full px-3 py-2 text-xs">Открыть AI Inbox</SitesButton>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-white p-3">
+                        <p className="text-xs font-bold text-slate-900">Telegram-канал</p>
+                        <p className="mt-1 text-[11px] text-slate-600">Подключите основной канал, чтобы заявки приходили в рабочий контур.</p>
+                        {toHref(state.brief.telegramLink) ? (
+                          <a href={toHref(state.brief.telegramLink)} target="_blank" rel="noreferrer" className="mt-2 inline-flex w-full items-center justify-center rounded-xl border border-cyan-300 bg-cyan-50 px-3 py-2 text-xs font-semibold text-cyan-700">
+                            Открыть Telegram
+                          </a>
+                        ) : (
+                          <p className="mt-2 text-[11px] font-semibold text-amber-700">Добавьте ссылку Telegram в брифе.</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
+                {state.publishedPath ? (
+                  <SitesButton onClick={() => onNavigate(state.publishedPath!)} tone="secondary" className="w-full sm:w-auto">Открыть сайт сейчас</SitesButton>
                 ) : null}
               </div>
             ) : null}
+            </motion.div>
           </section>
 
           <aside className="space-y-4">
-            <div className={sectionCardClass()}>
+            <div className={sitesTokens.surface}>
               <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Состояния</p>
               <div className="mt-3 space-y-2 text-sm">
                 <div className={`rounded-xl border px-3 py-2 ${statusClass(state.conceptsStatus)}`}>Генерация концептов: {statusLabel(state.conceptsStatus)}</div>
@@ -1329,14 +1544,14 @@ export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) 
                 </p>
               ) : null}
             </div>
-            <div className={sectionCardClass()}>
+            <div className={sitesTokens.surface}>
               <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Текущий контекст</p>
               <p className="mt-2 text-sm text-slate-700">Бизнес: <span className="font-semibold text-slate-900">{state.brief.businessName || "не заполнен"}</span></p>
               <p className="mt-1 text-sm text-slate-700">Ниша: <span className="font-semibold text-slate-900">{state.brief.niche || "не заполнена"}</span></p>
               <p className="mt-1 text-sm text-slate-700">Референсы: <span className="font-semibold text-slate-900">{state.references.filter((r) => r.url.trim()).length}</span></p>
               <p className="mt-1 text-sm text-slate-700">Фото: <span className="font-semibold text-slate-900">{state.photos.length}</span></p>
             </div>
-            <div className={sectionCardClass()}>
+            <div className={sitesTokens.surface}>
               <p className="text-xs font-bold uppercase tracking-[0.12em] text-cyan-700">Интеграции CFlow</p>
               <div className="mt-3 grid grid-cols-2 gap-2">
                 {["Telegram", "WhatsApp", "Instagram", "AI Inbox"].map((item) => (
@@ -1349,17 +1564,16 @@ export default function SitesBuilderPage({ onNavigate }: SitesBuilderPageProps) 
             </div>
           </aside>
         </div>
-      </div>
-      {state.publishStatus === "loading" ? (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/75 px-4">
-          <div className="w-full max-w-md rounded-2xl border border-white/20 bg-white/10 p-6 text-center backdrop-blur-md">
-            <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-            <p className="mt-4 text-lg font-bold text-white">Публикация сайта</p>
-            <p className="mt-2 text-sm text-slate-200">{publishOverlayMessage}</p>
-            <p className="mt-2 text-xs text-slate-300">Не закрывайте страницу, идет подготовка ссылки.</p>
-          </div>
+      <SitesModal
+        open={state.publishStatus === "loading"}
+        title="Публикация сайта"
+        description={`${publishOverlayMessage} Не закрывайте страницу, идет подготовка ссылки.`}
+      >
+        <div className="mt-4 flex justify-center">
+          <div className="h-10 w-10 animate-spin rounded-full border-2 border-white/30 border-t-white" />
         </div>
-      ) : null}
-    </div>
+      </SitesModal>
+      <SitesToast show={Boolean(toast)} tone={toast?.tone || "info"} message={toast?.message || ""} />
+    </SitesPageShell>
   );
 }
