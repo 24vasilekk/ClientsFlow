@@ -1113,6 +1113,7 @@ const BUSINESS_TUNING_KEY = "clientsflow_business_tuning_v1";
 const SITES_BUILDER_PREFS_KEY = "clientsflow_sites_builder_prefs_v1";
 const SITES_BUILDER_STYLE_KEY = "clientsflow_sites_builder_style_v1";
 const SITES_BUILDER_PAYMENT_KEY = "clientsflow_sites_builder_payment_v1";
+const LOCAL_PUBLISHED_SITE_PREFIX = "clientsflow_local_published_site:";
 const TELEGRAM_ONBOARDING_QUESTIONS = [
   "Чтобы настроить ответы под ваш бизнес, задам 4 коротких вопроса. Первый: в какой нише вы работаете?",
   "Отлично. Какая у вас ключевая услуга или предложение?",
@@ -4996,39 +4997,50 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                           setSitesPublishRedirectScreen(true);
                           setSitesActionMessage("Публикуем сайт на домене...");
                           try {
+                            const publishPayload = {
+                              businessName: sitesAnswers.businessName || "CFlow Site",
+                              city: sitesAnswers.city,
+                              logoUrl: sitesLogoUrl,
+                              accentColor: sitesAccentColor,
+                              baseColor: sitesBaseColor,
+                              heroTitle: sitesGeneratedContent.heroTitle || "Сайт вашего бизнеса",
+                              heroSubtitle: sitesGeneratedContent.heroSubtitle,
+                              about: sitesGeneratedContent.about,
+                              primaryCta: sitesGeneratedContent.primaryCta,
+                              secondaryCta: sitesGeneratedContent.secondaryCta,
+                              trustStats: sitesGeneratedContent.trustStats,
+                              valueProps: sitesGeneratedContent.valueProps,
+                              processSteps: sitesGeneratedContent.processSteps,
+                              testimonials: sitesGeneratedContent.testimonials,
+                              faq: sitesGeneratedContent.faq,
+                              contactLine: sitesGeneratedContent.contactLine,
+                              products: sitesProducts,
+                              sections: sitesSections,
+                              sectionOrder: sitesSectionOrder,
+                              galleryUrls: sitesGalleryUrls,
+                              cabinetEnabled: sitesCabinetEnabled,
+                              telegramBot: sitesTelegramBot
+                            };
                             const response = await fetch("/api/sites/publish", {
                               method: "POST",
                               headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({
-                                businessName: sitesAnswers.businessName || "CFlow Site",
-                                city: sitesAnswers.city,
-                                logoUrl: sitesLogoUrl,
-                                accentColor: sitesAccentColor,
-                                baseColor: sitesBaseColor,
-                                heroTitle: sitesGeneratedContent.heroTitle || "Сайт вашего бизнеса",
-                                heroSubtitle: sitesGeneratedContent.heroSubtitle,
-                                about: sitesGeneratedContent.about,
-                                primaryCta: sitesGeneratedContent.primaryCta,
-                                secondaryCta: sitesGeneratedContent.secondaryCta,
-                                trustStats: sitesGeneratedContent.trustStats,
-                                valueProps: sitesGeneratedContent.valueProps,
-                                processSteps: sitesGeneratedContent.processSteps,
-                                testimonials: sitesGeneratedContent.testimonials,
-                                faq: sitesGeneratedContent.faq,
-                                contactLine: sitesGeneratedContent.contactLine,
-                                products: sitesProducts,
-                                sections: sitesSections,
-                                sectionOrder: sitesSectionOrder,
-                                galleryUrls: sitesGalleryUrls,
-                                cabinetEnabled: sitesCabinetEnabled,
-                                telegramBot: sitesTelegramBot
-                              })
+                              body: JSON.stringify(publishPayload)
                             });
                             const data = (await response.json()) as { slug?: string; path?: string; url?: string; error?: string };
                             const targetPath = data.path || (data.slug ? `/s/${data.slug}` : "");
                             const targetUrl = data.url || (targetPath ? `${window.location.origin}${targetPath}` : "");
                             if (!response.ok || !targetPath) {
                               throw new Error(data.error || "Не удалось опубликовать сайт");
+                            }
+                            if (data.slug) {
+                              try {
+                                localStorage.setItem(
+                                  `${LOCAL_PUBLISHED_SITE_PREFIX}${data.slug}`,
+                                  JSON.stringify({ slug: data.slug, payload: publishPayload })
+                                );
+                              } catch {
+                                // no-op
+                              }
                             }
                             setSitesFlowStatus("published");
                             setSitesGenerationProgress(100);

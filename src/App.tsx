@@ -210,6 +210,19 @@ type PublishedSiteData = {
   };
 };
 
+function loadLocalPublishedSite(slug: string): PublishedSiteData | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(`clientsflow_local_published_site:${slug}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as PublishedSiteData;
+    if (!parsed || typeof parsed !== "object" || typeof parsed.slug !== "string" || !parsed.payload) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 function useRoute(): [RoutePath, (path: RoutePath) => void] {
   const [path, setPath] = useState<RoutePath>(() => normalizePath(window.location.pathname));
 
@@ -948,10 +961,20 @@ function PublishedSitePage({ path, onNavigate }: { path: `/s/${string}`; onNavig
         const response = await fetch(`/api/sites/get?slug=${encodeURIComponent(slug)}`);
         const body = (await response.json()) as PublishedSiteData | { error?: string };
         if (!response.ok || !("payload" in body)) {
+          const localSite = loadLocalPublishedSite(slug);
+          if (localSite) {
+            if (!cancelled) setData(localSite);
+            return;
+          }
           throw new Error((body as { error?: string }).error || "Сайт не найден");
         }
         if (!cancelled) setData(body as PublishedSiteData);
       } catch (e: any) {
+        const localSite = loadLocalPublishedSite(slug);
+        if (localSite) {
+          if (!cancelled) setData(localSite);
+          return;
+        }
         if (!cancelled) setError(e?.message || "Ошибка загрузки сайта");
       } finally {
         if (!cancelled) setLoading(false);
