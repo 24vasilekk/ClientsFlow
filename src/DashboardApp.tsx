@@ -5035,6 +5035,12 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                             const targetUrl = String(data.url);
                             window.setTimeout(() => {
                               try {
+                                const parsed = new URL(targetUrl, window.location.origin);
+                                if (parsed.origin === window.location.origin && parsed.pathname.startsWith("/s/")) {
+                                  window.history.pushState({}, "", `${parsed.pathname}${parsed.search}${parsed.hash}`);
+                                  window.dispatchEvent(new PopStateEvent("popstate"));
+                                  return;
+                                }
                                 window.location.assign(targetUrl);
                               } catch {
                                 window.location.href = targetUrl;
