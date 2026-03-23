@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { createPublishedSite, getPublishedSite, type PublishedSitePayload } from "./api/sites/_store";
 
 function openRouterMiddleware() {
   const systemPrompt =
@@ -97,6 +98,8 @@ function openRouterMiddleware() {
     const isTelegramReplyRoute = req.method === "POST" && req.url === "/api/openrouter/telegram-reply";
     const isTelegramGetUpdatesRoute = req.method === "POST" && req.url === "/api/telegram/get-updates";
     const isTelegramSendRoute = req.method === "POST" && req.url === "/api/telegram/send-message";
+    const isSitesPublishRoute = req.method === "POST" && req.url === "/api/sites/publish";
+    const isSitesGetRoute = req.method === "GET" && String(req.url || "").startsWith("/api/sites/get");
     if (
       !isChatRoute &&
       !isSitesRoute &&
@@ -106,10 +109,84 @@ function openRouterMiddleware() {
       !isBusinessSummaryRoute &&
       !isTelegramReplyRoute &&
       !isTelegramGetUpdatesRoute &&
-      !isTelegramSendRoute
+      !isTelegramSendRoute &&
+      !isSitesPublishRoute &&
+      !isSitesGetRoute
     ) {
       next();
       return;
+    }
+
+    if (isSitesPublishRoute || isSitesGetRoute) {
+      try {
+        if (isSitesGetRoute) {
+          const parsed = new URL(String(req.url || "/api/sites/get"), "http://localhost");
+          const slug = (parsed.searchParams.get("slug") || "").trim();
+          if (!slug) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ error: "slug is required" }));
+            return;
+          }
+          const site = await getPublishedSite(slug);
+          if (!site) {
+            res.statusCode = 404;
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ error: "Not found" }));
+            return;
+          }
+          res.statusCode = 200;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify(site));
+          return;
+        }
+
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) {
+          chunks.push(Buffer.from(chunk));
+        }
+        const raw = Buffer.concat(chunks).toString("utf8");
+        const payload = (raw ? JSON.parse(raw) : {}) as Partial<PublishedSitePayload>;
+        if (!payload.businessName || !payload.logoUrl || !payload.heroTitle) {
+          res.statusCode = 400;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: "Missing required fields" }));
+          return;
+        }
+        const doc = await createPublishedSite({
+          businessName: String(payload.businessName || "Business"),
+          city: String(payload.city || ""),
+          logoUrl: String(payload.logoUrl || ""),
+          accentColor: String(payload.accentColor || "#0f172a"),
+          baseColor: String(payload.baseColor || "#f8fafc"),
+          heroTitle: String(payload.heroTitle || ""),
+          heroSubtitle: String(payload.heroSubtitle || ""),
+          about: String(payload.about || ""),
+          primaryCta: String(payload.primaryCta || "Связаться"),
+          secondaryCta: String(payload.secondaryCta || "Услуги"),
+          trustStats: Array.isArray(payload.trustStats) ? payload.trustStats.slice(0, 3) : [],
+          valueProps: Array.isArray(payload.valueProps) ? payload.valueProps.slice(0, 3) : [],
+          processSteps: Array.isArray(payload.processSteps) ? payload.processSteps.slice(0, 4) : [],
+          testimonials: Array.isArray(payload.testimonials) ? payload.testimonials.slice(0, 6) : [],
+          faq: Array.isArray(payload.faq) ? payload.faq.slice(0, 10) : [],
+          contactLine: String(payload.contactLine || ""),
+          products: Array.isArray(payload.products) ? payload.products.slice(0, 24) : [],
+          sections: payload.sections && typeof payload.sections === "object" ? (payload.sections as Record<string, boolean>) : {},
+          sectionOrder: Array.isArray(payload.sectionOrder) ? payload.sectionOrder.map((item) => String(item)) : [],
+          galleryUrls: Array.isArray(payload.galleryUrls) ? payload.galleryUrls.slice(0, 20).map((item) => String(item)) : [],
+          cabinetEnabled: payload.cabinetEnabled !== false,
+          telegramBot: String(payload.telegramBot || "@clientsflow_support_bot")
+        });
+        res.statusCode = 200;
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ slug: doc.slug, url: `http://localhost:5173/s/${doc.slug}` }));
+        return;
+      } catch (error: any) {
+        res.statusCode = 500;
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ error: error?.message || "Sites API error" }));
+        return;
+      }
     }
 
     if (isTelegramGetUpdatesRoute || isTelegramSendRoute) {

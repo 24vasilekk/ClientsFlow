@@ -1,0 +1,25 @@
+import { getPublishedSite } from "./_store";
+
+export default async function handler(req: any, res: any) {
+  if (req.method !== "GET") {
+    res.status(405).json({ error: "Method not allowed" });
+    return;
+  }
+
+  try {
+    const slug = String(req.query?.slug || "").trim();
+    if (!slug) {
+      res.status(400).json({ error: "slug is required" });
+      return;
+    }
+    const site = await getPublishedSite(slug);
+    if (!site) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+    res.status(200).json(site);
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || "Fetch failed" });
+  }
+}
+

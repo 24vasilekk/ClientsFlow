@@ -1525,6 +1525,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
   const [sitesFlowStatus, setSitesFlowStatus] = useState<"idle" | "generating" | "ready" | "published">("idle");
   const [sitesGenerationProgress, setSitesGenerationProgress] = useState(0);
   const [sitesActionMessage, setSitesActionMessage] = useState<string | null>(null);
+  const [sitesPublishedUrl, setSitesPublishedUrl] = useState<string>("");
   const [sitesLastGenerationMode, setSitesLastGenerationMode] = useState<"ai" | "fallback" | null>(null);
   const [sitesLogoUrl, setSitesLogoUrl] = useState<string>("");
   const [sitesGalleryUrls, setSitesGalleryUrls] = useState<string[]>([]);
@@ -1538,8 +1539,11 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
   const [sitesPreviewTab, setSitesPreviewTab] = useState<"home" | "services" | "reviews" | "cabinet">("home");
   const [sitesFaqOpen, setSitesFaqOpen] = useState<string | null>(null);
   const [sitesOpenedProductId, setSitesOpenedProductId] = useState<string | null>(null);
+  const [draggedSitesProductId, setDraggedSitesProductId] = useState<string | null>(null);
+  const [sitesProductUploadIndex, setSitesProductUploadIndex] = useState<number | null>(null);
   const sitesLogoInputRef = useRef<HTMLInputElement | null>(null);
   const sitesGalleryInputRef = useRef<HTMLInputElement | null>(null);
+  const sitesProductImageInputRef = useRef<HTMLInputElement | null>(null);
   const [mobileInboxView, setMobileInboxView] = useState<"list" | "detail">("list");
   const [subscription, setSubscription] = useState<SubscriptionState>(() => loadSubscription());
   const [checkoutPlanId, setCheckoutPlanId] = useState<PlanDefinition["id"] | null>(null);
@@ -2118,6 +2122,33 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
       next[index] = { ...next[index], [field]: value };
       return next;
     });
+  }
+
+  function reorderSitesProducts(sourceId: string, targetId: string): void {
+    if (sourceId === targetId) return;
+    setSitesProducts((prev) => {
+      const sourceIndex = prev.findIndex((item) => item.id === sourceId);
+      const targetIndex = prev.findIndex((item) => item.id === targetId);
+      if (sourceIndex < 0 || targetIndex < 0) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(sourceIndex, 1);
+      next.splice(targetIndex, 0, moved);
+      return next;
+    });
+  }
+
+  async function handleSitesProductImageUpload(file?: File): Promise<void> {
+    if (!file || sitesProductUploadIndex === null) return;
+    const dataUrl = await readFileAsDataUrl(file);
+    setSitesProducts((prev) => {
+      const next = [...prev];
+      if (!next[sitesProductUploadIndex]) return prev;
+      const current = next[sitesProductUploadIndex];
+      next[sitesProductUploadIndex] = { ...current, images: [dataUrl] };
+      return next;
+    });
+    setSitesActionMessage(`Фото загружено для товара #${sitesProductUploadIndex + 1}.`);
+    setSitesProductUploadIndex(null);
   }
 
   function reorderSitesSections(sourceKey: SitesSectionKey, targetKey: SitesSectionKey): void {
@@ -4265,6 +4296,12 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                       <p className="text-xs font-bold uppercase tracking-[0.12em] text-cyan-700">Фиксированная стоимость</p>
                       <p className="mt-1 text-2xl font-extrabold tracking-tight text-slate-900">3 500 ₽</p>
                       <p className="text-xs text-slate-600">за 1 сайт</p>
+                      <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 py-2">
+                        <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-emerald-700">Бонус при оплате</p>
+                        <p className="mt-1 text-xs font-semibold text-emerald-900">
+                          Бесплатная настройка и привязка к Telegram-боту через менеджера.
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </section>
@@ -4598,6 +4635,9 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                           setSitesPreviewTab("home");
                           setSitesFaqOpen(null);
                           setSitesOpenedProductId(null);
+                          setSitesProductUploadIndex(null);
+                          setDraggedSitesProductId(null);
+                          setSitesPublishedUrl("");
                           setSitesFlowStatus("idle");
                           setSitesGenerationProgress(0);
                           setSitesLastGenerationMode(null);
@@ -4656,7 +4696,36 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                           <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Товары / услуги</p>
                           <div className="mt-2 space-y-2">
                             {sitesProducts.map((product, index) => (
-                              <div key={product.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                              <div
+                                key={product.id}
+                                draggable
+                                onDragStart={() => setDraggedSitesProductId(product.id)}
+                                onDragOver={(event) => event.preventDefault()}
+                                onDrop={(event) => {
+                                  event.preventDefault();
+                                  if (!draggedSitesProductId) return;
+                                  reorderSitesProducts(draggedSitesProductId, product.id);
+                                  setDraggedSitesProductId(null);
+                                }}
+                                onDragEnd={() => setDraggedSitesProductId(null)}
+                                className="rounded-lg border border-slate-200 bg-slate-50 p-3"
+                              >
+                                <div className="mb-2 flex items-center justify-between gap-2">
+                                  <span className="text-xs text-slate-400">⋮⋮ Перетащите для сортировки</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSitesProductUploadIndex(index);
+                                      sitesProductImageInputRef.current?.click();
+                                    }}
+                                    className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700"
+                                  >
+                                    Загрузить фото
+                                  </button>
+                                </div>
+                                <div className="mb-2 h-16 overflow-hidden rounded-md border border-slate-200 bg-white">
+                                  {product.images[0] ? <img src={product.images[0]} alt={product.title} className="h-full w-full object-cover" /> : <div className="h-full w-full bg-slate-100" />}
+                                </div>
                                 <div className="grid gap-2 sm:grid-cols-2">
                                   <input
                                     value={product.title}
@@ -4687,6 +4756,16 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                               </div>
                             ))}
                           </div>
+                          <input
+                            ref={sitesProductImageInputRef}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(event) => {
+                              void handleSitesProductImageUpload(event.target.files?.[0]);
+                              event.currentTarget.value = "";
+                            }}
+                          />
                         </div>
 
                         <div className="rounded-xl border border-slate-200 bg-white p-3">
@@ -4821,8 +4900,8 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                           </div>
                         </div>
 
-                        <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center px-4">
-                          <div className="pointer-events-auto flex items-center gap-1 rounded-full border border-slate-200 bg-white/95 p-1 shadow-lg backdrop-blur">
+                        <div className="sticky bottom-3 z-20 flex justify-center px-4">
+                          <div className="flex items-center gap-1 rounded-full border border-slate-200 bg-white/95 p-1 shadow-lg backdrop-blur">
                             {previewTabs.map((tab) => (
                               <button
                                 key={tab.id}
@@ -4842,14 +4921,53 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
 
                     <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                       <button
-                        onClick={() => {
+                        onClick={async () => {
                           if (!sitesLogoUrl) {
                             setSitesActionMessage("Публикация невозможна без логотипа. Загрузите логотип в брифе.");
                             return;
                           }
-                          setSitesFlowStatus("published");
-                          setSitesGenerationProgress(100);
-                          setSitesActionMessage("Сайт опубликован. Финальная версия будет передана вашим менеджером для выдачи ссылки.");
+                          setSitesActionMessage("Публикуем сайт на домене...");
+                          try {
+                            const response = await fetch("/api/sites/publish", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                businessName: sitesAnswers.businessName,
+                                city: sitesAnswers.city,
+                                logoUrl: sitesLogoUrl,
+                                accentColor: sitesAccentColor,
+                                baseColor: sitesBaseColor,
+                                heroTitle: sitesGeneratedContent.heroTitle,
+                                heroSubtitle: sitesGeneratedContent.heroSubtitle,
+                                about: sitesGeneratedContent.about,
+                                primaryCta: sitesGeneratedContent.primaryCta,
+                                secondaryCta: sitesGeneratedContent.secondaryCta,
+                                trustStats: sitesGeneratedContent.trustStats,
+                                valueProps: sitesGeneratedContent.valueProps,
+                                processSteps: sitesGeneratedContent.processSteps,
+                                testimonials: sitesGeneratedContent.testimonials,
+                                faq: sitesGeneratedContent.faq,
+                                contactLine: sitesGeneratedContent.contactLine,
+                                products: sitesProducts,
+                                sections: sitesSections,
+                                sectionOrder: sitesSectionOrder,
+                                galleryUrls: sitesGalleryUrls,
+                                cabinetEnabled: sitesCabinetEnabled,
+                                telegramBot: sitesTelegramBot
+                              })
+                            });
+                            const data = (await response.json()) as { slug?: string; url?: string; error?: string };
+                            if (!response.ok || !data.url) {
+                              throw new Error(data.error || "Не удалось опубликовать сайт");
+                            }
+                            setSitesFlowStatus("published");
+                            setSitesGenerationProgress(100);
+                            setSitesPublishedUrl(data.url);
+                            setSitesActionMessage(`Сайт опубликован: ${data.url}`);
+                            window.open(data.url, "_blank", "noopener,noreferrer");
+                          } catch (error: any) {
+                            setSitesActionMessage(error?.message || "Ошибка публикации сайта");
+                          }
                         }}
                         disabled={!sitesLogoUrl || (sitesFlowStatus !== "ready" && sitesFlowStatus !== "published")}
                         className="w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
@@ -4863,6 +4981,14 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                         Открыть AI Inbox
                       </button>
                     </div>
+                    <p className="mt-2 text-xs font-semibold text-emerald-700">
+                      При оплате сайта за 3 500 ₽ менеджер бесплатно подключит и настроит привязку к Telegram-боту.
+                    </p>
+                    {sitesPublishedUrl ? (
+                      <a href={sitesPublishedUrl} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs font-semibold text-cyan-700 underline">
+                        Открыть опубликованный сайт
+                      </a>
+                    ) : null}
                   </div>
                 </section>
 

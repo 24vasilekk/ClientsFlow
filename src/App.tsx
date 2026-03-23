@@ -3,7 +3,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import DashboardApp from "./DashboardApp";
 import WorkbenchApp from "./WorkbenchApp";
 
-type RoutePath = "/" | "/login" | "/dashboard" | "/pricing" | "/workbench" | "/sites";
+type RoutePath = "/" | "/login" | "/dashboard" | "/pricing" | "/workbench" | "/sites" | `/s/${string}`;
 
 type ChatRole = "assistant" | "user";
 type ChatMessage = {
@@ -173,6 +173,7 @@ const faqItems = [
 ];
 
 function normalizePath(pathname: string): RoutePath {
+  if (pathname.startsWith("/s/")) return pathname as `/s/${string}`;
   if (pathname === "/login") return "/login";
   if (pathname === "/dashboard") return "/dashboard";
   if (pathname === "/pricing") return "/pricing";
@@ -180,6 +181,34 @@ function normalizePath(pathname: string): RoutePath {
   if (pathname === "/sites") return "/sites";
   return "/";
 }
+
+type PublishedSiteData = {
+  slug: string;
+  payload: {
+    businessName: string;
+    city?: string;
+    logoUrl: string;
+    accentColor: string;
+    baseColor: string;
+    heroTitle: string;
+    heroSubtitle: string;
+    about: string;
+    primaryCta: string;
+    secondaryCta: string;
+    trustStats: Array<{ label: string; value: string }>;
+    valueProps: string[];
+    processSteps: string[];
+    testimonials: Array<{ name: string; role: string; text: string }>;
+    faq: Array<{ q: string; a: string }>;
+    contactLine: string;
+    products: Array<{ id: string; title: string; price: string; description: string; ctaText: string; images: string[] }>;
+    sections: Record<string, boolean>;
+    sectionOrder: string[];
+    galleryUrls: string[];
+    cabinetEnabled: boolean;
+    telegramBot: string;
+  };
+};
 
 function useRoute(): [RoutePath, (path: RoutePath) => void] {
   const [path, setPath] = useState<RoutePath>(() => normalizePath(window.location.pathname));
@@ -901,6 +930,247 @@ function SitesPage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
   );
 }
 
+function PublishedSitePage({ path, onNavigate }: { path: `/s/${string}`; onNavigate: (path: RoutePath) => void }) {
+  const slug = path.replace("/s/", "");
+  const [data, setData] = useState<PublishedSiteData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"home" | "services" | "reviews" | "cabinet">("home");
+  const [openFaq, setOpenFaq] = useState<string | null>(null);
+  const [openedProductId, setOpenedProductId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await fetch(`/api/sites/get?slug=${encodeURIComponent(slug)}`);
+        const body = (await response.json()) as PublishedSiteData | { error?: string };
+        if (!response.ok || !("payload" in body)) {
+          throw new Error((body as { error?: string }).error || "Сайт не найден");
+        }
+        if (!cancelled) setData(body as PublishedSiteData);
+      } catch (e: any) {
+        if (!cancelled) setError(e?.message || "Ошибка загрузки сайта");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [slug]);
+
+  if (loading) {
+    return <div className="flex min-h-screen items-center justify-center bg-[#f7f8f6] text-sm font-semibold text-slate-600">Загружаем сайт...</div>;
+  }
+
+  if (error || !data) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#f7f8f6] px-4">
+        <div className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">Сайт не найден</h1>
+          <p className="mt-2 text-sm text-slate-600">{error || "Проверьте ссылку публикации."}</p>
+          <button onClick={() => onNavigate("/")} className="mt-4 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white">На главную</button>
+        </div>
+      </div>
+    );
+  }
+
+  const p = data.payload;
+  const sections = p.sections || {};
+  const openedProduct = p.products.find((item) => item.id === openedProductId) || null;
+  const tabs: Array<{ id: "home" | "services" | "reviews" | "cabinet"; label: string }> = [
+    { id: "home", label: "Дом" },
+    { id: "services", label: "Услуги" },
+    { id: "reviews", label: "Отзывы" },
+    { id: "cabinet", label: "Личный кабинет" }
+  ];
+  const visibleByTab: Record<typeof activeTab, string[]> = {
+    home: ["valueProps", "process", "gallery", "map"],
+    services: ["services"],
+    reviews: ["testimonials", "faq"],
+    cabinet: ["cabinet"]
+  };
+  const show = (key: string) => sections[key] !== false && visibleByTab[activeTab].includes(key);
+
+  return (
+    <div className="min-h-screen text-slate-900" style={{ backgroundColor: p.baseColor || "#f8fafc" }}>
+      <div className="border-b border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-[1100px] items-center justify-between gap-3 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-white">
+              {p.logoUrl ? <img src={p.logoUrl} alt={p.businessName} className="h-full w-full object-contain" /> : null}
+            </div>
+            <p className="text-sm font-bold">{p.businessName}</p>
+          </div>
+          <div className="flex items-center gap-2 text-xs">
+            <span className="rounded-full border border-slate-300 bg-white px-2.5 py-1">{p.city || "Город"}</span>
+            {["TG", "WA", "IG"].map((icon) => (
+              <span key={icon} className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-300 bg-white font-bold text-slate-600">{icon}</span>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="mx-auto max-w-[1100px] px-4 pb-24 pt-5">
+        <div className="rounded-2xl border border-slate-200 px-4 py-6" style={{ backgroundColor: p.baseColor || "#f8fafc" }}>
+          <h1 className="text-3xl font-extrabold tracking-tight">{p.heroTitle}</h1>
+          <p className="mt-2 max-w-3xl text-sm text-slate-700">{p.heroSubtitle}</p>
+          <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
+            <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500">About</p>
+            <p className="mt-1 text-sm leading-6 text-slate-700">{p.about}</p>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button className="rounded-full px-4 py-2 text-xs font-semibold text-white" style={{ backgroundColor: p.accentColor }}>{p.primaryCta}</button>
+            <button className="rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700">{p.secondaryCta}</button>
+            {p.cabinetEnabled ? <button className="rounded-full px-4 py-2 text-xs font-semibold text-white" style={{ backgroundColor: p.accentColor }}>Войти через Telegram</button> : null}
+          </div>
+          <div className="mt-4 grid gap-2 sm:grid-cols-3">
+            {p.trustStats?.slice(0, 3).map((item) => (
+              <div key={item.label} className="rounded-xl border border-slate-200 bg-white p-2.5">
+                <p className="text-[11px] text-slate-500">{item.label}</p>
+                <p className="text-sm font-bold text-slate-900">{item.value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {openedProduct ? (
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="text-sm font-bold text-slate-900">{openedProduct.title}</p>
+                <p className="text-xs text-slate-500">{openedProduct.price}</p>
+              </div>
+              <button onClick={() => setOpenedProductId(null)} className="text-sm font-semibold text-slate-500">✕</button>
+            </div>
+            {openedProduct.images?.[0] ? <img src={openedProduct.images[0]} alt={openedProduct.title} className="mt-2 h-44 w-full rounded-xl border border-slate-200 object-cover" /> : null}
+            <p className="mt-2 text-sm text-slate-700">{openedProduct.description}</p>
+            <button className="mt-3 rounded-full px-4 py-2 text-xs font-semibold text-white" style={{ backgroundColor: p.accentColor }}>{openedProduct.ctaText}</button>
+          </div>
+        ) : null}
+
+        <div className="mt-4 space-y-3">
+          {show("valueProps") ? (
+            <div className="rounded-xl border border-slate-200 bg-white p-3">
+              <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Преимущества</p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                {p.valueProps?.slice(0, 3).map((item) => <div key={item} className="aspect-square rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm font-semibold text-slate-800">{item}</div>)}
+              </div>
+            </div>
+          ) : null}
+
+          {show("services") ? (
+            <div className="rounded-xl border border-slate-200 bg-white p-3">
+              <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Услуги и товары</p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                {p.products?.map((product) => (
+                  <button key={product.id} onClick={() => setOpenedProductId(product.id)} className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-left transition hover:border-slate-400">
+                    <div className="h-20 overflow-hidden rounded-md border border-slate-200 bg-white">{product.images?.[0] ? <img src={product.images[0]} alt={product.title} className="h-full w-full object-cover" /> : null}</div>
+                    <p className="mt-2 text-xs font-semibold text-slate-900">{product.title}</p>
+                    <p className="text-xs text-slate-600">{product.price}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {show("process") ? (
+            <div className="rounded-xl border border-slate-200 bg-white p-3">
+              <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Как это работает</p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                {p.processSteps?.map((step, index) => (
+                  <div key={step} className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700"><span className="font-semibold text-slate-900">{index + 1}. </span>{step}</div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {show("gallery") && p.galleryUrls?.length ? (
+            <div className="rounded-xl border border-slate-200 bg-white p-3">
+              <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Галерея</p>
+              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {p.galleryUrls.map((url, index) => <img key={`${url}-${index}`} src={url} alt={`gallery-${index}`} className="h-24 w-full rounded-lg border border-slate-200 object-cover" />)}
+              </div>
+            </div>
+          ) : null}
+
+          {show("testimonials") ? (
+            <div className="rounded-xl border border-slate-200 bg-white p-3">
+              <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Отзывы</p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                {p.testimonials?.map((item) => (
+                  <div key={item.name} className="rounded-lg border border-slate-200 bg-slate-50 p-2">
+                    <p className="text-xs font-semibold text-slate-900">{item.name}</p>
+                    <p className="text-[11px] text-slate-500">{item.role}</p>
+                    <p className="mt-1 text-xs text-slate-700">{item.text}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {show("faq") ? (
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <div className="grid gap-4 md:grid-cols-[0.8fr_1.2fr]">
+                <h4 className="text-3xl font-extrabold tracking-tight text-slate-900">Частые вопросы</h4>
+                <div>
+                  {p.faq?.map((item) => {
+                    const isOpen = openFaq === item.q;
+                    return (
+                      <div key={item.q} className="border-t border-slate-200 py-3">
+                        <button onClick={() => setOpenFaq(isOpen ? null : item.q)} className="flex w-full items-center justify-between gap-2 text-left">
+                          <span className="text-base font-semibold text-slate-900">{item.q}</span>
+                          <span className="text-xl text-slate-500">{isOpen ? "−" : "+"}</span>
+                        </button>
+                        {isOpen ? <p className="mt-2 text-sm text-slate-600">{item.a}</p> : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {show("cabinet") && p.cabinetEnabled ? (
+            <div className="rounded-xl border border-slate-200 bg-white p-3">
+              <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Личный кабинет</p>
+              <div className="mt-2 rounded-lg border p-3" style={{ borderColor: `${p.accentColor}40`, backgroundColor: `${p.accentColor}12` }}>
+                <p className="text-xs font-semibold text-slate-900">Вход через Telegram</p>
+                <button className="mt-2 rounded-full px-3 py-1.5 text-[11px] font-semibold text-white" style={{ backgroundColor: p.accentColor }}>
+                  {p.telegramBot || "Войти через Telegram"}
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="mt-4 rounded-xl border border-cyan-200 bg-cyan-50 p-3">
+          <p className="text-sm font-semibold text-slate-900">{p.contactLine}</p>
+        </div>
+      </div>
+
+      <div className="fixed inset-x-0 bottom-4 z-20 flex justify-center px-4">
+        <div className="flex items-center gap-1 rounded-full border border-slate-200 bg-white/95 p-1 shadow-lg backdrop-blur">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${activeTab === tab.id ? "text-white" : "text-slate-700"}`}
+              style={activeTab === tab.id ? { backgroundColor: p.accentColor } : undefined}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DashboardRoute({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
   const isAuth = useMemo(() => {
     try {
@@ -988,6 +1258,7 @@ function WorkbenchRoute({ onNavigate }: { onNavigate: (path: RoutePath) => void 
 
 export default function App() {
   const [path, navigate] = useRoute();
+  const isPublishedSitePath = path.startsWith("/s/");
 
   return (
     <>
@@ -997,6 +1268,7 @@ export default function App() {
       {path === "/sites" ? <SitesPage onNavigate={navigate} /> : null}
       {path === "/dashboard" ? <DashboardRoute onNavigate={navigate} /> : null}
       {path === "/workbench" ? <WorkbenchRoute onNavigate={navigate} /> : null}
+      {isPublishedSitePath ? <PublishedSitePage path={path as `/s/${string}`} onNavigate={navigate} /> : null}
     </>
   );
 }
