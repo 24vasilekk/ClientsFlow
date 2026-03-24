@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type ChatSitesBuilderPageProps = {
   onNavigate: (path: string) => void;
@@ -47,6 +47,8 @@ type DslAction =
   | { kind: "addSection"; section: SectionKey }
   | { kind: "removeSection"; section: SectionKey }
   | { kind: "rewriteHero"; text: string }
+  | { kind: "undo" }
+  | { kind: "revert"; round: number }
   | { kind: "none" };
 
 type DraftState = {
@@ -85,6 +87,13 @@ type AgentProfile = {
   mustHave: string[];
 };
 
+type GenerationHistoryItem = {
+  id: string;
+  round: number;
+  engine: "openrouter" | "algorithm";
+  createdAt: string;
+};
+
 type DesignPreset = {
   id: string;
   label: string;
@@ -121,6 +130,7 @@ type PublishPayload = {
 };
 
 const LOCAL_PUBLISHED_SITE_PREFIX = "clientsflow_local_published_site:";
+const SITE_SESSION_STORAGE_KEY = "clientsflow_sites_generation_session";
 const PUBLISH_REDIRECT_DELAY_MS = 1200;
 
 const navItems = [
@@ -254,6 +264,11 @@ function parseDslCommand(text: string): DslAction {
   const cmd = command.toLowerCase();
 
   if (cmd === "regenerate") return { kind: "regenerate", guidance: rest };
+  if (cmd === "undo") return { kind: "undo" };
+  if (cmd === "revert") {
+    const round = Number(rest);
+    return Number.isFinite(round) && round > 0 ? { kind: "revert", round: Math.floor(round) } : { kind: "none" };
+  }
   if (cmd === "add-section") {
     const section = parseSectionArg(rest);
     return section ? { kind: "addSection", section } : { kind: "none" };
@@ -776,8 +791,11 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
   const [previewExpanded, setPreviewExpanded] = useState(true);
   const [generationRound, setGenerationRound] = useState(1);
   const [generationEngine, setGenerationEngine] = useState<"openrouter" | "algorithm">("algorithm");
-  const [generationSessionId, setGenerationSessionId] = useState(() => `session-${uid()}`);
-  const [generationHistory, setGenerationHistory] = useState<Array<{ id: string; round: number; engine: "openrouter" | "algorithm"; createdAt: string }>>([]);
+  const [generationSessionId, setGenerationSessionId] = useState(() => {
+    if (typeof window === "undefined") return `session-${uid()}`;
+    return localStorage.getItem(SITE_SESSION_STORAGE_KEY) || `session-${uid()}`;
+  });
+  const [generationHistory, setGenerationHistory] = useState<GenerationHistoryItem[]>([]);
   const [profile, setProfile] = useState<AgentProfile>({
     businessName: "",
     niche: "",
@@ -788,6 +806,30 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
   });
 
   const canPublish = paymentStatus === "success" && publishStatus !== "loading" && !!draft;
+
+  useEffect(() => {
+    localStorage.setItem(SITE_SESSION_STORAGE_KEY, generationSessionId);
+  }, [generationSessionId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadHistory = async () => {
+      if (!generationSessionId) return;
+      try {
+        const response = await fetch(`/api/sites/generate?sessionId=${encodeURIComponent(generationSessionId)}`);
+        if (!response.ok) return;
+        const body = (await response.json()) as { history?: GenerationHistoryItem[] };
+        if (cancelled || !Array.isArray(body.history)) return;
+        setGenerationHistory(body.history.slice(-8));
+      } catch {
+        // no-op: keep in-memory history
+      }
+    };
+    void loadHistory();
+    return () => {
+      cancelled = true;
+    };
+  }, [generationSessionId]);
 
   const addMessage = (role: ChatRole, text: string, tone: "default" | "soft" = "default") => {
     setMessages((prev) => [...prev, { id: uid(), role, text, time: nowTime(), tone }]);
@@ -896,6 +938,55 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
     setIsWorking(false);
   };
 
+  const restoreRound = async (targetRound: number) => {
+    if (targetRound < 1) {
+      addMessage("assistant", "Нельзя откатиться ниже первого варианта.", "soft");
+      return;
+    }
+    setGenerationStatus("loading");
+    setIsWorking(true);
+    setWorkingText(`Восстанавливаю вариант #${targetRound}...`);
+    try {
+      const response = await fetch(`/api/sites/generate?sessionId=${encodeURIComponent(generationSessionId)}`);
+      if (!response.ok) {
+        addMessage("assistant", "История сейчас недоступна. Попробуй чуть позже.", "soft");
+        return;
+      }
+      const body = (await response.json()) as {
+        history?: Array<{
+          id: string;
+          round: number;
+          engine: "openrouter" | "algorithm";
+          createdAt: string;
+          profile: AgentProfile;
+          draft: unknown;
+        }>;
+      };
+      if (!Array.isArray(body.history)) {
+        addMessage("assistant", "История вернулась в неверном формате.", "soft");
+        return;
+      }
+      setGenerationHistory(body.history.map((item) => ({ id: item.id, round: item.round, engine: item.engine, createdAt: item.createdAt })).slice(-8));
+      const record = body.history.find((item) => item.round === targetRound);
+      if (!record) {
+        addMessage("assistant", `Вариант #${targetRound} не найден.`, "soft");
+        return;
+      }
+      const fallback = createDraftFromProfile(record.profile, `restore-${targetRound}`, targetRound);
+      const restored = hydrateGeneratedDraft(record.draft, fallback);
+      setDraft(restored);
+      setProfile(record.profile);
+      setGenerationRound(targetRound);
+      setGenerationEngine(record.engine);
+      addMessage("assistant", `Готово. Восстановил вариант #${targetRound}.`, "soft");
+    } catch {
+      addMessage("assistant", "Не удалось восстановить версию из истории.", "soft");
+    } finally {
+      setGenerationStatus("success");
+      setIsWorking(false);
+    }
+  };
+
   const onSend = (raw: string) => {
     const text = raw.trim();
     if (!text) return;
@@ -913,6 +1004,14 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
       if (dsl.kind === "regenerate") {
         const merged = mergeProfile(profile, parseProfileFromMessage(dsl.guidance || text));
         void generateFromProfile(merged, dsl.guidance || text, generationRound + 1);
+        return;
+      }
+      if (dsl.kind === "undo") {
+        void restoreRound(generationRound - 1);
+        return;
+      }
+      if (dsl.kind === "revert") {
+        void restoreRound(dsl.round);
         return;
       }
       if (dsl.kind === "addSection") {
@@ -1447,7 +1546,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
               ))}
             </div>
             <p className="mt-2 text-xs text-slate-400">
-              DSL: <code>/regenerate premium dark</code> · <code>/add-section team</code> · <code>/remove-section faq</code> · <code>/rewrite-hero Новый оффер</code>
+              DSL: <code>/regenerate premium dark</code> · <code>/add-section team</code> · <code>/remove-section faq</code> · <code>/rewrite-hero Новый оффер</code> · <code>/undo</code> · <code>/revert 2</code>
             </p>
           </div>
         </main>
