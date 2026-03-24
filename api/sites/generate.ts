@@ -493,24 +493,11 @@ function buildAlgorithmicDraft(profile: AgentProfile, guidance: string, round: n
 
 async function tryOpenRouterGeneration(profile: AgentProfile, guidance: string, round: number): Promise<DraftLike | null> {
   const apiKey = String(process.env.OPENROUTER_API_KEY || "")
-    .replace(/[\r\n]+/g, "")
+    .replace(/[\r\n\s\u200B-\u200D\uFEFF]+/g, "")
     .trim();
   if (!apiKey) return null;
 
   const model = String(process.env.OPENROUTER_MODEL || "google/gemini-2.5-flash").trim();
-  let referer = "https://clients-flow-ten.vercel.app";
-  const envReferer = String(process.env.OPENROUTER_SITE_URL || "").trim();
-  if (envReferer) {
-    try {
-      const parsed = new URL(envReferer);
-      if (parsed.protocol === "https:" || parsed.protocol === "http:") {
-        referer = parsed.toString();
-      }
-    } catch {
-      referer = "https://clients-flow-ten.vercel.app";
-    }
-  }
-
   const prompt = [
     "Собери индивидуальный сайт в формате JSON на русском языке.",
     `Бизнес: ${profile.businessName || "без названия"}`,
@@ -565,9 +552,7 @@ async function tryOpenRouterGeneration(profile: AgentProfile, guidance: string, 
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": referer,
-        "X-Title": "ClientsFlow Sites Generator"
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({
         model,
@@ -703,16 +688,22 @@ export default async function handler(req: any, res: any) {
       { id: "assembly", ms: 14, source: "spec-assembler" }
     ];
 
-    const history = await appendSpecRecord({
-      id: `spec-${uid()}`,
-      sessionId,
-      createdAt: new Date().toISOString(),
-      round,
-      engine,
-      guidance,
-      profile,
-      draft
-    });
+    let history: Array<{ id: string; round: number; engine: "openrouter" | "algorithm"; createdAt: string }> = [];
+    try {
+      const persisted = await appendSpecRecord({
+        id: `spec-${uid()}`,
+        sessionId,
+        createdAt: new Date().toISOString(),
+        round,
+        engine,
+        guidance,
+        profile,
+        draft
+      });
+      history = persisted.map((item) => ({ id: item.id, round: item.round, engine: item.engine, createdAt: item.createdAt })).slice(-8);
+    } catch {
+      history = [];
+    }
 
     res.status(200).json({
       specVersion: "v1",
@@ -725,9 +716,9 @@ export default async function handler(req: any, res: any) {
       candidates: scored.slice(0, 4).map((item) => ({ id: item.id, engine: item.engine, score: item.score, label: item.label })),
       selectedCandidateId: selected.id,
       totalMs: Date.now() - startedAt,
-      history: history.map((item) => ({ id: item.id, round: item.round, engine: item.engine, createdAt: item.createdAt })).slice(-8)
+      history
     });
   } catch (error: any) {
-    res.status(500).json({ error: error?.message || "Generate failed" });
+    res.status(500).json({ error: "Generate failed" });
   }
 }
