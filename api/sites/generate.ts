@@ -1,5 +1,9 @@
 import { appendSpecRecord, getSpecHistory } from "./_specStore";
 
+export const config = {
+  maxDuration: 60
+};
+
 const SECTION_KEYS = ["about", "services", "team", "reviews", "faq", "booking", "contacts", "gallery"] as const;
 type SectionKey = (typeof SECTION_KEYS)[number];
 
@@ -553,7 +557,7 @@ async function tryOpenRouterGeneration(profile: AgentProfile, guidance: string, 
   ].join("\n");
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 14000);
+  const timeout = setTimeout(() => controller.abort(), 6500);
   try {
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
@@ -667,27 +671,11 @@ export default async function handler(req: any, res: any) {
     const startedAt = Date.now();
     const t1 = Date.now();
     debugStage = "openrouter_generate";
-    const [aiMain, aiAltA, aiAltB] = await Promise.all([
-      tryOpenRouterGeneration(profile, guidance, round, "ai-main"),
-      tryOpenRouterGeneration(
-        profile,
-        `${guidance}\nСобери альтернативу A: другая композиция секций, иная типографика и другой ритм отступов.`,
-        round + 101,
-        "ai-alt-a"
-      ),
-      tryOpenRouterGeneration(
-        profile,
-        `${guidance}\nСобери альтернативу B: другая visual language, контраст и плотность, но та же бизнес-цель.`,
-        round + 202,
-        "ai-alt-b"
-      )
-    ]);
+    const aiMain = await tryOpenRouterGeneration(profile, guidance, round, "ai-main");
     const t2 = Date.now();
     const candidatesPool: Array<{ id: string; engine: "openrouter" | "algorithm"; label: string; draft: DraftLike }> = [];
     if (aiMain.draft) candidatesPool.push({ id: "ai-main", engine: "openrouter", label: "AI Main", draft: aiMain.draft });
-    if (aiAltA.draft) candidatesPool.push({ id: "ai-alt-a", engine: "openrouter", label: "AI Alt A", draft: aiAltA.draft });
-    if (aiAltB.draft) candidatesPool.push({ id: "ai-alt-b", engine: "openrouter", label: "AI Alt B", draft: aiAltB.draft });
-    const aiErrors = [aiMain, aiAltA, aiAltB]
+    const aiErrors = [aiMain]
       .filter((item) => !item.draft)
       .map((item) => ({ candidate: item.candidate, status: item.status || null, error: item.error || "unknown_error" }));
     if (!candidatesPool.length) {
