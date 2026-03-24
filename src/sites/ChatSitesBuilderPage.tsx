@@ -276,6 +276,37 @@ async function parseJsonResponseSafe(response: Response) {
   }
 }
 
+function parseMaybeJsonObject(raw: string): Record<string, unknown> | null {
+  if (!raw || typeof raw !== "string") return null;
+  const text = raw.trim();
+  try {
+    const parsed = JSON.parse(text);
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    // continue
+  }
+  const fenced = text.match(/```json\s*([\s\S]*?)```/i) || text.match(/```\s*([\s\S]*?)```/i);
+  if (fenced?.[1]) {
+    try {
+      const parsed = JSON.parse(fenced[1].trim());
+      return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null;
+    } catch {
+      // continue
+    }
+  }
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start >= 0 && end > start) {
+    try {
+      const parsed = JSON.parse(text.slice(start, end + 1));
+      return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 function nowTime() {
   return new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
 }
@@ -1686,6 +1717,44 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
       setGenerationStatus("success");
     } catch (error: any) {
       const message = String(error?.message || "AI generation failed");
+      const lower = message.toLowerCase();
+      if (lower.includes("function_invocation_timeout") || lower.includes("status=504")) {
+        try {
+          const recoveryPrompt = [
+            "Верни только JSON для структуры лендинга. Без markdown.",
+            `Бизнес: ${nextProfile.businessName || "Studio Name"}`,
+            `Ниша: ${nextProfile.niche || "service"}`,
+            `Город: ${nextProfile.city || "Москва"}`,
+            `Цель: ${nextProfile.goal || "заявки"}`,
+            `Стиль: ${nextProfile.style || "современный"}`,
+            `Референс: ${nextProfile.styleReference || "-"}`,
+            `Запрос: ${guidance || "-"}`,
+            'Поля: heroTitle, heroSubtitle, aboutBody, services[], team[], reviews[], faq[], pageDsl[], pageCode.'
+          ].join("\n");
+          const recoveryRes = await fetch("/api/openrouter/sites-copy", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              messages: [{ role: "user", content: recoveryPrompt }]
+            })
+          });
+          const recoveryBody = (await recoveryRes.json()) as { reply?: string; error?: string };
+          if (recoveryRes.ok && typeof recoveryBody.reply === "string") {
+            const fallbackDraft = createDraftFromProfile(nextProfile, guidance, nextRound);
+            const aiJson = parseMaybeJsonObject(recoveryBody.reply);
+            const recoveredDraft = aiJson ? hydrateGeneratedDraft(aiJson, fallbackDraft) : fallbackDraft;
+            setGenerationEngine("openrouter");
+            setDraft(finalizeDraft(recoveredDraft));
+            setGenerationRound(nextRound);
+            setProfile(nextProfile);
+            setGenerationStatus("success");
+            addMessage("assistant", "Собрал сайт через резервный AI-канал. Можно продолжать правки в чате.", "soft");
+            return;
+          }
+        } catch {
+          // continue to error block
+        }
+      }
       const userMessage = humanizeGenerationError(message);
       const debugTrace = `stage=${debugStage}; endpoint=${debugEndpoint || "n/a"}; session=${debugSession}; raw=${message}`;
       setGenerationStatus("error");
