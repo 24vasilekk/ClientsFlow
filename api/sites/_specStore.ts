@@ -11,6 +11,7 @@ type SpecRecord = {
     city: string;
     goal: string;
     style: string;
+    styleReference?: string;
     mustHave: string[];
   };
   draft: unknown;

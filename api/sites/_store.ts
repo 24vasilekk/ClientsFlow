@@ -26,6 +26,13 @@ export type PublishedSitePayload = {
     whatsapp?: string;
     instagram?: string;
   };
+  theme?: {
+    fontHeading?: string;
+    fontBody?: string;
+    density?: "airy" | "balanced" | "compact";
+    radius?: "soft" | "rounded" | "sharp";
+    contrast?: "soft" | "medium" | "high";
+  };
 };
 
 export type PublishedSiteDoc = {

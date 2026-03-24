@@ -37,6 +37,11 @@ type DraftLike = {
   sectionOrder: SectionKey[];
   sectionsEnabled: Record<SectionKey, boolean>;
   summaryPoints: string[];
+  fontHeading: string;
+  fontBody: string;
+  density: "airy" | "balanced" | "compact";
+  radius: "soft" | "rounded" | "sharp";
+  contrast: "soft" | "medium" | "high";
 };
 
 type DesignPreset = {
@@ -177,7 +182,12 @@ function sanitizeDraft(raw: any, fallback: DraftLike): DraftLike {
     sectionsEnabled: toBoolRecord(raw.sectionsEnabled, fallback.sectionsEnabled),
     summaryPoints: Array.isArray(raw.summaryPoints)
       ? raw.summaryPoints.filter((item: unknown) => typeof item === "string" && item.trim()).slice(0, 7)
-      : fallback.summaryPoints
+      : fallback.summaryPoints,
+    fontHeading: typeof raw.fontHeading === "string" && raw.fontHeading.trim() ? raw.fontHeading.trim() : fallback.fontHeading,
+    fontBody: typeof raw.fontBody === "string" && raw.fontBody.trim() ? raw.fontBody.trim() : fallback.fontBody,
+    density: raw.density === "airy" || raw.density === "balanced" || raw.density === "compact" ? raw.density : fallback.density,
+    radius: raw.radius === "soft" || raw.radius === "rounded" || raw.radius === "sharp" ? raw.radius : fallback.radius,
+    contrast: raw.contrast === "soft" || raw.contrast === "medium" || raw.contrast === "high" ? raw.contrast : fallback.contrast
   };
 
   safe.sectionOrder = safe.sectionOrder.filter((key) => safe.sectionsEnabled[key]);
@@ -277,7 +287,12 @@ function buildAlgorithmicDraft(profile: AgentProfile, guidance: string, round: n
       `Навигация под нишу: ${nav.join(", ")}`,
       `Дизайн-вариант: ${preset.label}`,
       "Динамические секции и ready-to-publish структура"
-    ]
+    ],
+    fontHeading: preset.headlineStyle === "serif" ? '"Playfair Display", Georgia, serif' : '"Inter", "Segoe UI", sans-serif',
+    fontBody: '"Inter", "Segoe UI", sans-serif',
+    density: styleContext.includes("минимал") ? "airy" : "balanced",
+    radius: styleContext.includes("workspace") ? "rounded" : "soft",
+    contrast: styleContext.includes("dark") ? "high" : "medium"
   };
 }
 
@@ -323,7 +338,12 @@ async function tryOpenRouterGeneration(profile: AgentProfile, guidance: string, 
     '  "faq": [{"q":"...","a":"..."}],',
     '  "sectionOrder": ["about","services","team","reviews","faq","booking","contacts","gallery"],',
     '  "sectionsEnabled": {"about":true,"services":true,"team":true,"reviews":true,"faq":true,"booking":true,"contacts":true,"gallery":false},',
-    '  "summaryPoints": ["...", "..."]',
+    '  "summaryPoints": ["...", "..."],',
+    '  "fontHeading": "\"Playfair Display\", Georgia, serif",',
+    '  "fontBody": "\"Inter\", \"Segoe UI\", sans-serif",',
+    '  "density": "airy|balanced|compact",',
+    '  "radius": "soft|rounded|sharp",',
+    '  "contrast": "soft|medium|high"',
     "}"
   ].join("\n");
 

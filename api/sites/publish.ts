@@ -39,7 +39,26 @@ export default async function handler(req: any, res: any) {
               whatsapp: typeof payload.socialLinks.whatsapp === "string" ? payload.socialLinks.whatsapp : "",
               instagram: typeof payload.socialLinks.instagram === "string" ? payload.socialLinks.instagram : ""
             }
-          : { telegram: "", whatsapp: "", instagram: "" }
+          : { telegram: "", whatsapp: "", instagram: "" },
+      theme:
+        payload.theme && typeof payload.theme === "object"
+          ? {
+              fontHeading: typeof payload.theme.fontHeading === "string" ? payload.theme.fontHeading : "",
+              fontBody: typeof payload.theme.fontBody === "string" ? payload.theme.fontBody : "",
+              density:
+                payload.theme.density === "airy" || payload.theme.density === "balanced" || payload.theme.density === "compact"
+                  ? payload.theme.density
+                  : "balanced",
+              radius:
+                payload.theme.radius === "soft" || payload.theme.radius === "rounded" || payload.theme.radius === "sharp"
+                  ? payload.theme.radius
+                  : "soft",
+              contrast:
+                payload.theme.contrast === "soft" || payload.theme.contrast === "medium" || payload.theme.contrast === "high"
+                  ? payload.theme.contrast
+                  : "medium"
+            }
+          : { fontHeading: "", fontBody: "", density: "balanced", radius: "soft", contrast: "medium" }
     };
 
     const doc = await createPublishedSite(safePayload);

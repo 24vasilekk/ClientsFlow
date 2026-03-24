@@ -213,6 +213,13 @@ type PublishedSiteData = {
       whatsapp?: string;
       instagram?: string;
     };
+    theme?: {
+      fontHeading?: string;
+      fontBody?: string;
+      density?: "airy" | "balanced" | "compact";
+      radius?: "soft" | "rounded" | "sharp";
+      contrast?: "soft" | "medium" | "high";
+    };
   };
 };
 
@@ -1026,16 +1033,22 @@ function PublishedSitePage({ path, onNavigate }: { path: `/s/${string}`; onNavig
     reviews: { title: "Отзывы и ответы на вопросы", subtitle: "Реальные впечатления клиентов и ключевая информация перед обращением." },
     cabinet: { title: "Личный кабинет клиента", subtitle: "Доступ к записям, статусам и персональной коммуникации." }
   } as const;
+  const theme = p.theme || {};
+  const fontHeading = theme.fontHeading || '"Inter", "Segoe UI", sans-serif';
+  const fontBody = theme.fontBody || '"Inter", "Segoe UI", sans-serif';
+  const radius = theme.radius === "rounded" ? 24 : theme.radius === "sharp" ? 10 : 16;
+  const cardBorder = theme.contrast === "high" ? "rgba(15,23,42,0.24)" : "rgba(148,163,184,0.28)";
+  const blockPadding = theme.density === "compact" ? "12px" : theme.density === "airy" ? "22px" : "16px";
 
   return (
-    <div className="min-h-screen text-slate-900" style={{ backgroundColor: p.baseColor || "#f8fafc" }}>
+    <div className="min-h-screen text-slate-900" style={{ backgroundColor: p.baseColor || "#f8fafc", fontFamily: fontBody }}>
       <div className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-[1100px] items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-white">
               {p.logoUrl ? <img src={p.logoUrl} alt={p.businessName} className="h-full w-full object-contain" /> : null}
             </div>
-            <p className="text-sm font-bold">{p.businessName}</p>
+            <p className="text-sm font-bold" style={{ fontFamily: fontHeading }}>{p.businessName}</p>
           </div>
           <div className="flex items-center gap-2 text-xs">
             <span className="rounded-full border border-slate-300 bg-white px-2.5 py-1">{p.city || "Город"}</span>
@@ -1065,10 +1078,10 @@ function PublishedSitePage({ path, onNavigate }: { path: `/s/${string}`; onNavig
 
       <div className="mx-auto max-w-[1100px] px-4 pb-24 pt-5">
         {activeTab === "home" ? (
-          <div className="rounded-2xl border border-slate-200 px-4 py-6" style={{ backgroundColor: p.baseColor || "#f8fafc" }}>
-            <h1 className="text-3xl font-extrabold tracking-tight">{tabIntro.home.title}</h1>
+          <div className="border px-4 py-6" style={{ backgroundColor: p.baseColor || "#f8fafc", borderColor: cardBorder, borderRadius: radius }}>
+            <h1 className="text-3xl font-extrabold tracking-tight" style={{ fontFamily: fontHeading }}>{tabIntro.home.title}</h1>
             <p className="mt-2 max-w-3xl text-sm text-slate-700">{tabIntro.home.subtitle}</p>
-            <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
+            <div className="mt-3 border bg-white" style={{ borderColor: cardBorder, borderRadius: Math.max(10, radius - 4), padding: blockPadding }}>
               <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500">About</p>
               <p className="mt-1 text-sm leading-6 text-slate-700">{p.about}</p>
             </div>
@@ -1079,7 +1092,7 @@ function PublishedSitePage({ path, onNavigate }: { path: `/s/${string}`; onNavig
             </div>
             <div className="mt-4 grid gap-2 sm:grid-cols-3">
               {p.trustStats?.slice(0, 3).map((item) => (
-                <div key={item.label} className="rounded-xl border border-slate-200 bg-white p-2.5">
+                <div key={item.label} className="border bg-white p-2.5" style={{ borderColor: cardBorder, borderRadius: Math.max(10, radius - 4) }}>
                   <p className="text-[11px] text-slate-500">{item.label}</p>
                   <p className="text-sm font-bold text-slate-900">{item.value}</p>
                 </div>
@@ -1087,14 +1100,14 @@ function PublishedSitePage({ path, onNavigate }: { path: `/s/${string}`; onNavig
             </div>
           </div>
         ) : (
-          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-6">
-            <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">{tabIntro[activeTab].title}</h1>
+          <div className="border bg-white px-4 py-6" style={{ borderColor: cardBorder, borderRadius: radius }}>
+            <h1 className="text-3xl font-extrabold tracking-tight text-slate-900" style={{ fontFamily: fontHeading }}>{tabIntro[activeTab].title}</h1>
             <p className="mt-2 max-w-3xl text-sm text-slate-600">{tabIntro[activeTab].subtitle}</p>
           </div>
         )}
 
         {openedProduct ? (
-          <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mt-4 border bg-white p-4 shadow-sm" style={{ borderColor: cardBorder, borderRadius: radius }}>
             <div className="flex items-start justify-between gap-2">
               <div>
                 <p className="text-sm font-bold text-slate-900">{openedProduct.title}</p>
@@ -1110,12 +1123,19 @@ function PublishedSitePage({ path, onNavigate }: { path: `/s/${string}`; onNavig
 
         <div className="mt-4 space-y-3">
           {show("services") ? (
-            <div className="rounded-xl border border-slate-200 bg-white p-3">
+            <div className="border bg-white p-3" style={{ borderColor: cardBorder, borderRadius: Math.max(10, radius - 4) }}>
               <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Услуги и товары</p>
               <div className="mt-2 grid gap-2 sm:grid-cols-3">
                 {p.products?.map((product) => (
-                  <button key={product.id} onClick={() => setOpenedProductId(product.id)} className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-left transition hover:border-slate-400">
-                    <div className="h-20 overflow-hidden rounded-md border border-slate-200 bg-white">{product.images?.[0] ? <img src={product.images[0]} alt={product.title} className="h-full w-full object-cover" /> : null}</div>
+                  <button
+                    key={product.id}
+                    onClick={() => setOpenedProductId(product.id)}
+                    className="border bg-slate-50 p-2 text-left transition hover:border-slate-400"
+                    style={{ borderColor: cardBorder, borderRadius: Math.max(8, radius - 6) }}
+                  >
+                    <div className="h-20 overflow-hidden border bg-white" style={{ borderColor: cardBorder, borderRadius: Math.max(6, radius - 8) }}>
+                      {product.images?.[0] ? <img src={product.images[0]} alt={product.title} className="h-full w-full object-cover" /> : null}
+                    </div>
                     <p className="mt-2 text-xs font-semibold text-slate-900">{product.title}</p>
                     <p className="text-xs text-slate-600">{product.price}</p>
                   </button>
@@ -1125,31 +1145,31 @@ function PublishedSitePage({ path, onNavigate }: { path: `/s/${string}`; onNavig
           ) : null}
 
           {show("process") ? (
-            <div className="rounded-xl border border-slate-200 bg-white p-3">
+            <div className="border bg-white p-3" style={{ borderColor: cardBorder, borderRadius: Math.max(10, radius - 4) }}>
               <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Как это работает</p>
               <div className="mt-2 grid gap-2 sm:grid-cols-3">
                 {p.processSteps?.map((step, index) => (
-                  <div key={step} className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700"><span className="font-semibold text-slate-900">{index + 1}. </span>{step}</div>
+                  <div key={step} className="border bg-slate-50 p-2 text-xs text-slate-700" style={{ borderColor: cardBorder, borderRadius: Math.max(8, radius - 6) }}><span className="font-semibold text-slate-900">{index + 1}. </span>{step}</div>
                 ))}
               </div>
             </div>
           ) : null}
 
           {show("gallery") && p.galleryUrls?.length ? (
-            <div className="rounded-xl border border-slate-200 bg-white p-3">
+            <div className="border bg-white p-3" style={{ borderColor: cardBorder, borderRadius: Math.max(10, radius - 4) }}>
               <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Галерея</p>
               <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {p.galleryUrls.map((url, index) => <img key={`${url}-${index}`} src={url} alt={`gallery-${index}`} className="h-24 w-full rounded-lg border border-slate-200 object-cover" />)}
+                {p.galleryUrls.map((url, index) => <img key={`${url}-${index}`} src={url} alt={`gallery-${index}`} className="h-24 w-full border object-cover" style={{ borderColor: cardBorder, borderRadius: Math.max(8, radius - 6) }} />)}
               </div>
             </div>
           ) : null}
 
           {show("testimonials") ? (
-            <div className="rounded-xl border border-slate-200 bg-white p-3">
+            <div className="border bg-white p-3" style={{ borderColor: cardBorder, borderRadius: Math.max(10, radius - 4) }}>
               <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Отзывы</p>
               <div className="mt-2 grid gap-2 sm:grid-cols-3">
                 {p.testimonials?.map((item) => (
-                  <div key={item.name} className="rounded-lg border border-slate-200 bg-slate-50 p-2">
+                  <div key={item.name} className="border bg-slate-50 p-2" style={{ borderColor: cardBorder, borderRadius: Math.max(8, radius - 6) }}>
                     <p className="text-xs font-semibold text-slate-900">{item.name}</p>
                     <p className="text-[11px] text-slate-500">{item.role}</p>
                     <p className="mt-1 text-xs text-slate-700">{item.text}</p>
@@ -1160,9 +1180,9 @@ function PublishedSitePage({ path, onNavigate }: { path: `/s/${string}`; onNavig
           ) : null}
 
           {show("faq") ? (
-            <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <div className="border bg-white p-4" style={{ borderColor: cardBorder, borderRadius: Math.max(10, radius - 4) }}>
               <div className="grid gap-4 md:grid-cols-[0.8fr_1.2fr]">
-                <h4 className="text-3xl font-extrabold tracking-tight text-slate-900">Частые вопросы</h4>
+                <h4 className="text-3xl font-extrabold tracking-tight text-slate-900" style={{ fontFamily: fontHeading }}>Частые вопросы</h4>
                 <div>
                   {p.faq?.map((item) => {
                     const isOpen = openFaq === item.q;
@@ -1182,9 +1202,9 @@ function PublishedSitePage({ path, onNavigate }: { path: `/s/${string}`; onNavig
           ) : null}
 
           {show("cabinet") && p.cabinetEnabled ? (
-            <div className="rounded-xl border border-slate-200 bg-white p-3">
+            <div className="border bg-white p-3" style={{ borderColor: cardBorder, borderRadius: Math.max(10, radius - 4) }}>
               <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Личный кабинет</p>
-              <div className="mt-2 rounded-lg border p-3" style={{ borderColor: `${p.accentColor}40`, backgroundColor: `${p.accentColor}12` }}>
+              <div className="mt-2 border p-3" style={{ borderColor: `${p.accentColor}40`, backgroundColor: `${p.accentColor}12`, borderRadius: Math.max(8, radius - 6) }}>
                 <p className="text-xs font-semibold text-slate-900">Вход через Telegram</p>
                 <button className="mt-2 rounded-full px-3 py-1.5 text-[11px] font-semibold text-white" style={{ backgroundColor: p.accentColor }}>
                   {p.telegramBot || "Войти через Telegram"}

@@ -42,6 +42,9 @@ type ReviewItem = {
 };
 
 type SectionKey = "about" | "services" | "team" | "reviews" | "faq" | "booking" | "contacts" | "gallery";
+type ThemeDensity = "airy" | "balanced" | "compact";
+type ThemeRadius = "soft" | "rounded" | "sharp";
+type ThemeContrast = "soft" | "medium" | "high";
 type DslAction =
   | { kind: "regenerate"; guidance: string }
   | { kind: "styleLike"; reference: string }
@@ -77,6 +80,11 @@ type DraftState = {
   sectionsEnabled: Record<SectionKey, boolean>;
   summaryPoints: string[];
   socialLinks: { telegram?: string; whatsapp?: string; instagram?: string };
+  fontHeading: string;
+  fontBody: string;
+  density: ThemeDensity;
+  radius: ThemeRadius;
+  contrast: ThemeContrast;
 };
 
 type AgentProfile = {
@@ -129,6 +137,13 @@ type PublishPayload = {
   cabinetEnabled: boolean;
   telegramBot: string;
   socialLinks?: { telegram?: string; whatsapp?: string; instagram?: string };
+  theme?: {
+    fontHeading?: string;
+    fontBody?: string;
+    density?: ThemeDensity;
+    radius?: ThemeRadius;
+    contrast?: ThemeContrast;
+  };
 };
 
 const LOCAL_PUBLISHED_SITE_PREFIX = "clientsflow_local_published_site:";
@@ -304,6 +319,62 @@ function parseDslCommand(text: string): DslAction {
   }
   if (cmd === "rewrite-hero") return { kind: "rewriteHero", text: rest };
   return { kind: "none" };
+}
+
+function detectFontIntent(text: string) {
+  const lower = text.toLowerCase();
+  return lower.includes("шрифт") || lower.includes("font") || lower.includes("типограф");
+}
+
+function parseFontPair(text: string): { heading: string; body: string; label: string } | null {
+  const lower = text.toLowerCase();
+  if (lower.includes("playfair") || lower.includes("с засеч")) {
+    return { heading: '"Playfair Display", Georgia, serif', body: '"Lora", Georgia, serif', label: "Playfair + Lora" };
+  }
+  if (lower.includes("manrope")) {
+    return { heading: '"Manrope", "Segoe UI", sans-serif', body: '"Manrope", "Segoe UI", sans-serif', label: "Manrope" };
+  }
+  if (lower.includes("montserrat")) {
+    return { heading: '"Montserrat", "Segoe UI", sans-serif', body: '"Montserrat", "Segoe UI", sans-serif', label: "Montserrat" };
+  }
+  if (lower.includes("inter") || lower.includes("без засеч")) {
+    return { heading: '"Inter", "Segoe UI", sans-serif', body: '"Inter", "Segoe UI", sans-serif', label: "Inter" };
+  }
+  return null;
+}
+
+function parseDensity(text: string): ThemeDensity | null {
+  const lower = text.toLowerCase();
+  if (lower.includes("возду") || lower.includes("больше отступ") || lower.includes("простор")) return "airy";
+  if (lower.includes("плотн") || lower.includes("компакт")) return "compact";
+  return null;
+}
+
+function parseRadius(text: string): ThemeRadius | null {
+  const lower = text.toLowerCase();
+  if (lower.includes("остр") || lower.includes("угл")) return "sharp";
+  if (lower.includes("скругл") || lower.includes("round")) return "rounded";
+  if (lower.includes("мягк")) return "soft";
+  return null;
+}
+
+function parseContrast(text: string): ThemeContrast | null {
+  const lower = text.toLowerCase();
+  if (lower.includes("высок") || lower.includes("контрастнее")) return "high";
+  if (lower.includes("мягк") || lower.includes("спокойн")) return "soft";
+  return null;
+}
+
+function radiusPx(radius: ThemeRadius) {
+  if (radius === "sharp") return 10;
+  if (radius === "rounded") return 24;
+  return 16;
+}
+
+function sectionPadding(density: ThemeDensity) {
+  if (density === "compact") return "14px";
+  if (density === "airy") return "26px";
+  return "20px";
 }
 
 const sectionKeywords: Array<{ key: SectionKey; words: string[] }> = [
@@ -646,7 +717,12 @@ function createDraftFromProfile(profile: AgentProfile, guidance = "", round = 1)
     sectionOrder,
     sectionsEnabled,
     summaryPoints,
-    socialLinks: {}
+    socialLinks: {},
+    fontHeading: preset.headlineStyle === "serif" ? '"Playfair Display", Georgia, serif' : '"Inter", "Segoe UI", sans-serif',
+    fontBody: '"Inter", "Segoe UI", sans-serif',
+    density: styleContext.includes("минимал") ? "airy" : "balanced",
+    radius: styleContext.includes("workspace") ? "rounded" : "soft",
+    contrast: styleContext.includes("dark") ? "high" : "medium"
   };
 }
 
@@ -657,7 +733,7 @@ function draftToPayload(draft: DraftState): PublishPayload {
     city: draft.city,
     logoUrl: "",
     accentColor: draft.accentColor,
-    baseColor: "#f8fafc",
+    baseColor: draft.pageBg || "#f8fafc",
     heroTitle: draft.heroTitle,
     heroSubtitle: draft.heroSubtitle,
     about: `${draft.aboutTitle}. ${draft.aboutBody}`,
@@ -697,7 +773,14 @@ function draftToPayload(draft: DraftState): PublishPayload {
     galleryUrls: [],
     cabinetEnabled: true,
     telegramBot: "@clientsflow_support_bot",
-    socialLinks: draft.socialLinks
+    socialLinks: draft.socialLinks,
+    theme: {
+      fontHeading: draft.fontHeading,
+      fontBody: draft.fontBody,
+      density: draft.density,
+      radius: draft.radius,
+      contrast: draft.contrast
+    }
   };
 }
 
@@ -741,7 +824,9 @@ function normalizeAiDraftPatch(raw: any): Partial<DraftState> | null {
     "aboutBody",
     "primaryCta",
     "secondaryCta",
-    "contactLine"
+    "contactLine",
+    "fontHeading",
+    "fontBody"
   ];
   for (const key of strings) {
     const value = raw[key];
@@ -749,6 +834,9 @@ function normalizeAiDraftPatch(raw: any): Partial<DraftState> | null {
   }
 
   if (raw.headlineStyle === "serif" || raw.headlineStyle === "sans") patch.headlineStyle = raw.headlineStyle;
+  if (raw.density === "airy" || raw.density === "balanced" || raw.density === "compact") patch.density = raw.density;
+  if (raw.radius === "soft" || raw.radius === "rounded" || raw.radius === "sharp") patch.radius = raw.radius;
+  if (raw.contrast === "soft" || raw.contrast === "medium" || raw.contrast === "high") patch.contrast = raw.contrast;
 
   if (Array.isArray(raw.navItems)) {
     patch.navItems = raw.navItems.filter((item: unknown) => typeof item === "string" && item.trim()).slice(0, 8);
@@ -911,6 +999,20 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
         next.accentColor = "#c77a7a";
         next.heroTitle = "Сервис премиум-уровня для тех, кто ценит детали";
       }
+      if (detectFontIntent(text)) {
+        const font = parseFontPair(text);
+        if (font) {
+          next.fontHeading = font.heading;
+          next.fontBody = font.body;
+          next.styleLabel = `${next.styleLabel} · ${font.label}`;
+        }
+      }
+      const density = parseDensity(text);
+      if (density) next.density = density;
+      const radius = parseRadius(text);
+      if (radius) next.radius = radius;
+      const contrast = parseContrast(text);
+      if (contrast) next.contrast = contrast;
       if (lower.includes("запис") || lower.includes("лид")) {
         next.primaryCta = "Записаться онлайн";
         next.secondaryCta = "Выбрать время";
@@ -1217,6 +1319,12 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
     }
   };
 
+  const previewRadiusValue = radiusPx(draft?.radius || "soft");
+  const previewSectionPaddingValue = sectionPadding(draft?.density || "balanced");
+  const previewCardBorder = draft?.contrast === "high" ? "rgba(15,23,42,0.22)" : "rgba(148,163,184,0.3)";
+  const previewHeadingFont = draft?.fontHeading || '"Inter", "Segoe UI", sans-serif';
+  const previewBodyFont = draft?.fontBody || '"Inter", "Segoe UI", sans-serif';
+
   const previewPanel = (
     <div className="flex h-full flex-col">
       <div className="rounded-[22px] border border-slate-200/90 bg-white p-4 shadow-[0_25px_70px_-45px_rgba(15,23,42,0.45)]">
@@ -1272,9 +1380,9 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
               <span>↗</span>
             </div>
 
-            <div style={{ backgroundColor: draft?.pageBg || "#f6f2f3" }}>
+            <div style={{ backgroundColor: draft?.pageBg || "#f6f2f3", fontFamily: previewBodyFont }}>
               <div className="flex items-center justify-between border-b border-[#e8d8da] bg-white/80 px-6 py-4">
-                <p className="text-3xl font-semibold" style={{ color: draft?.accentColor || "#c77a7a" }}>
+                <p className="text-3xl font-semibold" style={{ color: draft?.accentColor || "#c77a7a", fontFamily: previewHeadingFont }}>
                   ✿ {draft?.businessName || "Studio"}
                 </p>
                 <div className="hidden items-center gap-6 text-base text-slate-700 2xl:flex">
@@ -1293,7 +1401,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
                 <p className="text-center text-xs uppercase tracking-[0.35em]" style={{ color: draft?.accentColor || "#c77a7a" }}>
                   {draft?.aboutTitle || "О нас"}
                 </p>
-                <h3 className={`mt-3 text-center text-4xl leading-tight text-slate-800 md:text-5xl ${draft?.headlineStyle === "serif" ? "font-serif" : "font-semibold"}`}>
+                <h3 className={`mt-3 text-center text-4xl leading-tight text-slate-800 md:text-5xl ${draft?.headlineStyle === "serif" ? "font-serif" : "font-semibold"}`} style={{ fontFamily: previewHeadingFont }}>
                   {draft?.heroTitle || "Место, где сервис - это искусство"}
                 </h3>
                 <p className="mx-auto mt-4 max-w-[820px] text-center text-lg leading-[1.55] text-slate-600">
@@ -1304,7 +1412,11 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
                   {(draft?.sectionOrder || []).filter((section) => draft?.sectionsEnabled?.[section]).map((section) => {
                     if (section === "about") {
                       return (
-                        <section key={section} className="rounded-2xl border border-slate-200 bg-white/80 p-4 text-slate-700" style={{ backgroundColor: draft?.surfaceBg || "#fffafb" }}>
+                        <section
+                          key={section}
+                          className="border bg-white/80 text-slate-700"
+                          style={{ backgroundColor: draft?.surfaceBg || "#fffafb", borderRadius: previewRadiusValue, padding: previewSectionPaddingValue, borderColor: previewCardBorder }}
+                        >
                           <p className="text-xs uppercase tracking-[0.24em]" style={{ color: draft?.accentColor || "#c77a7a" }}>О проекте</p>
                           <p className="mt-2 text-base leading-7">{draft?.aboutBody}</p>
                         </section>
@@ -1316,11 +1428,15 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
                           <p className="mb-3 text-center text-xs uppercase tracking-[0.24em]" style={{ color: draft?.accentColor || "#c77a7a" }}>Прайс</p>
                           <div className="grid gap-3 lg:grid-cols-2">
                             {(draft?.services || []).slice(0, 6).map((service) => (
-                              <div key={service.id} className="rounded-2xl border border-[#efe4e6] bg-white/90 px-4 py-3" style={{ backgroundColor: draft?.surfaceBg || "#fffafb" }}>
+                              <div
+                                key={service.id}
+                                className="border bg-white/90 px-4 py-3"
+                                style={{ backgroundColor: draft?.surfaceBg || "#fffafb", borderRadius: previewRadiusValue, borderColor: previewCardBorder }}
+                              >
                                 <div className="flex items-start justify-between gap-2">
                                   <div>
                                     <p className="text-2xl">{service.emoji}</p>
-                                    <p className="mt-1 text-xl font-semibold leading-snug text-slate-800">{service.title}</p>
+                                    <p className="mt-1 text-xl font-semibold leading-snug text-slate-800" style={{ fontFamily: previewHeadingFont }}>{service.title}</p>
                                     <p className="mt-1 text-sm text-slate-500">{service.duration}</p>
                                   </div>
                                   <p className="pt-2 text-2xl font-semibold" style={{ color: draft?.accentColor || "#c77a7a" }}>
@@ -1339,8 +1455,12 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
                           <p className="mb-3 text-center text-xs uppercase tracking-[0.24em]" style={{ color: draft?.accentColor || "#c77a7a" }}>Команда</p>
                           <div className="grid gap-3 md:grid-cols-3">
                             {(draft?.team || []).map((member) => (
-                              <div key={member.id} className="rounded-2xl border border-slate-200 bg-white/90 p-4 text-center" style={{ backgroundColor: draft?.surfaceBg || "#fffafb" }}>
-                                <p className="text-lg font-semibold text-slate-800">{member.name}</p>
+                              <div
+                                key={member.id}
+                                className="border bg-white/90 p-4 text-center"
+                                style={{ backgroundColor: draft?.surfaceBg || "#fffafb", borderRadius: previewRadiusValue, borderColor: previewCardBorder }}
+                              >
+                                <p className="text-lg font-semibold text-slate-800" style={{ fontFamily: previewHeadingFont }}>{member.name}</p>
                                 <p className="mt-1 text-sm text-slate-500">{member.role}</p>
                               </div>
                             ))}
@@ -1354,7 +1474,11 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
                           <p className="mb-3 text-center text-xs uppercase tracking-[0.24em]" style={{ color: draft?.accentColor || "#c77a7a" }}>Отзывы</p>
                           <div className="grid gap-3 md:grid-cols-2">
                             {(draft?.reviews || []).map((review) => (
-                              <div key={review.id} className="rounded-2xl border border-slate-200 bg-white/90 p-4" style={{ backgroundColor: draft?.surfaceBg || "#fffafb" }}>
+                              <div
+                                key={review.id}
+                                className="border bg-white/90 p-4"
+                                style={{ backgroundColor: draft?.surfaceBg || "#fffafb", borderRadius: previewRadiusValue, borderColor: previewCardBorder }}
+                              >
                                 <p className="text-sm leading-6 text-slate-700">“{review.text}”</p>
                                 <p className="mt-2 text-xs font-semibold text-slate-500">{review.author}</p>
                               </div>
@@ -1369,8 +1493,12 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
                           <p className="mb-3 text-center text-xs uppercase tracking-[0.24em]" style={{ color: draft?.accentColor || "#c77a7a" }}>FAQ</p>
                           <div className="space-y-2">
                             {(draft?.faq || []).map((item) => (
-                              <div key={item.id} className="rounded-xl border border-slate-200 bg-white/90 p-3" style={{ backgroundColor: draft?.surfaceBg || "#fffafb" }}>
-                                <p className="text-sm font-semibold text-slate-800">{item.q}</p>
+                              <div
+                                key={item.id}
+                                className="border bg-white/90 p-3"
+                                style={{ backgroundColor: draft?.surfaceBg || "#fffafb", borderRadius: Math.max(10, previewRadiusValue - 4), borderColor: previewCardBorder }}
+                              >
+                                <p className="text-sm font-semibold text-slate-800" style={{ fontFamily: previewHeadingFont }}>{item.q}</p>
                                 <p className="mt-1 text-sm text-slate-600">{item.a}</p>
                               </div>
                             ))}
@@ -1380,8 +1508,12 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
                     }
                     if (section === "booking") {
                       return (
-                        <section key={section} className="rounded-2xl border border-slate-200 bg-white/90 p-4 text-center" style={{ backgroundColor: draft?.surfaceBg || "#fffafb" }}>
-                          <p className="text-lg font-semibold text-slate-800">Онлайн-запись</p>
+                        <section
+                          key={section}
+                          className="border bg-white/90 text-center"
+                          style={{ backgroundColor: draft?.surfaceBg || "#fffafb", borderRadius: previewRadiusValue, padding: previewSectionPaddingValue, borderColor: previewCardBorder }}
+                        >
+                          <p className="text-lg font-semibold text-slate-800" style={{ fontFamily: previewHeadingFont }}>Онлайн-запись</p>
                           <p className="mt-1 text-sm text-slate-600">Форма записи с выбором услуги, даты и времени.</p>
                           <button type="button" className="mt-3 rounded-full px-4 py-2 text-sm font-semibold text-white" style={{ backgroundColor: draft?.accentColor || "#c77a7a" }}>
                             {draft?.primaryCta || "Записаться"}
@@ -1391,15 +1523,23 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
                     }
                     if (section === "contacts") {
                       return (
-                        <section key={section} className="rounded-2xl border border-slate-200 bg-white/90 p-4 text-center" style={{ backgroundColor: draft?.surfaceBg || "#fffafb" }}>
-                          <p className="text-lg font-semibold text-slate-800">Контакты</p>
+                        <section
+                          key={section}
+                          className="border bg-white/90 text-center"
+                          style={{ backgroundColor: draft?.surfaceBg || "#fffafb", borderRadius: previewRadiusValue, padding: previewSectionPaddingValue, borderColor: previewCardBorder }}
+                        >
+                          <p className="text-lg font-semibold text-slate-800" style={{ fontFamily: previewHeadingFont }}>Контакты</p>
                           <p className="mt-1 text-sm text-slate-600">{draft?.contactLine}</p>
                         </section>
                       );
                     }
                     return (
-                      <section key={section} className="rounded-2xl border border-slate-200 bg-white/90 p-4 text-center" style={{ backgroundColor: draft?.surfaceBg || "#fffafb" }}>
-                        <p className="text-lg font-semibold text-slate-800">Галерея</p>
+                      <section
+                        key={section}
+                        className="border bg-white/90 text-center"
+                        style={{ backgroundColor: draft?.surfaceBg || "#fffafb", borderRadius: previewRadiusValue, padding: previewSectionPaddingValue, borderColor: previewCardBorder }}
+                      >
+                        <p className="text-lg font-semibold text-slate-800" style={{ fontFamily: previewHeadingFont }}>Галерея</p>
                         <p className="mt-1 text-sm text-slate-600">Блок галереи работ готов к наполнению фото.</p>
                       </section>
                     );
