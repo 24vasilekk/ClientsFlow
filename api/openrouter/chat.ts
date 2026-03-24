@@ -75,7 +75,7 @@ export default async function handler(req: any, res: any) {
 
   try {
     const messages = Array.isArray(req.body?.messages) ? req.body.messages : [];
-    const model = process.env.OPENROUTER_MODEL || "google/gemini-2.5-flash";
+    const model = process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini";
     const referer = process.env.OPENROUTER_SITE_URL || "https://clients-flow-ten.vercel.app";
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 9000);

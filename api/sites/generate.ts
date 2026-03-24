@@ -345,7 +345,7 @@ export default async function handler(req: any, res: any) {
     const apiKey = String(process.env.OPENROUTER_API_KEY || "")
       .replace(/[\r\n\s\u200B-\u200D\uFEFF]+/g, "")
       .trim();
-    const model = String(process.env.OPENROUTER_MODEL || "google/gemini-2.5-flash").trim();
+    const model = String(process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini").trim();
     const base = fallbackDraft(profile, guidance);
     const finishWithFallback = (code: string, message: string) => {
       const safeDraft: DraftLike = { ...base, styleLabel: `${base.styleLabel} · Fallback` };
