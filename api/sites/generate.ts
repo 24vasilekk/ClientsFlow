@@ -635,35 +635,54 @@ export default async function handler(req: any, res: any) {
     };
     const guidance = String(req.body?.guidance || "");
     const round = Math.max(1, Number(req.body?.round || 1));
+    if (!process.env.OPENROUTER_API_KEY) {
+      res.status(503).json({
+        error: "AI engine is not configured. Set OPENROUTER_API_KEY in Vercel Environment Variables."
+      });
+      return;
+    }
 
     const startedAt = Date.now();
-    const algorithmDraft = buildAlgorithmicDraft(profile, guidance, round);
-    const algorithmDraftAltA = buildAlgorithmicDraft(profile, `${guidance} alt-a`, round + 101);
-    const algorithmDraftAltB = buildAlgorithmicDraft(profile, `${guidance} alt-b`, round + 202);
     const t1 = Date.now();
-    const aiDraft = await tryOpenRouterGeneration(profile, guidance, round);
+    const [aiMain, aiAltA, aiAltB] = await Promise.all([
+      tryOpenRouterGeneration(profile, guidance, round),
+      tryOpenRouterGeneration(
+        profile,
+        `${guidance}\nСобери альтернативу A: другая композиция секций, иная типографика и другой ритм отступов.`,
+        round + 101
+      ),
+      tryOpenRouterGeneration(
+        profile,
+        `${guidance}\nСобери альтернативу B: другая visual language, контраст и плотность, но та же бизнес-цель.`,
+        round + 202
+      )
+    ]);
     const t2 = Date.now();
-    const candidatesPool: Array<{ id: string; engine: "openrouter" | "algorithm"; label: string; draft: DraftLike }> = [
-      { id: "alg-A", engine: "algorithm", label: "Algorithm A", draft: algorithmDraft },
-      { id: "alg-B", engine: "algorithm", label: "Algorithm B", draft: algorithmDraftAltA },
-      { id: "alg-C", engine: "algorithm", label: "Algorithm C", draft: algorithmDraftAltB }
-    ];
-    if (aiDraft) candidatesPool.unshift({ id: "ai-main", engine: "openrouter", label: "AI Main", draft: aiDraft });
+    const candidatesPool: Array<{ id: string; engine: "openrouter" | "algorithm"; label: string; draft: DraftLike }> = [];
+    if (aiMain) candidatesPool.push({ id: "ai-main", engine: "openrouter", label: "AI Main", draft: aiMain });
+    if (aiAltA) candidatesPool.push({ id: "ai-alt-a", engine: "openrouter", label: "AI Alt A", draft: aiAltA });
+    if (aiAltB) candidatesPool.push({ id: "ai-alt-b", engine: "openrouter", label: "AI Alt B", draft: aiAltB });
+    if (!candidatesPool.length) {
+      res.status(502).json({
+        error: "AI generation failed. OpenRouter did not return a valid site draft. Please retry."
+      });
+      return;
+    }
 
     const scored = candidatesPool.map((candidate) => ({
       ...candidate,
       score: scoreCandidate(candidate.draft, guidance, profile)
     }));
     scored.sort((a, b) => b.score - a.score);
-    const selected = scored[0] || { id: "alg-A", engine: "algorithm" as const, label: "Algorithm A", draft: algorithmDraft, score: 50 };
+    const selected = scored[0];
     const draft = selected.draft;
-    const engine: "openrouter" | "algorithm" = selected.engine;
+    const engine: "openrouter" | "algorithm" = "openrouter";
 
     const stages = [
       { id: "brief", ms: 12, source: "profile-parser" },
       { id: "structure", ms: 18, source: "layout-planner" },
-      { id: "visual", ms: aiDraft ? t2 - t1 : 16, source: engine },
-      { id: "copy", ms: aiDraft ? Math.max(25, Math.round((t2 - t1) * 0.35)) : 20, source: engine },
+      { id: "visual", ms: t2 - t1, source: engine },
+      { id: "copy", ms: Math.max(25, Math.round((t2 - t1) * 0.35)), source: engine },
       { id: "selector", ms: 11, source: "candidate-ranker" },
       { id: "assembly", ms: 14, source: "spec-assembler" }
     ];

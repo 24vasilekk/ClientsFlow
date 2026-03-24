@@ -1420,7 +1420,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
   const [overlayMessage, setOverlayMessage] = useState("Публикуем сайт...");
   const [previewExpanded, setPreviewExpanded] = useState(true);
   const [generationRound, setGenerationRound] = useState(1);
-  const [generationEngine, setGenerationEngine] = useState<"openrouter" | "algorithm">("algorithm");
+  const [generationEngine, setGenerationEngine] = useState<"openrouter" | "algorithm">("openrouter");
   const [generationSessionId, setGenerationSessionId] = useState(() => {
     if (typeof window === "undefined") return `session-${uid()}`;
     return localStorage.getItem(SITE_SESSION_STORAGE_KEY) || `session-${uid()}`;
@@ -1533,10 +1533,6 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
     addMessage("assistant", "Окей, понял задачу. Делаю структуру и дизайн под твой запрос.", "soft");
     setWorkingText("Updating pages...");
 
-    const fallbackDraft = createDraftFromProfile(nextProfile, guidance, nextRound);
-    let finalDraft = fallbackDraft;
-    let engine: "openrouter" | "algorithm" = "algorithm";
-
     try {
       const response = await fetch("/api/sites/generate", {
         method: "POST",
@@ -1549,47 +1545,58 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
         })
       });
 
-      if (response.ok) {
-        const body = (await response.json()) as {
-          sessionId?: string;
-          engine?: "openrouter" | "algorithm";
-          draft?: unknown;
-          history?: Array<{ id: string; round: number; engine: "openrouter" | "algorithm"; createdAt: string }>;
-          stages?: Array<{ id: string; ms: number; source: string }>;
-          candidates?: Array<{ id: string; engine: "openrouter" | "algorithm"; score: number; label: string }>;
-          selectedCandidateId?: string;
-        };
-        if (body.sessionId) setGenerationSessionId(body.sessionId);
-        if (body.engine === "openrouter") engine = "openrouter";
-        if (body.draft) finalDraft = hydrateGeneratedDraft(body.draft, fallbackDraft);
-        if (Array.isArray(body.history)) setGenerationHistory(body.history);
-        if (Array.isArray(body.stages) && body.stages.length > 0) {
-          const stageLine = body.stages.map((stage) => `${stage.id}:${stage.ms}ms`).join(" · ");
-          addMessage("assistant", `Pipeline: ${stageLine}`, "soft");
-        }
-        if (Array.isArray(body.candidates) && body.candidates.length > 0) {
-          const candidateLine = body.candidates.map((c) => `${c.id}(${c.engine}, ${c.score})`).join(" · ");
-          addMessage("assistant", `Кандидаты: ${candidateLine}. Выбран: ${body.selectedCandidateId || body.candidates[0].id}`, "soft");
-        }
-      }
-    } catch {
-      // fallback to algorithmic generation
-    }
+      const body = (await response.json()) as {
+        error?: string;
+        sessionId?: string;
+        engine?: "openrouter" | "algorithm";
+        draft?: unknown;
+        history?: Array<{ id: string; round: number; engine: "openrouter" | "algorithm"; createdAt: string }>;
+        stages?: Array<{ id: string; ms: number; source: string }>;
+        candidates?: Array<{ id: string; engine: "openrouter" | "algorithm"; score: number; label: string }>;
+        selectedCandidateId?: string;
+      };
 
-    setGenerationEngine(engine);
-    setDraft(finalizeDraft(finalDraft));
-    setGenerationRound(nextRound);
-    setProfile(nextProfile);
-    if (engine === "algorithm") {
-      addMessage("assistant", "Сейчас отработал в fallback-режиме. Проверь `OPENROUTER_API_KEY` в Vercel, чтобы включить полноценную AI-генерацию.", "soft");
+      if (!response.ok) {
+        throw new Error(body.error || "AI generation request failed");
+      }
+
+      if (body.sessionId) setGenerationSessionId(body.sessionId);
+      if (body.engine !== "openrouter" || !body.draft) {
+        throw new Error("AI engine did not return a valid draft");
+      }
+      const fallbackDraft = createDraftFromProfile(nextProfile, guidance, nextRound);
+      const finalDraft = hydrateGeneratedDraft(body.draft, fallbackDraft);
+      if (Array.isArray(body.history)) setGenerationHistory(body.history);
+      if (Array.isArray(body.stages) && body.stages.length > 0) {
+        const stageLine = body.stages.map((stage) => `${stage.id}:${stage.ms}ms`).join(" · ");
+        addMessage("assistant", `Pipeline: ${stageLine}`, "soft");
+      }
+      if (Array.isArray(body.candidates) && body.candidates.length > 0) {
+        const candidateLine = body.candidates.map((c) => `${c.id}(${c.engine}, ${c.score})`).join(" · ");
+        addMessage("assistant", `Кандидаты: ${candidateLine}. Выбран: ${body.selectedCandidateId || body.candidates[0].id}`, "soft");
+      }
+      setGenerationEngine("openrouter");
+      setDraft(finalizeDraft(finalDraft));
+      setGenerationRound(nextRound);
+      setProfile(nextProfile);
+      const summary = finalDraft.summaryPoints.map((point) => `• ${point}`).join("\n");
+      addMessage(
+        "assistant",
+        `Готово. Собрал индивидуальный вариант #${nextRound} для «${finalDraft.businessName}».\n\nЧто уже есть:\n${summary}\n\nЕсли нужно, напиши «перегенерируй» — сделаю новый дизайн с нуля под тот же бриф.`
+      );
+      setGenerationStatus("success");
+    } catch (error: any) {
+      const message = String(error?.message || "AI generation failed");
+      setGenerationStatus("error");
+      setError(message);
+      addMessage(
+        "assistant",
+        `Не смог собрать сайт через AI: ${message}. Проверь OPENROUTER_API_KEY/OPENROUTER_MODEL в Vercel и повтори запрос.`,
+        "soft"
+      );
+    } finally {
+      setIsWorking(false);
     }
-    const summary = finalDraft.summaryPoints.map((point) => `• ${point}`).join("\n");
-    addMessage(
-      "assistant",
-      `Готово. Собрал индивидуальный вариант #${nextRound} для «${finalDraft.businessName}».\n\nЧто уже есть:\n${summary}\n\nЕсли нужно, напиши «перегенерируй» — сделаю новый дизайн с нуля под тот же бриф.`
-    );
-    setGenerationStatus("success");
-    setIsWorking(false);
   };
 
   const restoreRound = async (targetRound: number) => {
