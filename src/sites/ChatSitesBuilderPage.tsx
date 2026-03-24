@@ -47,6 +47,15 @@ type DraftState = {
   socialLinks: { telegram?: string; whatsapp?: string; instagram?: string };
 };
 
+type AgentProfile = {
+  businessName: string;
+  niche: string;
+  city: string;
+  goal: string;
+  style: string;
+  mustHave: string[];
+};
+
 type PublishPayload = {
   businessName: string;
   city?: string;
@@ -126,60 +135,180 @@ function statusClass(status: BuilderStatus) {
   return "border-slate-200 bg-slate-100 text-slate-600";
 }
 
-function parsePrompt(prompt: string) {
-  const text = prompt.toLowerCase();
-  const patch: Partial<DraftState> = {};
-
-  if (text.includes("салон") || text.includes("nails")) {
-    patch.niche = "Nail Studio";
-    patch.businessName = "Nails Beauty";
-    patch.accentColor = "#c77a7a";
-    patch.navItems = ["О нас", "Услуги", "Команда", "Отзывы", "Запись"];
-  }
-
-  if (text.includes("клиник") || text.includes("стомат")) {
-    patch.niche = "Clinic";
-    patch.businessName = "Care Clinic";
-    patch.accentColor = "#5f7aa6";
-    patch.navItems = ["О нас", "Услуги", "Врачи", "Отзывы", "Контакты"];
-  }
-
-  if (text.includes("моск")) patch.city = "Москва";
-  if (text.includes("спб") || text.includes("питер")) patch.city = "Санкт-Петербург";
-
-  if (text.includes("преми") || text.includes("дорог")) {
-    patch.heroTitle = "Сервис, где качество чувствуется в каждой детали";
-    patch.heroSubtitle = "Премиальная подача, аккуратная типографика и понятный путь к записи без визуального шума.";
-  }
-
-  return patch;
+function normalizeBusinessName(raw: string) {
+  return raw
+    .replace(/["«»']/g, "")
+    .replace(/\b(остальное|сделай|заполни|сам|и)\b.*$/i, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
 }
 
-function createDraftFromPrompt(prompt: string): DraftState {
-  const patch = parsePrompt(prompt);
+function extractBusinessName(text: string) {
+  const byName = text.match(/(?:названи[ея]|name)\s*[:\-]?\s*["«]?([a-zа-я0-9][^"»\n,.]{1,42})["»]?/i);
+  if (byName?.[1]) {
+    const candidate = normalizeBusinessName(byName[1]);
+    if (candidate.length >= 2) return candidate;
+  }
+  const quoted = text.match(/["«]([^"»]{2,42})["»]/);
+  if (quoted?.[1]) {
+    const candidate = normalizeBusinessName(quoted[1]);
+    if (candidate.length >= 2) return candidate;
+  }
+  return "";
+}
+
+function extractCity(text: string) {
+  const lower = text.toLowerCase();
+  if (lower.includes("моск")) return "Москва";
+  if (lower.includes("спб") || lower.includes("питер") || lower.includes("санкт")) return "Санкт-Петербург";
+  if (lower.includes("казан")) return "Казань";
+  if (lower.includes("екб") || lower.includes("екатерин")) return "Екатеринбург";
+  return "";
+}
+
+function extractNiche(text: string) {
+  const lower = text.toLowerCase();
+  if (lower.includes("барбер")) return "Barbershop";
+  if (lower.includes("салон") || lower.includes("nails") || lower.includes("маник")) return "Nail Studio";
+  if (lower.includes("клиник") || lower.includes("стомат")) return "Clinic";
+  if (lower.includes("юрист") || lower.includes("адвокат")) return "Legal";
+  return "";
+}
+
+function extractGoal(text: string) {
+  const lower = text.toLowerCase();
+  if (lower.includes("заяв")) return "Больше заявок";
+  if (lower.includes("запис")) return "Больше онлайн-записей";
+  if (lower.includes("звон")) return "Больше звонков";
+  if (lower.includes("продаж")) return "Больше продаж";
+  return "";
+}
+
+function extractStyle(text: string) {
+  const lower = text.toLowerCase();
+  if (lower.includes("преми") || lower.includes("дорог")) return "Премиальный";
+  if (lower.includes("минимал")) return "Минимализм";
+  if (lower.includes("строг")) return "Строгий";
+  if (lower.includes("дружелюб")) return "Дружелюбный";
+  return "";
+}
+
+function extractMustHave(text: string) {
+  const lower = text.toLowerCase();
+  const must: string[] = [];
+  if (lower.includes("онлайн") && lower.includes("запис")) must.push("Онлайн-запись");
+  if (lower.includes("прайс") || lower.includes("цены")) must.push("Прайс");
+  if (lower.includes("галер")) must.push("Галерея работ");
+  if (lower.includes("отзыв")) must.push("Отзывы");
+  if (lower.includes("команд") || lower.includes("мастер")) must.push("Команда");
+  if (lower.includes("контакт")) must.push("Контакты");
+  return must;
+}
+
+function parseProfileFromMessage(text: string): Partial<AgentProfile> {
+  const businessName = extractBusinessName(text);
+  const niche = extractNiche(text);
+  const city = extractCity(text);
+  const goal = extractGoal(text);
+  const style = extractStyle(text);
+  const mustHave = extractMustHave(text);
+  return {
+    businessName,
+    niche,
+    city,
+    goal,
+    style,
+    mustHave
+  };
+}
+
+function mergeProfile(current: AgentProfile, patch: Partial<AgentProfile>): AgentProfile {
+  const next: AgentProfile = { ...current };
+  if (patch.businessName) next.businessName = patch.businessName;
+  if (patch.niche) next.niche = patch.niche;
+  if (patch.city) next.city = patch.city;
+  if (patch.goal) next.goal = patch.goal;
+  if (patch.style) next.style = patch.style;
+  if (patch.mustHave?.length) {
+    next.mustHave = Array.from(new Set([...next.mustHave, ...patch.mustHave]));
+  }
+  return next;
+}
+
+function getMissingProfileFields(profile: AgentProfile) {
+  const missing: Array<"businessName" | "niche" | "city"> = [];
+  if (!profile.businessName.trim()) missing.push("businessName");
+  if (!profile.niche.trim()) missing.push("niche");
+  if (!profile.city.trim()) missing.push("city");
+  return missing;
+}
+
+function nextClarifyingQuestion(profile: AgentProfile) {
+  const missing = getMissingProfileFields(profile);
+  const first = missing[0];
+  if (first === "businessName") return "Как называется бизнес? Напиши: «название <имя>».";
+  if (first === "niche") return "Какая ниша? Например: барбершоп, салон, клиника, юр. услуги.";
+  if (first === "city") return "В каком городе работаете?";
+  return "";
+}
+
+function shouldForceGenerate(text: string) {
+  const lower = text.toLowerCase();
+  return (
+    lower.includes("сделай сам") ||
+    lower.includes("заполни сам") ||
+    lower.includes("остальное сам") ||
+    lower.includes("сам заполни")
+  );
+}
+
+function createDraftFromProfile(profile: AgentProfile): DraftState {
+  const normalizedNiche = profile.niche || "Service";
+  const isBarber = normalizedNiche.toLowerCase().includes("barber") || normalizedNiche.toLowerCase().includes("барбер");
+  const isNails = normalizedNiche.toLowerCase().includes("nail") || normalizedNiche.toLowerCase().includes("салон");
+  const isClinic = normalizedNiche.toLowerCase().includes("clinic") || normalizedNiche.toLowerCase().includes("клиник");
+
+  const accentColor = isBarber ? "#355c7d" : isNails ? "#c77a7a" : isClinic ? "#5f7aa6" : "#6d7ef6";
+  const businessName = profile.businessName || (isBarber ? "Noe Barbershop" : isNails ? "Nails Beauty" : "Studio Name");
+  const nav = isBarber
+    ? ["О нас", "Услуги", "Барберы", "Отзывы", "Запись"]
+    : isNails
+    ? ["О нас", "Услуги", "Команда", "Отзывы", "Запись"]
+    : ["О нас", "Услуги", "Отзывы", "FAQ", "Контакты"];
+
+  const baseServices = isBarber
+    ? [
+        { id: uid(), emoji: "✂️", title: "Стрижка мужская", duration: "60 мин", price: "1 800 ₽" },
+        { id: uid(), emoji: "🧔", title: "Стрижка + борода", duration: "90 мин", price: "2 500 ₽" },
+        { id: uid(), emoji: "💈", title: "Оформление бороды", duration: "45 мин", price: "1 200 ₽" },
+        { id: uid(), emoji: "🔥", title: "Премиум-комплекс", duration: "120 мин", price: "3 500 ₽" }
+      ]
+    : [
+        { id: uid(), emoji: "💅", title: "Маникюр классический", duration: "60 мин", price: "1 200 ₽" },
+        { id: uid(), emoji: "✨", title: "Маникюр с покрытием", duration: "90 мин", price: "1 800 ₽" },
+        { id: uid(), emoji: "🦶", title: "Педикюр", duration: "80 мин", price: "2 100 ₽" },
+        { id: uid(), emoji: "💎", title: "Комплекс VIP", duration: "120 мин", price: "3 500 ₽" }
+      ];
+
+  const styleLabel = profile.style ? ` Стиль: ${profile.style}.` : "";
+  const goalLabel = profile.goal ? ` Цель: ${profile.goal}.` : "";
+  const mustHaveLabel = profile.mustHave.length ? ` Обязательные блоки: ${profile.mustHave.join(", ")}.` : "";
 
   return {
-    businessName: patch.businessName || "Studio Name",
-    city: patch.city || "Москва",
-    niche: patch.niche || "Service",
-    accentColor: patch.accentColor || "#6d7ef6",
-    heroTitle: patch.heroTitle || "Место, где сервис - это искусство",
-    heroSubtitle:
-      patch.heroSubtitle ||
-      "Помогаем клиентам быстро записаться на нужную услугу и сразу получить понятный результат без долгих переписок.",
+    businessName,
+    city: profile.city || "Москва",
+    niche: normalizedNiche,
+    accentColor,
+    heroTitle: isBarber ? "Место, где стиль и сервис работают на тебя" : "Место, где сервис - это искусство",
+    heroSubtitle: `Собрали сайт под ${normalizedNiche.toLowerCase()} в ${profile.city || "вашем городе"}.${goalLabel}${styleLabel}${mustHaveLabel}`.trim(),
     aboutTitle: "О нас",
     aboutBody:
       "Мы работаем с акцентом на качество, стерильность и удобный клиентский опыт. Каждый визит проходит по понятному сценарию: запрос, выбор услуги, запись, результат.",
     primaryCta: "Записаться",
     secondaryCta: "Открыть прайс",
-    contactLine: `${patch.businessName || "Studio Name"}, ${patch.city || "Москва"}`,
-    navItems: patch.navItems || ["О нас", "Услуги", "Отзывы", "FAQ", "Запись"],
-    services: [
-      { id: uid(), emoji: "💅", title: "Маникюр классический", duration: "60 мин", price: "1 200 ₽" },
-      { id: uid(), emoji: "✨", title: "Маникюр с покрытием", duration: "90 мин", price: "1 800 ₽" },
-      { id: uid(), emoji: "🦶", title: "Педикюр", duration: "80 мин", price: "2 100 ₽" },
-      { id: uid(), emoji: "💎", title: "Комплекс VIP", duration: "120 мин", price: "3 500 ₽" }
-    ],
+    contactLine: `${businessName}, ${profile.city || "Москва"}`,
+    navItems: nav,
+    services: baseServices,
     faq: [
       {
         id: uid(),
@@ -269,6 +398,14 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
   const [publishingOverlay, setPublishingOverlay] = useState(false);
   const [overlayMessage, setOverlayMessage] = useState("Публикуем сайт...");
   const [previewExpanded, setPreviewExpanded] = useState(true);
+  const [profile, setProfile] = useState<AgentProfile>({
+    businessName: "",
+    niche: "",
+    city: "",
+    goal: "",
+    style: "",
+    mustHave: []
+  });
 
   const canPublish = paymentStatus === "success" && publishStatus !== "loading" && !!draft;
 
@@ -278,6 +415,8 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
 
   const applyEditPrompt = (text: string) => {
     const lower = text.toLowerCase();
+    const profilePatch = parseProfileFromMessage(text);
+    setProfile((prev) => mergeProfile(prev, profilePatch));
     setDraft((prev) => {
       if (!prev) return prev;
       const next = { ...prev };
@@ -299,12 +438,23 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
       if (lower.includes("отзыв")) {
         next.aboutBody = `${next.aboutBody} Отдельно усилили социальное доказательство через блок отзывов.`;
       }
+      if (profilePatch.businessName) {
+        next.businessName = profilePatch.businessName;
+        next.contactLine = `${profilePatch.businessName}, ${profilePatch.city || next.city}`;
+      }
+      if (profilePatch.city) {
+        next.city = profilePatch.city;
+        next.contactLine = `${next.businessName}, ${profilePatch.city}`;
+      }
+      if (profilePatch.niche) {
+        next.niche = profilePatch.niche;
+      }
 
       return next;
     });
   };
 
-  const generateFromFirstPrompt = (prompt: string) => {
+  const generateFromProfile = (nextProfile: AgentProfile) => {
     setError(null);
     setGenerationStatus("loading");
     setPaymentStatus("idle");
@@ -319,8 +469,9 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
     }, 260);
 
     window.setTimeout(() => {
-      const nextDraft = createDraftFromPrompt(prompt);
+      const nextDraft = createDraftFromProfile(nextProfile);
       setDraft(nextDraft);
+      setProfile(nextProfile);
       addMessage("assistant", `Готово. Собрал первый вариант для «${nextDraft.businessName}». Можем дальше править в чате.`);
       setGenerationStatus("success");
       setIsWorking(false);
@@ -335,8 +486,19 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
     setInput("");
     setError(null);
 
+    const profilePatch = parseProfileFromMessage(text);
+    const mergedProfile = mergeProfile(profile, profilePatch);
+    const needsClarification = getMissingProfileFields(mergedProfile).length > 0;
+    const forceGenerate = shouldForceGenerate(text);
+
     if (!draft) {
-      generateFromFirstPrompt(text);
+      if (needsClarification && !forceGenerate) {
+        setProfile(mergedProfile);
+        const question = nextClarifyingQuestion(mergedProfile);
+        addMessage("assistant", question || "Уточни, пожалуйста, пару деталей и сразу соберу сайт.", "soft");
+        return;
+      }
+      generateFromProfile(mergedProfile);
       return;
     }
 
