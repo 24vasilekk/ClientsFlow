@@ -39,6 +39,12 @@ export type PublishedSitePayload = {
     variant?: string;
     [key: string]: unknown;
   }>;
+  pageDsl?: Array<{
+    id?: string;
+    type?: string;
+    variant?: string;
+    [key: string]: unknown;
+  }>;
 };
 
 export type PublishedSiteDoc = {

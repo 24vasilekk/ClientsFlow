@@ -43,6 +43,7 @@ type DraftLike = {
   radius: "soft" | "rounded" | "sharp";
   contrast: "soft" | "medium" | "high";
   layoutSpec: Array<Record<string, unknown>>;
+  pageDsl: Array<Record<string, unknown>>;
 };
 
 type DesignPreset = {
@@ -189,7 +190,8 @@ function sanitizeDraft(raw: any, fallback: DraftLike): DraftLike {
     density: raw.density === "airy" || raw.density === "balanced" || raw.density === "compact" ? raw.density : fallback.density,
     radius: raw.radius === "soft" || raw.radius === "rounded" || raw.radius === "sharp" ? raw.radius : fallback.radius,
     contrast: raw.contrast === "soft" || raw.contrast === "medium" || raw.contrast === "high" ? raw.contrast : fallback.contrast,
-    layoutSpec: Array.isArray(raw.layoutSpec) ? raw.layoutSpec.slice(0, 32).filter((item: unknown) => item && typeof item === "object").map((item) => item as Record<string, unknown>) : fallback.layoutSpec
+    layoutSpec: Array.isArray(raw.layoutSpec) ? raw.layoutSpec.slice(0, 32).filter((item: unknown) => item && typeof item === "object").map((item) => item as Record<string, unknown>) : fallback.layoutSpec,
+    pageDsl: Array.isArray(raw.pageDsl) ? raw.pageDsl.slice(0, 32).filter((item: unknown) => item && typeof item === "object").map((item) => item as Record<string, unknown>) : fallback.pageDsl
   };
 
   safe.sectionOrder = safe.sectionOrder.filter((key) => safe.sectionsEnabled[key]);
@@ -271,6 +273,28 @@ function buildAlgorithmicDraft(profile: AgentProfile, guidance: string, round: n
     if (section === "contacts") layoutSpec.push({ id: `b-${uid()}`, type: "contacts", variant: rnd() > 0.5 ? "panel" : "minimal", line: `${businessName}, ${profile.city || "Москва"}` });
     if (section === "gallery") layoutSpec.push({ id: `b-${uid()}`, type: "gallery", variant: rnd() > 0.5 ? "masonry" : "tiles", title: "Галерея" });
   }
+  const pageDsl: Array<Record<string, unknown>> = [
+    ...layoutSpec,
+    {
+      id: `b-${uid()}`,
+      type: "stats",
+      variant: rnd() > 0.5 ? "inline" : "cards",
+      items: [
+        { label: "Скорость ответа", value: "< 2 мин" },
+        { label: "Повторные клиенты", value: "72%" },
+        { label: "Конверсия в запись", value: "+28%" }
+      ]
+    },
+    {
+      id: `b-${uid()}`,
+      type: "cta",
+      variant: rnd() > 0.5 ? "centered" : "split",
+      title: "Готовы зафиксировать удобное время?",
+      subtitle: "Оставьте заявку и получите подтверждение в течение пары минут.",
+      primaryCta: profile.goal.includes("звон") ? "Позвонить сейчас" : "Записаться",
+      secondaryCta: "Связаться в мессенджере"
+    }
+  ].slice(0, 32);
 
   return {
     businessName,
@@ -317,7 +341,8 @@ function buildAlgorithmicDraft(profile: AgentProfile, guidance: string, round: n
     radius: styleContext.includes("workspace") ? "rounded" : "soft",
     contrast: styleContext.includes("dark") ? "high" : "medium"
     ,
-    layoutSpec
+    layoutSpec,
+    pageDsl
   };
 }
 
@@ -369,7 +394,8 @@ async function tryOpenRouterGeneration(profile: AgentProfile, guidance: string, 
     '  "density": "airy|balanced|compact",',
     '  "radius": "soft|rounded|sharp",',
     '  "contrast": "soft|medium|high",',
-    '  "layoutSpec": [{"type":"hero","variant":"centered|split","title":"...","subtitle":"...","primaryCta":"...","secondaryCta":"..."},{"type":"services","variant":"cards|rows","items":[{"emoji":"...","title":"...","duration":"...","price":"..."}]}]',
+    '  "layoutSpec": [{"type":"hero","variant":"centered|split","title":"...","subtitle":"...","primaryCta":"...","secondaryCta":"..."},{"type":"services","variant":"cards|rows","items":[{"emoji":"...","title":"...","duration":"...","price":"..."}]}],',
+    '  "pageDsl": [{"type":"hero","variant":"centered|split","title":"...","subtitle":"..."},{"type":"stats","items":[{"label":"...","value":"..."}]},{"type":"cta","title":"...","subtitle":"...","primaryCta":"...","secondaryCta":"..."}]',
     "}"
   ].join("\n");
 

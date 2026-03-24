@@ -55,6 +55,18 @@ type LayoutBlock =
   | { id: string; type: "booking"; variant: "panel"; primaryCta: string }
   | { id: string; type: "contacts"; variant: "panel" | "minimal"; line: string }
   | { id: string; type: "gallery"; variant: "masonry" | "tiles"; title: string };
+type PageDslBlock = {
+  id: string;
+  type: string;
+  variant?: string;
+  title?: string;
+  subtitle?: string;
+  body?: string;
+  line?: string;
+  primaryCta?: string;
+  secondaryCta?: string;
+  items?: Array<Record<string, string>>;
+};
 type DslAction =
   | { kind: "regenerate"; guidance: string }
   | { kind: "styleLike"; reference: string }
@@ -96,6 +108,7 @@ type DraftState = {
   radius: ThemeRadius;
   contrast: ThemeContrast;
   layoutSpec: LayoutBlock[];
+  pageDsl: PageDslBlock[];
 };
 
 type AgentProfile = {
@@ -156,6 +169,7 @@ type PublishPayload = {
     contrast?: ThemeContrast;
   };
   layoutSpec?: LayoutBlock[];
+  pageDsl?: PageDslBlock[];
 };
 
 const LOCAL_PUBLISHED_SITE_PREFIX = "clientsflow_local_published_site:";
@@ -544,6 +558,89 @@ function normalizeLayoutSpec(raw: unknown, fallback: DraftState): LayoutBlock[] 
   return result;
 }
 
+function composePageDsl(draft: Pick<DraftState, "businessName" | "styleLabel" | "primaryCta" | "contactLine" | "layoutSpec">): PageDslBlock[] {
+  const rnd = seeded(hashString(`${draft.businessName}|${draft.styleLabel}|dsl`));
+  const base = draft.layoutSpec.map((block) => {
+    const next: PageDslBlock = { id: block.id, type: block.type, variant: (block as any).variant };
+    if ("title" in block && typeof block.title === "string") next.title = block.title;
+    if ("subtitle" in block && typeof block.subtitle === "string") next.subtitle = block.subtitle;
+    if ("body" in block && typeof block.body === "string") next.body = block.body;
+    if ("line" in block && typeof block.line === "string") next.line = block.line;
+    if ("primaryCta" in block && typeof block.primaryCta === "string") next.primaryCta = block.primaryCta;
+    if ("secondaryCta" in block && typeof block.secondaryCta === "string") next.secondaryCta = block.secondaryCta;
+    if ("items" in block && Array.isArray((block as any).items)) next.items = ((block as any).items as Array<Record<string, string>>).slice(0, 12);
+    return next;
+  });
+
+  const statsBlock: PageDslBlock = {
+    id: uid(),
+    type: "stats",
+    variant: rnd() > 0.5 ? "inline" : "cards",
+    items: [
+      { label: "Скорость ответа", value: "< 2 мин" },
+      { label: "Повторные клиенты", value: "72%" },
+      { label: "Средний чек", value: "+18%" }
+    ]
+  };
+  const ctaBlock: PageDslBlock = {
+    id: uid(),
+    type: "cta",
+    variant: rnd() > 0.5 ? "centered" : "split",
+    title: "Готовы зафиксировать удобное время?",
+    subtitle: "Оставьте заявку и получите подтверждение в течение пары минут.",
+    primaryCta: draft.primaryCta,
+    secondaryCta: "Связаться в мессенджере"
+  };
+  const contactsBlock: PageDslBlock = {
+    id: uid(),
+    type: "contacts",
+    variant: "panel",
+    line: draft.contactLine
+  };
+
+  const withHero = base.some((b) => b.type === "hero") ? base : [{ id: uid(), type: "hero", variant: "centered", title: "Сайт под ваш запрос", subtitle: "Собран с нуля на базе AI-спека", primaryCta: draft.primaryCta, secondaryCta: "Подробнее" }, ...base];
+  const next = [...withHero];
+  if (!next.some((b) => b.type === "stats")) next.splice(Math.min(1, next.length), 0, statsBlock);
+  if (!next.some((b) => b.type === "cta")) next.push(ctaBlock);
+  if (!next.some((b) => b.type === "contacts")) next.push(contactsBlock);
+  return next.slice(0, 24);
+}
+
+function normalizePageDsl(raw: unknown, fallback: DraftState): PageDslBlock[] {
+  if (!Array.isArray(raw)) return composePageDsl(fallback);
+  const cleaned = raw
+    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
+    .map((item) => {
+      const block: PageDslBlock = {
+        id: typeof item.id === "string" && item.id ? item.id : uid(),
+        type: typeof item.type === "string" && item.type ? item.type : "text"
+      };
+      if (typeof item.variant === "string") block.variant = item.variant;
+      if (typeof item.title === "string") block.title = item.title;
+      if (typeof item.subtitle === "string") block.subtitle = item.subtitle;
+      if (typeof item.body === "string") block.body = item.body;
+      if (typeof item.line === "string") block.line = item.line;
+      if (typeof item.primaryCta === "string") block.primaryCta = item.primaryCta;
+      if (typeof item.secondaryCta === "string") block.secondaryCta = item.secondaryCta;
+      if (Array.isArray(item.items)) {
+        block.items = item.items
+          .filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === "object")
+          .slice(0, 12)
+          .map((row) => {
+            const normalized: Record<string, string> = {};
+            for (const [key, value] of Object.entries(row)) {
+              if (typeof value === "string") normalized[key] = value;
+            }
+            return normalized;
+          });
+      }
+      return block;
+    })
+    .slice(0, 24);
+  if (!cleaned.length) return composePageDsl(fallback);
+  return cleaned;
+}
+
 const sectionKeywords: Array<{ key: SectionKey; words: string[] }> = [
   { key: "about", words: ["о нас", "about"] },
   { key: "services", words: ["услуг", "прайс", "цены"] },
@@ -890,9 +987,11 @@ function createDraftFromProfile(profile: AgentProfile, guidance = "", round = 1)
     density: styleContext.includes("минимал") ? "airy" : "balanced",
     radius: styleContext.includes("workspace") ? "rounded" : "soft",
     contrast: styleContext.includes("dark") ? "high" : "medium",
-    layoutSpec: []
+    layoutSpec: [],
+    pageDsl: []
   };
   nextDraft.layoutSpec = composeLayoutSpec(nextDraft);
+  nextDraft.pageDsl = composePageDsl(nextDraft);
   return nextDraft;
 }
 
@@ -951,7 +1050,8 @@ function draftToPayload(draft: DraftState): PublishPayload {
       radius: draft.radius,
       contrast: draft.contrast
     },
-    layoutSpec: draft.layoutSpec
+    layoutSpec: draft.layoutSpec,
+    pageDsl: draft.pageDsl
   };
 }
 
@@ -1082,9 +1182,11 @@ function hydrateGeneratedDraft(raw: any, fallback: DraftState): DraftState {
     sectionOrder,
     sectionsEnabled,
     summaryPoints: patch.summaryPoints?.length ? patch.summaryPoints : fallback.summaryPoints,
-    layoutSpec: []
+    layoutSpec: [],
+    pageDsl: []
   };
   merged.layoutSpec = normalizeLayoutSpec(raw?.layoutSpec, merged);
+  merged.pageDsl = normalizePageDsl(raw?.pageDsl, merged);
   return merged;
 }
 
@@ -1210,6 +1312,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
       }
       next = applySectionCommand(next, text);
       next.layoutSpec = composeLayoutSpec(next);
+      next.pageDsl = composePageDsl(next);
       return next;
     });
   };
@@ -1364,7 +1467,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
           const nextEnabled = { ...prev.sectionsEnabled, [dsl.section]: true };
           const nextOrder = prev.sectionOrder.includes(dsl.section) ? prev.sectionOrder : [...prev.sectionOrder, dsl.section];
           const nextDraft = { ...prev, sectionsEnabled: nextEnabled, sectionOrder: nextOrder };
-          return { ...nextDraft, layoutSpec: composeLayoutSpec(nextDraft) };
+          return { ...nextDraft, layoutSpec: composeLayoutSpec(nextDraft), pageDsl: composePageDsl(nextDraft) };
         });
         addMessage("assistant", `Секция ${dsl.section} включена.`, "soft");
         return;
@@ -1375,7 +1478,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
           const nextEnabled = { ...prev.sectionsEnabled, [dsl.section]: false };
           const nextOrder = prev.sectionOrder.filter((item) => item !== dsl.section);
           const nextDraft = { ...prev, sectionsEnabled: nextEnabled, sectionOrder: nextOrder };
-          return { ...nextDraft, layoutSpec: composeLayoutSpec(nextDraft) };
+          return { ...nextDraft, layoutSpec: composeLayoutSpec(nextDraft), pageDsl: composePageDsl(nextDraft) };
         });
         addMessage("assistant", `Секция ${dsl.section} выключена.`, "soft");
         return;
@@ -1388,7 +1491,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
         setDraft((prev) => {
           if (!prev) return prev;
           const nextDraft = { ...prev, heroTitle: dsl.text };
-          return { ...nextDraft, layoutSpec: composeLayoutSpec(nextDraft) };
+          return { ...nextDraft, layoutSpec: composeLayoutSpec(nextDraft), pageDsl: composePageDsl(nextDraft) };
         });
         addMessage("assistant", "Hero-заголовок обновлен.", "soft");
         return;
@@ -1580,7 +1683,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
                   </span>
                 </div>
                 <div className="mt-8 space-y-6">
-                  {(draft?.layoutSpec || []).map((block) => {
+                  {((draft?.pageDsl && draft.pageDsl.length ? draft.pageDsl : draft?.layoutSpec) || []).map((block: any) => {
                     if (block.type === "hero") {
                       return (
                         <section key={block.id} className={block.variant === "split" ? "grid gap-4 md:grid-cols-2" : "text-center"}>
@@ -1634,7 +1737,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
                         <section key={block.id}>
                           <p className="mb-3 text-center text-xs uppercase tracking-[0.24em]" style={{ color: draft?.accentColor || "#c77a7a" }}>Прайс</p>
                           <div className={block.variant === "rows" ? "space-y-2" : "grid gap-3 lg:grid-cols-2"}>
-                            {(block.items || []).slice(0, 6).map((service, index) => (
+                            {(block.items || []).slice(0, 6).map((service: any, index: number) => (
                               <div
                                 key={`${service.title}-${index}`}
                                 className="border bg-white/90 px-4 py-3"
@@ -1661,7 +1764,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
                         <section key={block.id}>
                           <p className="mb-3 text-center text-xs uppercase tracking-[0.24em]" style={{ color: draft?.accentColor || "#c77a7a" }}>Команда</p>
                           <div className={block.variant === "list" ? "space-y-2" : "grid gap-3 md:grid-cols-3"}>
-                            {block.items.map((member, index) => (
+                            {(block.items || []).map((member: any, index: number) => (
                               <div
                                 key={`${member.name}-${index}`}
                                 className="border bg-white/90 p-4 text-center"
@@ -1680,7 +1783,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
                         <section key={block.id}>
                           <p className="mb-3 text-center text-xs uppercase tracking-[0.24em]" style={{ color: draft?.accentColor || "#c77a7a" }}>Отзывы</p>
                           <div className={block.variant === "quotes" ? "space-y-2" : "grid gap-3 md:grid-cols-2"}>
-                            {block.items.map((review, index) => (
+                            {(block.items || []).map((review: any, index: number) => (
                               <div
                                 key={`${review.author}-${index}`}
                                 className="border bg-white/90 p-4"
@@ -1699,7 +1802,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
                         <section key={block.id}>
                           <p className="mb-3 text-center text-xs uppercase tracking-[0.24em]" style={{ color: draft?.accentColor || "#c77a7a" }}>FAQ</p>
                           <div className="space-y-2">
-                            {block.items.map((item, index) => (
+                            {(block.items || []).map((item: any, index: number) => (
                               <div
                                 key={`${item.q}-${index}`}
                                 className="border bg-white/90 p-3"
@@ -1737,6 +1840,44 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
                         >
                           <p className="text-lg font-semibold text-slate-800" style={{ fontFamily: previewHeadingFont }}>Контакты</p>
                           <p className="mt-1 text-sm text-slate-600">{block.line}</p>
+                        </section>
+                      );
+                    }
+                    if (block.type === "stats") {
+                      return (
+                        <section key={block.id}>
+                          <div className={block.variant === "inline" ? "grid gap-3 sm:grid-cols-3" : "grid gap-3 sm:grid-cols-3"}>
+                            {(Array.isArray(block.items) ? block.items : []).map((item: any, index: number) => (
+                              <div key={`${index}-${item.label || "stat"}`} className="border bg-white/90 p-3 text-center" style={{ backgroundColor: draft?.surfaceBg || "#fffafb", borderRadius: previewRadiusValue, borderColor: previewCardBorder }}>
+                                <p className="text-[11px] uppercase tracking-[0.15em] text-slate-500">{String(item.label || "Метрика")}</p>
+                                <p className="mt-1 text-xl font-semibold text-slate-800" style={{ fontFamily: previewHeadingFont }}>{String(item.value || "—")}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </section>
+                      );
+                    }
+                    if (block.type === "cta") {
+                      return (
+                        <section key={block.id} className="border bg-white/90 text-center" style={{ backgroundColor: draft?.surfaceBg || "#fffafb", borderRadius: previewRadiusValue, padding: previewSectionPaddingValue, borderColor: previewCardBorder }}>
+                          <p className="text-2xl font-semibold text-slate-800" style={{ fontFamily: previewHeadingFont }}>{block.title || "Готовы начать?"}</p>
+                          <p className="mt-2 text-sm text-slate-600">{block.subtitle || "Оставьте заявку и получите ответ в ближайшее время."}</p>
+                          <div className="mt-3 flex flex-wrap justify-center gap-2">
+                            <button type="button" className="rounded-full px-4 py-2 text-sm font-semibold text-white" style={{ backgroundColor: draft?.accentColor || "#c77a7a" }}>
+                              {block.primaryCta || draft?.primaryCta || "Записаться"}
+                            </button>
+                            <button type="button" className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
+                              {block.secondaryCta || draft?.secondaryCta || "Подробнее"}
+                            </button>
+                          </div>
+                        </section>
+                      );
+                    }
+                    if (block.type === "text") {
+                      return (
+                        <section key={block.id} className="border bg-white/90" style={{ backgroundColor: draft?.surfaceBg || "#fffafb", borderRadius: previewRadiusValue, padding: previewSectionPaddingValue, borderColor: previewCardBorder }}>
+                          <p className="text-xs uppercase tracking-[0.24em]" style={{ color: draft?.accentColor || "#c77a7a" }}>{block.title || "Блок"}</p>
+                          <p className="mt-2 text-base leading-7 text-slate-700">{block.body || ""}</p>
                         </section>
                       );
                     }

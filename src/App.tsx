@@ -232,6 +232,18 @@ type PublishedSiteData = {
       line?: string;
       items?: Array<Record<string, unknown>>;
     }>;
+    pageDsl?: Array<{
+      id?: string;
+      type?: string;
+      variant?: string;
+      title?: string;
+      subtitle?: string;
+      primaryCta?: string;
+      secondaryCta?: string;
+      body?: string;
+      line?: string;
+      items?: Array<Record<string, unknown>>;
+    }>;
   };
 };
 
@@ -1043,7 +1055,7 @@ function PublishedSitePage({ path, onNavigate }: { path: `/s/${string}`; onNavig
   const radius = theme.radius === "rounded" ? 24 : theme.radius === "sharp" ? 10 : 16;
   const cardBorder = theme.contrast === "high" ? "rgba(15,23,42,0.24)" : "rgba(148,163,184,0.28)";
   const blockPadding = theme.density === "compact" ? "12px" : theme.density === "airy" ? "22px" : "16px";
-  const layoutBlocks = Array.isArray(p.layoutSpec) ? p.layoutSpec : [];
+  const layoutBlocks = Array.isArray(p.pageDsl) && p.pageDsl.length ? p.pageDsl : Array.isArray(p.layoutSpec) ? p.layoutSpec : [];
   const hasDynamicLayout = layoutBlocks.length > 0;
   const runtimeBlocks = hasDynamicLayout
     ? layoutBlocks
@@ -1207,6 +1219,39 @@ function PublishedSitePage({ path, onNavigate }: { path: `/s/${string}`; onNavig
                 </div>
               );
             }
+            if (block.type === "stats") {
+              const items: any[] = Array.isArray(block.items) ? block.items : [];
+              return (
+                <div key={block.id || uid()} className="grid gap-2 sm:grid-cols-3">
+                  {items.map((item: any, idx: number) => (
+                    <div key={`${idx}-${String(item.label || "")}`} className="border bg-white p-3 text-center" style={{ borderColor: cardBorder, borderRadius: Math.max(10, radius - 4) }}>
+                      <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500">{String(item.label || "Метрика")}</p>
+                      <p className="mt-1 text-xl font-semibold text-slate-900" style={{ fontFamily: fontHeading }}>{String(item.value || "—")}</p>
+                    </div>
+                  ))}
+                </div>
+              );
+            }
+            if (block.type === "cta") {
+              return (
+                <div key={block.id || uid()} className="border bg-white p-4 text-center" style={{ borderColor: cardBorder, borderRadius: Math.max(10, radius - 4) }}>
+                  <h4 className="text-2xl font-extrabold tracking-tight text-slate-900" style={{ fontFamily: fontHeading }}>{String(block.title || "Готовы начать?")}</h4>
+                  <p className="mt-2 text-sm text-slate-600">{String(block.subtitle || "Оставьте заявку, и мы свяжемся с вами.")}</p>
+                  <div className="mt-3 flex flex-wrap justify-center gap-2">
+                    <button className="rounded-full px-4 py-2 text-xs font-semibold text-white" style={{ backgroundColor: p.accentColor }}>{String(block.primaryCta || p.primaryCta)}</button>
+                    <button className="rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700">{String(block.secondaryCta || p.secondaryCta)}</button>
+                  </div>
+                </div>
+              );
+            }
+            if (block.type === "text") {
+              return (
+                <div key={block.id || uid()} className="border bg-white p-4" style={{ borderColor: cardBorder, borderRadius: Math.max(10, radius - 4) }}>
+                  <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">{String(block.title || "Блок")}</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-700">{String(block.body || "")}</p>
+                </div>
+              );
+            }
             if (block.type === "contacts") {
               return (
                 <div key={block.id || uid()} className="rounded-xl border border-cyan-200 bg-cyan-50 p-3" style={{ borderRadius: Math.max(10, radius - 4) }}>
@@ -1218,9 +1263,11 @@ function PublishedSitePage({ path, onNavigate }: { path: `/s/${string}`; onNavig
           })}
         </div>
 
-        <div className="mt-4 rounded-xl border border-cyan-200 bg-cyan-50 p-3">
-          <p className="text-sm font-semibold text-slate-900">{p.contactLine}</p>
-        </div>
+        {!runtimeBlocks.some((block: any) => block.type === "contacts") ? (
+          <div className="mt-4 rounded-xl border border-cyan-200 bg-cyan-50 p-3">
+            <p className="text-sm font-semibold text-slate-900">{p.contactLine}</p>
+          </div>
+        ) : null}
       </div>
 
       <div className="fixed inset-x-0 bottom-4 z-20 flex justify-center px-4">
