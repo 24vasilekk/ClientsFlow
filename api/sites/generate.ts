@@ -53,6 +53,40 @@ function compact(input: unknown) {
     .slice(0, 260);
 }
 
+function looksLowQualityPageCode(code: string) {
+  const html = String(code || "");
+  if (!html.trim()) return true;
+  const lower = html.toLowerCase();
+  const sectionCount = (lower.match(/<section\b/g) || []).length;
+  const hasCssVars = lower.includes(":root") && lower.includes("--accent");
+  const hasGradient = lower.includes("gradient(");
+  const hasMedia = lower.includes("@media");
+  const hasPlaceholder =
+    lower.includes("studio name") ||
+    lower.includes("секция") ||
+    lower.includes("блок") ||
+    lower.includes("lorem ipsum");
+  if (hasPlaceholder) return true;
+  if (html.length < 4200) return true;
+  if (sectionCount < 4) return true;
+  if (!hasCssVars || !hasGradient || !hasMedia) return true;
+  return false;
+}
+
+function buildDesignDirection(profile: AgentProfile, guidance: string) {
+  const text = `${profile.niche} ${profile.style} ${profile.styleReference} ${guidance}`.toLowerCase();
+  if (text.includes("барбер") || text.includes("barber")) {
+    return "Мужской editorial: глубокие темные цвета, контрастная типографика, аккуратные акценты латунь/медь, премиальные карточки услуг.";
+  }
+  if (text.includes("кибер") || text.includes("игров") || text.includes("gaming") || text.includes("computer club")) {
+    return "Киберпанк dark: неоновые акценты, glow, сильный hero, блок зон/тарифов/игр, эффектные hover-состояния.";
+  }
+  if (text.includes("салон") || text.includes("nail") || text.includes("beauty")) {
+    return "Beauty premium: мягкие градиенты, утонченная типографика, воздушные отступы, доверительный tone of voice.";
+  }
+  return "Premium SaaS/editorial: выразительная сетка, контрастные заголовки, продуманные CTA, живой визуальный ритм.";
+}
+
 function isEditRequest(guidance: string) {
   const text = guidance.toLowerCase();
   return (
@@ -386,6 +420,7 @@ export default async function handler(req: any, res: any) {
     }
 
     const isEdit = isEditRequest(guidance);
+    const designDirection = buildDesignDirection(profile, guidance);
     const prompt = [
       "Сгенерируй JSON сайта на русском языке.",
       `Бизнес: ${base.businessName}`,
@@ -395,13 +430,20 @@ export default async function handler(req: any, res: any) {
       `Стиль: ${profile.style || "современный"}`,
       `Референс: ${profile.styleReference || "-"}`,
       `Запрос: ${guidance || "-"}`,
+      `Design direction: ${designDirection}`,
       isEdit && currentPageCode
         ? `ТЕКУЩИЙ HTML/CSS КОД (измени его по запросу и верни полную новую версию pageCode, не обнуляй структуру):\n${currentPageCode.slice(0, 22000)}`
         : "Собери новый код с нуля под запрос.",
-      "Верни только JSON. Обязательные поля: heroTitle, heroSubtitle, aboutBody, services[], faq[], pageDsl[], pageCode."
+      "Ограничения качества:",
+      "1) pageCode = полный HTML документ с CSS внутри <style>, без JS библиотек.",
+      "2) Минимум 6 смысловых секций: hero, преимущества/о нас, услуги/пакеты, social proof, FAQ, финальный CTA/контакты.",
+      "3) Не использовать заглушки: Studio Name, Блок, Секция, Lorem Ipsum.",
+      "4) Добавь CSS variables (:root), хотя бы один градиент, responsive @media, hover-состояния кнопок/карточек.",
+      "5) Визуал должен быть выразительным и не шаблонным: продуманные отступы, контрастная типографика, аккуратная глубина/тени.",
+      "Верни только JSON. Обязательные поля: heroTitle, heroSubtitle, aboutBody, services[], faq[], pageDsl[], summaryPoints[], pageCode."
     ].join("\n");
 
-    const requestOpenRouter = async (timeoutMs: number) => {
+    const requestOpenRouter = async (timeoutMs: number, userPrompt: string = prompt) => {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), timeoutMs);
       try {
@@ -419,9 +461,9 @@ export default async function handler(req: any, res: any) {
               {
                 role: "system",
                 content:
-                  "Ты senior web designer + frontend developer. Верни только JSON без markdown и пояснений. pageCode должен быть полноценным HTML+CSS документом."
+                  "Ты арт-директор и senior frontend developer. Всегда выдаешь выразительный, современный, не-шаблонный лендинг. Верни только JSON без markdown и пояснений."
               },
-              { role: "user", content: prompt }
+              { role: "user", content: userPrompt }
             ]
           }),
           signal: controller.signal
@@ -465,7 +507,51 @@ export default async function handler(req: any, res: any) {
       return;
     }
 
-    const draft = normalizeDraft(parsed, base);
+    let draft = normalizeDraft(parsed, base);
+    if (looksLowQualityPageCode(draft.pageCode)) {
+      stage = "quality_refine_request";
+      const refinePrompt = [
+        "Улучши дизайн ниже до premium-уровня и верни только JSON с теми же полями.",
+        "Сохрани бизнес-контекст и смысл блоков, но сделай визуал гораздо сильнее.",
+        "Запрещены заглушки и плоский серый шаблон.",
+        `Бизнес: ${base.businessName}; Ниша: ${base.niche}; Город: ${base.city}`,
+        `Запрос пользователя: ${guidance || "-"}`,
+        "Текущий JSON:",
+        JSON.stringify(
+          {
+            heroTitle: draft.heroTitle,
+            heroSubtitle: draft.heroSubtitle,
+            aboutBody: draft.aboutBody,
+            services: draft.services,
+            faq: draft.faq,
+            pageDsl: draft.pageDsl,
+            pageCode: draft.pageCode
+          },
+          null,
+          2
+        )
+      ].join("\n");
+      try {
+        const refineResponse = await requestOpenRouter(12000, refinePrompt);
+        stage = "quality_refine_read";
+        const refineData = await refineResponse.json().catch(() => ({} as any));
+        if (refineResponse.ok) {
+          const refineContent = refineData?.choices?.[0]?.message?.content;
+          const refineText =
+            typeof refineContent === "string"
+              ? refineContent
+              : Array.isArray(refineContent)
+                ? refineContent.map((item: any) => item?.text || "").join("\n")
+                : "";
+          const refineParsed = parseJson(refineText);
+          if (refineParsed && typeof refineParsed === "object") {
+            draft = normalizeDraft(refineParsed, draft);
+          }
+        }
+      } catch {
+        // keep first draft if refine pass fails
+      }
+    }
     res.status(200).json({
       specVersion: "v1-lite",
       debug: { id: debugId, stage: "ok" },
