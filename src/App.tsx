@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import DashboardApp from "./DashboardApp";
-import SitesBuilderPage from "./sites/SitesBuilderPage";
+import SitesBuilderPage from "./sites/ChatSitesBuilderPage";
 import WorkbenchApp from "./WorkbenchApp";
 
 type RoutePath = "/" | "/login" | "/dashboard" | "/pricing" | "/workbench" | "/sites" | `/s/${string}`;
