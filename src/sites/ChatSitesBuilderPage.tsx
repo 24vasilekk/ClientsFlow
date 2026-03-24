@@ -397,6 +397,58 @@ function detectAiEditIntent(text: string) {
   );
 }
 
+function detectCopyToneIntent(text: string) {
+  const lower = text.toLowerCase();
+  return (
+    lower.includes("сделай текст") ||
+    lower.includes("перепиши текст") ||
+    lower.includes("более премиально") ||
+    lower.includes("короче") ||
+    lower.includes("агрессив") ||
+    lower.includes("вежлив") ||
+    lower.includes("дружелюб")
+  );
+}
+
+function parseCopyTone(text: string): "premium" | "short" | "aggressive" | "friendly" | null {
+  const lower = text.toLowerCase();
+  if (lower.includes("преми")) return "premium";
+  if (lower.includes("короче") || lower.includes("коротк")) return "short";
+  if (lower.includes("агрессив") || lower.includes("дерзк")) return "aggressive";
+  if (lower.includes("дружелюб") || lower.includes("вежлив") || lower.includes("теплее")) return "friendly";
+  return null;
+}
+
+function rewriteCopyTone(draft: DraftState, tone: "premium" | "short" | "aggressive" | "friendly"): DraftState {
+  const next = { ...draft };
+  if (tone === "premium") {
+    next.heroTitle = `${next.businessName}: премиальный сервис без компромиссов`;
+    next.heroSubtitle = "Точная подача, сильный визуал и конверсионный путь от первого экрана до заявки.";
+    next.aboutBody = "Мы собираем digital-витрину бизнеса так, чтобы бренд выглядел дороже, а клиент принимал решение быстрее.";
+    next.primaryCta = "Записаться сейчас";
+    next.secondaryCta = "Смотреть предложения";
+    next.styleLabel = `${next.styleLabel} · Premium Copy`;
+  } else if (tone === "short") {
+    next.heroTitle = `${next.businessName}: сайт для быстрых заявок`;
+    next.heroSubtitle = "Коротко. Понятно. Конверсионно.";
+    next.aboutBody = "Четкий оффер, прайс, доверие, запись.";
+    next.styleLabel = `${next.styleLabel} · Short Copy`;
+  } else if (tone === "aggressive") {
+    next.heroTitle = `${next.businessName}: забирайте клиентов быстрее конкурентов`;
+    next.heroSubtitle = "Сильный оффер, четкая упаковка и мгновенный путь к брони.";
+    next.aboutBody = "Делаем сайт, который не просто красиво выглядит, а стабильно забирает заявки в работу.";
+    next.primaryCta = "Забронировать место";
+    next.secondaryCta = "Получить оффер";
+    next.styleLabel = `${next.styleLabel} · Aggressive Copy`;
+  } else {
+    next.heroTitle = `${next.businessName}: удобно, понятно, по-человечески`;
+    next.heroSubtitle = "Аккуратный сайт, который помогает клиенту быстро понять ценность и записаться.";
+    next.aboutBody = "Мы делаем структуру и тексты так, чтобы человеку было легко выбрать услугу и сделать первый шаг.";
+    next.styleLabel = `${next.styleLabel} · Friendly Copy`;
+  }
+  return next;
+}
+
 function detectCapabilityQuestion(text: string) {
   const lower = text.toLowerCase();
   return lower.includes("что ты умеешь") || lower.includes("что ты еще можешь") || lower.includes("что ты можешь");
@@ -499,6 +551,35 @@ function parseContrast(text: string): ThemeContrast | null {
   if (lower.includes("высок") || lower.includes("контрастнее")) return "high";
   if (lower.includes("мягк") || lower.includes("спокойн")) return "soft";
   return null;
+}
+
+function styleReferenceHints(input: string): Partial<Pick<DraftState, "fontHeading" | "fontBody" | "density" | "radius" | "contrast" | "accentColor" | "pageBg" | "surfaceBg" | "styleLabel">> {
+  const lower = input.toLowerCase();
+  const next: Partial<Pick<DraftState, "fontHeading" | "fontBody" | "density" | "radius" | "contrast" | "accentColor" | "pageBg" | "surfaceBg" | "styleLabel">> = {};
+  if (!lower.trim()) return next;
+  if (lower.includes("base44") || lower.includes("workspace")) {
+    next.radius = "rounded";
+    next.density = "balanced";
+    next.contrast = "medium";
+    next.accentColor = "#0ea5e9";
+    next.pageBg = "#eff8ff";
+    next.surfaceBg = "#ffffff";
+    next.fontHeading = '"Inter", "Segoe UI", sans-serif';
+    next.fontBody = '"Inter", "Segoe UI", sans-serif';
+    next.styleLabel = "Workspace Ash · Reference";
+  }
+  if (lower.includes("editorial") || lower.includes("серф") || lower.includes("playfair")) {
+    next.fontHeading = '"Playfair Display", Georgia, serif';
+    next.fontBody = '"Lora", Georgia, serif';
+    next.styleLabel = "Editorial Rose · Reference";
+  }
+  if (lower.includes("dark") || lower.includes("темн")) {
+    next.contrast = "high";
+    next.pageBg = "#eef2f7";
+    next.surfaceBg = "#f8fafc";
+    next.styleLabel = `${next.styleLabel || "Noir Modern"} · Dark`;
+  }
+  return next;
 }
 
 function radiusPx(radius: ThemeRadius) {
@@ -718,12 +799,15 @@ function composePageDsl(draft: Pick<DraftState, "businessName" | "styleLabel" | 
 
 function normalizePageDsl(raw: unknown, fallback: DraftState): PageDslBlock[] {
   if (!Array.isArray(raw)) return composePageDsl(fallback);
+  const allowedTypes = new Set(["hero", "about", "services", "team", "reviews", "faq", "booking", "contacts", "gallery", "stats", "cta", "text"]);
   const cleaned = raw
     .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
     .map((item) => {
+      const inferredType = typeof item.type === "string" && item.type ? item.type.toLowerCase() : "text";
+      const normalizedType = allowedTypes.has(inferredType) ? inferredType : "text";
       const block: PageDslBlock = {
         id: typeof item.id === "string" && item.id ? item.id : uid(),
-        type: typeof item.type === "string" && item.type ? item.type : "text"
+        type: normalizedType
       };
       if (typeof item.variant === "string") block.variant = item.variant;
       if (typeof item.title === "string") block.title = item.title;
@@ -748,7 +832,12 @@ function normalizePageDsl(raw: unknown, fallback: DraftState): PageDslBlock[] {
     })
     .slice(0, 24);
   if (!cleaned.length) return composePageDsl(fallback);
-  return cleaned;
+  const withEssentials = [...cleaned];
+  if (!withEssentials.some((b) => b.type === "hero")) withEssentials.unshift({ id: uid(), type: "hero", variant: "centered", title: fallback.heroTitle, subtitle: fallback.heroSubtitle, primaryCta: fallback.primaryCta, secondaryCta: fallback.secondaryCta });
+  if (!withEssentials.some((b) => b.type === "services")) withEssentials.push({ id: uid(), type: "services", variant: "cards", items: fallback.services.map((item) => ({ emoji: item.emoji, title: item.title, duration: item.duration, price: item.price })) });
+  if (!withEssentials.some((b) => b.type === "cta")) withEssentials.push({ id: uid(), type: "cta", title: "Готовы начать?", subtitle: "Оставьте заявку и получите быстрый ответ.", primaryCta: fallback.primaryCta, secondaryCta: fallback.secondaryCta });
+  if (!withEssentials.some((b) => b.type === "contacts")) withEssentials.push({ id: uid(), type: "contacts", line: fallback.contactLine });
+  return withEssentials.slice(0, 24);
 }
 
 function escapeHtml(value: string) {
@@ -810,7 +899,7 @@ function buildPageCode(draft: Pick<DraftState, "businessName" | "accentColor" | 
       if (block.type === "contacts") {
         return `<section class="card"><h2>Контакты</h2><p>${escapeHtml(block.line || "")}</p></section>`;
       }
-      return `<section class="card"><h2>${escapeHtml(block.title || "Блок")}</h2><p>${escapeHtml(block.body || "")}</p></section>`;
+      return `<section class="card"><h2>${escapeHtml(block.title || "Секция")}</h2><p>${escapeHtml(block.body || "Контент обновляется по вашему запросу.")}</p></section>`;
     })
     .join("\n");
 
@@ -1306,6 +1395,7 @@ function createDraftFromProfile(profile: AgentProfile, guidance = "", round = 1)
     pageDsl: [],
     pageCode: ""
   };
+  Object.assign(nextDraft, styleReferenceHints(`${profile.styleReference} ${guidance}`));
   return finalizeDraft(nextDraft);
 }
 
@@ -1602,6 +1692,14 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
           next.fontBody = font.body;
           next.styleLabel = `${next.styleLabel} · ${font.label}`;
         }
+      }
+      const tone = parseCopyTone(text);
+      if (tone) {
+        next = rewriteCopyTone(next, tone);
+      }
+      const styleRef = extractStyleReference(text);
+      if (styleRef) {
+        Object.assign(next, styleReferenceHints(styleRef));
       }
       const density = parseDensity(text);
       if (density) next.density = density;
@@ -1965,7 +2063,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
       return;
     }
 
-    if (detectAiEditIntent(text)) {
+    if (detectCopyToneIntent(text) || detectAiEditIntent(text)) {
       applyEditPrompt(text);
       addMessage("assistant", "Обновил текущий вариант по твоему запросу. Если нужен полный редизайн, напиши «перегенерируй».", "soft");
       return;
@@ -2339,8 +2437,8 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
                     if (block.type === "text") {
                       return (
                         <section key={block.id} className="border bg-white/90" style={{ backgroundColor: draft?.surfaceBg || "#fffafb", borderRadius: previewRadiusValue, padding: previewSectionPaddingValue, borderColor: previewCardBorder }}>
-                          <p className="text-xs uppercase tracking-[0.24em]" style={{ color: draft?.accentColor || "#c77a7a" }}>{block.title || "Блок"}</p>
-                          <p className="mt-2 text-base leading-7 text-slate-700">{block.body || ""}</p>
+                          <p className="text-xs uppercase tracking-[0.24em]" style={{ color: draft?.accentColor || "#c77a7a" }}>{block.title || "Секция"}</p>
+                          <p className="mt-2 text-base leading-7 text-slate-700">{block.body || "Контент секции формируется по вашему запросу."}</p>
                         </section>
                       );
                     }
