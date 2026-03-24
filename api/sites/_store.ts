@@ -55,8 +55,10 @@ export type PublishedSiteDoc = {
   payload: PublishedSitePayload;
 };
 
-const KV_API_URL = process.env.KV_REST_API_URL;
-const KV_TOKEN = process.env.KV_REST_API_TOKEN;
+const KV_API_URL = String(process.env.KV_REST_API_URL || "").trim();
+const KV_TOKEN = String(process.env.KV_REST_API_TOKEN || "")
+  .replace(/[\r\n]+/g, "")
+  .trim();
 const SITE_KEY_PREFIX = "clientsflow:site:";
 
 function hasValidKvConfig() {

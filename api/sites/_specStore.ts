@@ -17,8 +17,10 @@ type SpecRecord = {
   draft: unknown;
 };
 
-const KV_API_URL = process.env.KV_REST_API_URL;
-const KV_TOKEN = process.env.KV_REST_API_TOKEN;
+const KV_API_URL = String(process.env.KV_REST_API_URL || "").trim();
+const KV_TOKEN = String(process.env.KV_REST_API_TOKEN || "")
+  .replace(/[\r\n]+/g, "")
+  .trim();
 const SPEC_KEY = "clientsflow:site-spec:session:";
 
 function hasValidKvConfig() {

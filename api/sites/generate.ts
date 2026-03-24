@@ -492,14 +492,17 @@ function buildAlgorithmicDraft(profile: AgentProfile, guidance: string, round: n
 }
 
 async function tryOpenRouterGeneration(profile: AgentProfile, guidance: string, round: number): Promise<DraftLike | null> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = String(process.env.OPENROUTER_API_KEY || "")
+    .replace(/[\r\n]+/g, "")
+    .trim();
   if (!apiKey) return null;
 
-  const model = process.env.OPENROUTER_MODEL || "google/gemini-2.5-flash";
+  const model = String(process.env.OPENROUTER_MODEL || "google/gemini-2.5-flash").trim();
   let referer = "https://clients-flow-ten.vercel.app";
-  if (process.env.OPENROUTER_SITE_URL) {
+  const envReferer = String(process.env.OPENROUTER_SITE_URL || "").trim();
+  if (envReferer) {
     try {
-      const parsed = new URL(process.env.OPENROUTER_SITE_URL);
+      const parsed = new URL(envReferer);
       if (parsed.protocol === "https:" || parsed.protocol === "http:") {
         referer = parsed.toString();
       }
@@ -645,7 +648,10 @@ export default async function handler(req: any, res: any) {
     };
     const guidance = String(req.body?.guidance || "");
     const round = Math.max(1, Number(req.body?.round || 1));
-    if (!process.env.OPENROUTER_API_KEY) {
+    const hasApiKey = String(process.env.OPENROUTER_API_KEY || "")
+      .replace(/[\r\n]+/g, "")
+      .trim();
+    if (!hasApiKey) {
       res.status(503).json({
         error: "AI engine is not configured. Set OPENROUTER_API_KEY in Vercel Environment Variables."
       });
