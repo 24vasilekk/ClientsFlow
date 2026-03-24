@@ -253,6 +253,29 @@ function sitesGenerateEndpoint() {
   }
 }
 
+async function parseJsonResponseSafe(response: Response) {
+  const status = response.status;
+  const contentType = response.headers.get("content-type") || "";
+  const buffer = await response.arrayBuffer();
+  const text = new TextDecoder("utf-8").decode(buffer);
+  try {
+    return {
+      ok: true as const,
+      status,
+      contentType,
+      body: JSON.parse(text) as any
+    };
+  } catch (error: any) {
+    return {
+      ok: false as const,
+      status,
+      contentType,
+      rawText: text.slice(0, 600),
+      parseError: String(error?.message || "json_parse_failed")
+    };
+  }
+}
+
 function nowTime() {
   return new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
 }
@@ -1607,8 +1630,15 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
         response = await requestGeneration(safeFreshSessionId);
       }
 
-      debugStage = "read_json";
-      const body = (await response.json()) as {
+      debugStage = "read_body";
+      const parsed = await parseJsonResponseSafe(response);
+      if (!parsed.ok) {
+        const snippet = parsed.rawText.replace(/\s+/g, " ").trim().slice(0, 220);
+        throw new Error(
+          `invalid_json_response:status=${parsed.status}:contentType=${parsed.contentType || "n/a"}:parse=${parsed.parseError}:snippet=${snippet}`
+        );
+      }
+      const body = parsed.body as {
         error?: string;
         debug?: unknown;
         sessionId?: string;
