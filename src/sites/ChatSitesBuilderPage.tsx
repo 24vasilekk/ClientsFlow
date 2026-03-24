@@ -292,6 +292,27 @@ function detectRestyleIntent(text: string) {
   );
 }
 
+function detectAiEditIntent(text: string) {
+  const lower = text.toLowerCase();
+  return (
+    lower.includes("измени") ||
+    lower.includes("поменяй") ||
+    lower.includes("сделай") ||
+    lower.includes("добавь") ||
+    lower.includes("убери") ||
+    lower.includes("перестав") ||
+    lower.includes("перепиши") ||
+    lower.includes("обнови дизайн") ||
+    lower.includes("сгенерируй") ||
+    lower.includes("редизайн")
+  );
+}
+
+function detectCapabilityQuestion(text: string) {
+  const lower = text.toLowerCase();
+  return lower.includes("что ты умеешь") || lower.includes("что ты еще можешь") || lower.includes("что ты можешь");
+}
+
 function parseSectionArg(input: string): SectionKey | null {
   const normalized = input.trim().toLowerCase();
   if (!normalized) return null;
@@ -1442,6 +1463,9 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
     setDraft(finalDraft);
     setGenerationRound(nextRound);
     setProfile(nextProfile);
+    if (engine === "algorithm") {
+      addMessage("assistant", "Сейчас отработал в fallback-режиме. Проверь `OPENROUTER_API_KEY` в Vercel, чтобы включить полноценную AI-генерацию.", "soft");
+    }
     const summary = finalDraft.summaryPoints.map((point) => `• ${point}`).join("\n");
     addMessage(
       "assistant",
@@ -1614,7 +1638,16 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
       return;
     }
 
-    if (detectRegenerateIntent(text) || detectRestyleIntent(text)) {
+    if (detectCapabilityQuestion(text)) {
+      addMessage(
+        "assistant",
+        "Я могу: сгенерировать новый дизайн с нуля, менять стиль по референсу, перестраивать блоки DSL-командами и публиковать сайт. Напиши конкретно: «измени стиль на минимализм», «добавь блок отзывов», «/rewrite-block #2 title: ...».",
+        "soft"
+      );
+      return;
+    }
+
+    if (detectRegenerateIntent(text) || detectRestyleIntent(text) || detectAiEditIntent(text)) {
       void generateFromProfile(mergedProfile, text, generationRound + 1);
       return;
     }
