@@ -988,6 +988,11 @@ function extractBusinessName(text: string) {
     const candidate = normalizeBusinessName(byName[1]);
     if (candidate.length >= 2) return candidate;
   }
+  const byTypeAndName = text.match(/(?:клуб|барбершоп|салон|студия)\s+["«]?([a-zа-я0-9][a-zа-я0-9 .\-]{1,32})["»]?/i);
+  if (byTypeAndName?.[1]) {
+    const candidate = normalizeBusinessName(byTypeAndName[1]);
+    if (candidate.length >= 2) return candidate;
+  }
   const quoted = text.match(/["«]([^"»]{2,42})["»]/);
   if (quoted?.[1]) {
     const candidate = normalizeBusinessName(quoted[1]);
@@ -1011,6 +1016,7 @@ function extractCity(text: string) {
 
 function extractNiche(text: string) {
   const lower = text.toLowerCase();
+  if (lower.includes("компьютерн") || lower.includes("кибер") || lower.includes("игров") || lower.includes("esports")) return "Computer Club";
   if (lower.includes("барбер")) return "Barbershop";
   if (lower.includes("салон") || lower.includes("nails") || lower.includes("маник")) return "Nail Studio";
   if (lower.includes("клиник") || lower.includes("стомат")) return "Clinic";
@@ -1126,6 +1132,11 @@ function shouldForceGenerate(text: string) {
 
 function createDraftFromProfile(profile: AgentProfile, guidance = "", round = 1): DraftState {
   const normalizedNiche = profile.niche || "Service";
+  const isComputerClub =
+    normalizedNiche.toLowerCase().includes("computer club") ||
+    normalizedNiche.toLowerCase().includes("компьютер") ||
+    normalizedNiche.toLowerCase().includes("кибер") ||
+    normalizedNiche.toLowerCase().includes("esport");
   const isBarber = normalizedNiche.toLowerCase().includes("barber") || normalizedNiche.toLowerCase().includes("барбер");
   const isNails = normalizedNiche.toLowerCase().includes("nail") || normalizedNiche.toLowerCase().includes("салон");
   const isClinic = normalizedNiche.toLowerCase().includes("clinic") || normalizedNiche.toLowerCase().includes("клиник");
@@ -1144,8 +1155,10 @@ function createDraftFromProfile(profile: AgentProfile, guidance = "", round = 1)
       ? designPresets.find((item) => item.id === "editorial-rose") || designPresets[0]
       : pick(designPresets, rnd);
 
-  const businessName = profile.businessName || (isBarber ? "Noe Barbershop" : isNails ? "Nails Beauty" : "Studio Name");
-  const nav = isBarber
+  const businessName = profile.businessName || (isComputerClub ? "AirDrop Arena" : isBarber ? "Noe Barbershop" : isNails ? "Nails Beauty" : "Studio Name");
+  const nav = isComputerClub
+    ? ["О нас", "Тарифы", "Залы", "Турниры", "Бронь"]
+    : isBarber
     ? ["О нас", "Услуги", "Барберы", "Отзывы", "Запись"]
     : isNails
     ? ["О нас", "Услуги", "Команда", "Отзывы", "Запись"]
@@ -1169,7 +1182,13 @@ function createDraftFromProfile(profile: AgentProfile, guidance = "", round = 1)
     { emoji: "📋", title: "План лечения", duration: "30 мин", price: "1 500 ₽" },
     { emoji: "✅", title: "Контрольный прием", duration: "25 мин", price: "1 200 ₽" }
   ];
-  const base = isBarber ? barberServices : isNails ? nailsServices : isClinic ? clinicServices : nailsServices;
+  const computerClubServices = [
+    { emoji: "🎮", title: "Игровое место Standard", duration: "1 час", price: "250 ₽" },
+    { emoji: "🖥️", title: "VIP зона", duration: "1 час", price: "450 ₽" },
+    { emoji: "🏆", title: "Турнирный пакет", duration: "3 часа", price: "990 ₽" },
+    { emoji: "🌙", title: "Ночной пакет", duration: "8 часов", price: "1 490 ₽" }
+  ];
+  const base = isComputerClub ? computerClubServices : isBarber ? barberServices : isNails ? nailsServices : isClinic ? clinicServices : nailsServices;
   const services = base.map((item) => ({
     id: uid(),
     emoji: item.emoji,
@@ -1178,7 +1197,13 @@ function createDraftFromProfile(profile: AgentProfile, guidance = "", round = 1)
     price: item.price
   }));
 
-  const heroVariants = isBarber
+  const heroVariants = isComputerClub
+    ? [
+        "Компьютерный клуб, где комфорт и FPS на максимуме",
+        "Современное игровое пространство для турниров и каток",
+        "Киберклуб, куда приходят за атмосферой и уровнем"
+      ]
+    : isBarber
     ? [
         "Место, где стиль и сервис работают на тебя",
         "Барбершоп, куда возвращаются за уровнем и атмосферой",
@@ -1219,9 +1244,9 @@ function createDraftFromProfile(profile: AgentProfile, guidance = "", round = 1)
   const sectionOrder = allSections.filter((key) => sectionsEnabled[key]);
 
   const team = [
-    { id: uid(), name: "Анастасия", role: isBarber ? "Барбер" : "Старший мастер" },
-    { id: uid(), name: "Екатерина", role: isBarber ? "Барбер-стилист" : "Мастер" },
-    { id: uid(), name: "Мария", role: isBarber ? "Администратор" : "Топ-специалист" }
+    { id: uid(), name: "Анастасия", role: isComputerClub ? "Администратор клуба" : isBarber ? "Барбер" : "Старший мастер" },
+    { id: uid(), name: "Екатерина", role: isComputerClub ? "Менеджер зала" : isBarber ? "Барбер-стилист" : "Мастер" },
+    { id: uid(), name: "Мария", role: isComputerClub ? "Организатор турниров" : isBarber ? "Администратор" : "Топ-специалист" }
   ];
   const reviews = [
     { id: uid(), author: "Клиент", text: "Очень понравился сервис и результат. Записалась онлайн за пару минут." },
@@ -1935,8 +1960,14 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
       return;
     }
 
-    if (detectRegenerateIntent(text) || detectRestyleIntent(text) || detectAiEditIntent(text)) {
+    if (detectRegenerateIntent(text) || detectRestyleIntent(text)) {
       void generateFromProfile(mergedProfile, text, generationRound + 1);
+      return;
+    }
+
+    if (detectAiEditIntent(text)) {
+      applyEditPrompt(text);
+      addMessage("assistant", "Обновил текущий вариант по твоему запросу. Если нужен полный редизайн, напиши «перегенерируй».", "soft");
       return;
     }
 

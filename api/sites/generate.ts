@@ -98,7 +98,7 @@ function fallbackDraft(profile: AgentProfile, guidance: string): DraftLike {
       type: "hero",
       variant: "centered",
       title: `${businessName}: современный сайт под ${niche}`,
-      subtitle: `Собрали персональный сайт для бизнеса в ${city}. ${guidance || "Фокус на конверсии и записи."}`,
+      subtitle: `Собрали персональный сайт для бизнеса в ${city}. Фокус на конверсии и онлайн-записи.`,
       primaryCta: "Записаться",
       secondaryCta: "Смотреть услуги"
     },
