@@ -236,6 +236,7 @@ export default async function handler(req: any, res: any) {
 
   const debugId = `gen-${Math.random().toString(36).slice(2, 10)}`;
   let stage = "init";
+  const startedAt = Date.now();
 
   try {
     stage = "parse_request";
@@ -257,16 +258,30 @@ export default async function handler(req: any, res: any) {
     const apiKey = String(process.env.OPENROUTER_API_KEY || "")
       .replace(/[\r\n\s\u200B-\u200D\uFEFF]+/g, "")
       .trim();
-    if (!apiKey) {
-      res.status(503).json({
-        error: "AI engine is not configured",
-        debug: { id: debugId, stage, code: "OPENROUTER_API_KEY_MISSING" }
-      });
-      return;
-    }
-
     const model = String(process.env.OPENROUTER_MODEL || "google/gemini-2.5-flash").trim();
     const base = fallbackDraft(profile, guidance);
+    const finishWithFallback = (code: string, message: string) => {
+      const safeDraft: DraftLike = { ...base, styleLabel: `${base.styleLabel} · Fallback` };
+      res.status(200).json({
+        specVersion: "v1-lite",
+        debug: { id: debugId, stage: "fallback", code, message, elapsedMs: Date.now() - startedAt },
+        sessionId,
+        round,
+        engine: "openrouter",
+        draft: safeDraft,
+        profile,
+        stages: [{ id: "fallback", ms: Date.now() - startedAt, source: "local" }],
+        candidates: [{ id: "fallback", engine: "openrouter", score: 100, label: "Safe Fallback" }],
+        selectedCandidateId: "fallback",
+        totalMs: Date.now() - startedAt,
+        history: []
+      });
+    };
+
+    if (!apiKey) {
+      finishWithFallback("OPENROUTER_API_KEY_MISSING", "OPENROUTER_API_KEY is not configured");
+      return;
+    }
 
     const prompt = [
       "Сгенерируй JSON сайта на русском языке.",
@@ -310,56 +325,22 @@ export default async function handler(req: any, res: any) {
     };
 
     stage = "openrouter_request";
-    let response: Response | null = null;
-    let requestError = "";
-    for (const timeoutMs of [12000, 22000]) {
-      try {
-        response = await requestOpenRouter(timeoutMs);
-        requestError = "";
-        break;
-      } catch (error: any) {
-        requestError = compact(error?.message || "openrouter_request_failed");
-        if (String(error?.name || "").toLowerCase() !== "aborterror") break;
-      }
+    if (Date.now() - startedAt > 4500) {
+      finishWithFallback("EARLY_TIMEOUT_GUARD", "Function time budget exceeded before OpenRouter call");
+      return;
     }
-
-    if (!response) {
-      const timeoutDraft: DraftLike = { ...base, styleLabel: `${base.styleLabel} · Safe fallback` };
-      res.status(200).json({
-        specVersion: "v1-lite",
-        debug: { id: debugId, stage: "fallback_timeout", code: "OPENROUTER_TIMEOUT_FALLBACK", message: requestError },
-        sessionId,
-        round,
-        engine: "openrouter",
-        draft: timeoutDraft,
-        profile,
-        stages: [{ id: "fallback", ms: 1, source: "local" }],
-        candidates: [{ id: "fallback", engine: "openrouter", score: 100, label: "Safe Fallback" }],
-        selectedCandidateId: "fallback",
-        totalMs: 1,
-        history: []
-      });
+    let response: Response | null = null;
+    try {
+      response = await requestOpenRouter(3500);
+    } catch (error: any) {
+      finishWithFallback("OPENROUTER_TIMEOUT_FALLBACK", compact(error?.message || "openrouter_request_failed"));
       return;
     }
 
     stage = "openrouter_read";
     const data = await response.json().catch(() => ({} as any));
     if (!response.ok) {
-      const safeDraft: DraftLike = { ...base, styleLabel: `${base.styleLabel} · API fallback` };
-      res.status(200).json({
-        specVersion: "v1-lite",
-        debug: { id: debugId, stage: "fallback_http_error", code: "OPENROUTER_HTTP_ERROR", status: response.status, details: compact(data?.error?.message || data?.error || "unknown_openrouter_error") },
-        sessionId,
-        round,
-        engine: "openrouter",
-        draft: safeDraft,
-        profile,
-        stages: [{ id: "fallback", ms: 1, source: "local" }],
-        candidates: [{ id: "fallback", engine: "openrouter", score: 100, label: "Safe Fallback" }],
-        selectedCandidateId: "fallback",
-        totalMs: 1,
-        history: []
-      });
+      finishWithFallback("OPENROUTER_HTTP_ERROR", `status=${response.status}; details=${compact(data?.error?.message || data?.error || "unknown_openrouter_error")}`);
       return;
     }
 
@@ -373,21 +354,7 @@ export default async function handler(req: any, res: any) {
           : "";
     const parsed = parseJson(text);
     if (!parsed || typeof parsed !== "object") {
-      const safeDraft: DraftLike = { ...base, styleLabel: `${base.styleLabel} · Parse fallback` };
-      res.status(200).json({
-        specVersion: "v1-lite",
-        debug: { id: debugId, stage: "fallback_invalid_json", code: "INVALID_MODEL_JSON", snippet: compact(text) },
-        sessionId,
-        round,
-        engine: "openrouter",
-        draft: safeDraft,
-        profile,
-        stages: [{ id: "fallback", ms: 1, source: "local" }],
-        candidates: [{ id: "fallback", engine: "openrouter", score: 100, label: "Safe Fallback" }],
-        selectedCandidateId: "fallback",
-        totalMs: 1,
-        history: []
-      });
+      finishWithFallback("INVALID_MODEL_JSON", compact(text));
       return;
     }
 
@@ -403,18 +370,27 @@ export default async function handler(req: any, res: any) {
       stages: [{ id: "openrouter", ms: 1, source: "openrouter" }],
       candidates: [{ id: "ai-main", engine: "openrouter", score: 100, label: "AI Main" }],
       selectedCandidateId: "ai-main",
-      totalMs: 1,
+      totalMs: Date.now() - startedAt,
       history: []
     });
   } catch (error: any) {
-    res.status(500).json({
-      error: "Generate failed",
-      debug: {
-        id: debugId,
-        stage,
-        code: "UNCAUGHT_EXCEPTION",
-        message: compact(error?.message || "unknown")
-      }
+    const fallback = fallbackDraft(
+      { businessName: "", niche: "", city: "", goal: "", style: "", styleReference: "", mustHave: [] },
+      ""
+    );
+    res.status(200).json({
+      specVersion: "v1-lite",
+      debug: { id: debugId, stage, code: "UNCAUGHT_EXCEPTION", message: compact(error?.message || "unknown") },
+      sessionId: `session-${Math.random().toString(36).slice(2, 10)}`,
+      round: 1,
+      engine: "openrouter",
+      draft: fallback,
+      profile: { businessName: "", niche: "", city: "", goal: "", style: "", styleReference: "", mustHave: [] },
+      stages: [{ id: "fallback", ms: Date.now() - startedAt, source: "local" }],
+      candidates: [{ id: "fallback", engine: "openrouter", score: 100, label: "Safe Fallback" }],
+      selectedCandidateId: "fallback",
+      totalMs: Date.now() - startedAt,
+      history: []
     });
   }
 }
