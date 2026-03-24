@@ -1877,70 +1877,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
     setMessages((prev) => [...prev, { id: uid(), role, text, time: nowTime(), tone }]);
   };
 
-  const applyEditPrompt = (text: string) => {
-    const lower = text.toLowerCase();
-    const profilePatch = parseProfileFromMessage(text);
-    setProfile((prev) => mergeProfile(prev, profilePatch));
-    setDraft((prev) => {
-      if (!prev) return prev;
-      let next = { ...prev };
-
-      if (lower.includes("короче")) {
-        next.heroSubtitle = next.heroSubtitle.split(".")[0] + ".";
-      }
-      if (lower.includes("преми") || lower.includes("дорог")) {
-        next.accentColor = "#c77a7a";
-        next.heroTitle = "Сервис премиум-уровня для тех, кто ценит детали";
-      }
-      if (detectFontIntent(text)) {
-        const font = parseFontPair(text);
-        if (font) {
-          next.fontHeading = font.heading;
-          next.fontBody = font.body;
-          next.styleLabel = `${next.styleLabel} · ${font.label}`;
-        }
-      }
-      const tone = parseCopyTone(text);
-      if (tone) {
-        next = rewriteCopyTone(next, tone);
-      }
-      const styleRef = extractStyleReference(text);
-      if (styleRef) {
-        Object.assign(next, styleReferenceHints(styleRef));
-      }
-      const density = parseDensity(text);
-      if (density) next.density = density;
-      const radius = parseRadius(text);
-      if (radius) next.radius = radius;
-      const contrast = parseContrast(text);
-      if (contrast) next.contrast = contrast;
-      if (lower.includes("запис") || lower.includes("лид")) {
-        next.primaryCta = "Записаться онлайн";
-        next.secondaryCta = "Выбрать время";
-      }
-      if (lower.includes("прайс")) {
-        next.navItems = ["О нас", "Прайс", "Команда", "Отзывы", "Запись"];
-      }
-      if (lower.includes("отзыв")) {
-        next.aboutBody = `${next.aboutBody} Отдельно усилили социальное доказательство через блок отзывов.`;
-      }
-      if (profilePatch.businessName) {
-        next.businessName = profilePatch.businessName;
-        next.contactLine = `${profilePatch.businessName}, ${profilePatch.city || next.city}`;
-      }
-      if (profilePatch.city) {
-        next.city = profilePatch.city;
-        next.contactLine = `${next.businessName}, ${profilePatch.city}`;
-      }
-      if (profilePatch.niche) {
-        next.niche = profilePatch.niche;
-      }
-      next = applySectionCommand(next, text);
-      return finalizeDraft(next);
-    });
-  };
-
-  const generateFromProfile = async (nextProfile: AgentProfile, guidance: string, nextRound: number) => {
+  const generateFromProfile = async (nextProfile: AgentProfile, guidance: string, nextRound: number, currentDraft?: DraftState | null) => {
     setError(null);
     setGenerationStatus("loading");
     setPaymentStatus("idle");
@@ -1968,7 +1905,9 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
               sessionId: sanitizeSessionId(sessionId),
               profile: nextProfile,
               guidance,
-              round: nextRound
+              round: nextRound,
+              currentPageCode: currentDraft?.pageCode || "",
+              currentBusinessName: currentDraft?.businessName || ""
             })
           });
         } catch (error: any) {
@@ -2023,6 +1962,13 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
         debugStage = "invalid_ai_draft";
         throw new Error("AI engine did not return a valid draft");
       }
+      const hasRawPageCode =
+        typeof (body.draft as { pageCode?: unknown }).pageCode === "string" &&
+        String((body.draft as { pageCode?: unknown }).pageCode || "").trim().length > 0;
+      if (!hasRawPageCode && currentDraft?.pageCode) {
+        debugStage = "missing_page_code";
+        throw new Error("AI returned draft without pageCode");
+      }
       debugStage = "hydrate_draft";
       const fallbackDraft = createDraftFromProfile(nextProfile, guidance, nextRound);
       const finalDraft = hydrateGeneratedDraft(body.draft, fallbackDraft);
@@ -2072,7 +2018,13 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
           if (recoveryRes.ok && typeof recoveryBody.reply === "string") {
             const fallbackDraft = createDraftFromProfile(nextProfile, guidance, nextRound);
             const aiJson = parseMaybeJsonObject(recoveryBody.reply);
-            const recoveredDraft = aiJson ? hydrateGeneratedDraft(aiJson, fallbackDraft) : fallbackDraft;
+            if (!aiJson) {
+              throw new Error("Recovery channel returned non-JSON");
+            }
+            if (typeof aiJson.pageCode !== "string" || !aiJson.pageCode.trim()) {
+              throw new Error("Recovery JSON missing pageCode");
+            }
+            const recoveredDraft = hydrateGeneratedDraft(aiJson, fallbackDraft);
             setGenerationEngine("openrouter");
             setDraft(recoveredDraft);
             setGenerationRound(nextRound);
@@ -2167,12 +2119,12 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
       }
       if (dsl.kind === "regenerate") {
         const merged = mergeProfile(profile, parseProfileFromMessage(dsl.guidance || text));
-        void generateFromProfile(merged, dsl.guidance || text, generationRound + 1);
+        void generateFromProfile(merged, dsl.guidance || text, generationRound + 1, draft);
         return;
       }
       if (dsl.kind === "styleLike") {
         const merged = mergeProfile(profile, { styleReference: dsl.reference });
-        void generateFromProfile(merged, `Сделай дизайн по примеру: ${dsl.reference}`, generationRound + 1);
+        void generateFromProfile(merged, `Сделай дизайн по примеру: ${dsl.reference}`, generationRound + 1, draft);
         return;
       }
       if (dsl.kind === "undo") {
@@ -2252,7 +2204,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
     const mergedProfile = mergeProfile(profile, profilePatch);
 
     if (!draft) {
-      void generateFromProfile(mergedProfile, text, 1);
+      void generateFromProfile(mergedProfile, text, 1, draft);
       return;
     }
 
@@ -2266,22 +2218,16 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
     }
 
     if (detectRegenerateIntent(text) || detectRestyleIntent(text)) {
-      void generateFromProfile(mergedProfile, text, generationRound + 1);
+      void generateFromProfile(mergedProfile, text, generationRound + 1, draft);
       return;
     }
 
-    if (detectCopyToneIntent(text)) {
-      applyEditPrompt(text);
-      addMessage("assistant", "Обновил текущий вариант по твоему запросу. Если нужен полный редизайн, напиши «перегенерируй».", "soft");
+    if (detectCopyToneIntent(text) || detectAiEditIntent(text)) {
+      void generateFromProfile(mergedProfile, text, generationRound + 1, draft);
       return;
     }
 
-    if (detectAiEditIntent(text)) {
-      void generateFromProfile(mergedProfile, text, generationRound + 1);
-      return;
-    }
-
-    void generateFromProfile(mergedProfile, text, generationRound + 1);
+    void generateFromProfile(mergedProfile, text, generationRound + 1, draft);
   };
 
   const onSubmit = (event: FormEvent) => {

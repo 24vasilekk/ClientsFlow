@@ -53,6 +53,21 @@ function compact(input: unknown) {
     .slice(0, 260);
 }
 
+function isEditRequest(guidance: string) {
+  const text = guidance.toLowerCase();
+  return (
+    text.includes("измени") ||
+    text.includes("поменяй") ||
+    text.includes("перепиши") ||
+    text.includes("сделай") ||
+    text.includes("добавь") ||
+    text.includes("убери") ||
+    text.includes("редизайн") ||
+    text.includes("шрифт") ||
+    text.includes("цвет")
+  );
+}
+
 function parseJson(raw: string): any | null {
   if (!raw || typeof raw !== "string") return null;
   const text = raw.trim();
@@ -331,6 +346,7 @@ export default async function handler(req: any, res: any) {
     const sessionId = String(req.body?.sessionId || "").trim() || `session-${Math.random().toString(36).slice(2, 10)}`;
     const round = Math.max(1, Number(req.body?.round || 1));
     const guidance = String(req.body?.guidance || "").trim();
+    const currentPageCode = String(req.body?.currentPageCode || "").trim();
     const profile: AgentProfile = {
       businessName: String(profileRaw.businessName || ""),
       niche: String(profileRaw.niche || ""),
@@ -348,14 +364,13 @@ export default async function handler(req: any, res: any) {
     const model = String(process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini").trim();
     const base = fallbackDraft(profile, guidance);
     const finishWithFallback = (code: string, message: string) => {
-      const safeDraft: DraftLike = { ...base, styleLabel: `${base.styleLabel} · Fallback` };
-      res.status(200).json({
+      res.status(502).json({
         specVersion: "v1-lite",
         debug: { id: debugId, stage: "fallback", code, message, elapsedMs: Date.now() - startedAt },
+        error: message,
         sessionId,
         round,
         engine: "openrouter",
-        draft: safeDraft,
         profile,
         stages: [{ id: "fallback", ms: Date.now() - startedAt, source: "local" }],
         candidates: [{ id: "fallback", engine: "openrouter", score: 100, label: "Safe Fallback" }],
@@ -370,6 +385,7 @@ export default async function handler(req: any, res: any) {
       return;
     }
 
+    const isEdit = isEditRequest(guidance);
     const prompt = [
       "Сгенерируй JSON сайта на русском языке.",
       `Бизнес: ${base.businessName}`,
@@ -379,6 +395,9 @@ export default async function handler(req: any, res: any) {
       `Стиль: ${profile.style || "современный"}`,
       `Референс: ${profile.styleReference || "-"}`,
       `Запрос: ${guidance || "-"}`,
+      isEdit && currentPageCode
+        ? `ТЕКУЩИЙ HTML/CSS КОД (измени его по запросу и верни полную новую версию pageCode, не обнуляй структуру):\n${currentPageCode.slice(0, 22000)}`
+        : "Собери новый код с нуля под запрос.",
       "Верни только JSON. Обязательные поля: heroTitle, heroSubtitle, aboutBody, services[], faq[], pageDsl[], pageCode."
     ].join("\n");
 
@@ -455,24 +474,20 @@ export default async function handler(req: any, res: any) {
       engine: "openrouter",
       draft,
       profile,
-      stages: [{ id: "openrouter", ms: 1, source: "openrouter" }],
+      stages: [{ id: "openrouter", ms: Date.now() - startedAt, source: "openrouter" }],
       candidates: [{ id: "ai-main", engine: "openrouter", score: 100, label: "AI Main" }],
       selectedCandidateId: "ai-main",
       totalMs: Date.now() - startedAt,
       history: []
     });
   } catch (error: any) {
-    const fallback = fallbackDraft(
-      { businessName: "", niche: "", city: "", goal: "", style: "", styleReference: "", mustHave: [] },
-      ""
-    );
-    res.status(200).json({
+    res.status(500).json({
       specVersion: "v1-lite",
       debug: { id: debugId, stage, code: "UNCAUGHT_EXCEPTION", message: compact(error?.message || "unknown") },
+      error: compact(error?.message || "unknown"),
       sessionId: `session-${Math.random().toString(36).slice(2, 10)}`,
       round: 1,
       engine: "openrouter",
-      draft: fallback,
       profile: { businessName: "", niche: "", city: "", goal: "", style: "", styleReference: "", mustHave: [] },
       stages: [{ id: "fallback", ms: Date.now() - startedAt, source: "local" }],
       candidates: [{ id: "fallback", engine: "openrouter", score: 100, label: "Safe Fallback" }],
