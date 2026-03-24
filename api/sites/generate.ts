@@ -280,47 +280,85 @@ export default async function handler(req: any, res: any) {
       "Верни только JSON. Обязательные поля: heroTitle, heroSubtitle, aboutBody, services[], faq[], pageDsl[], pageCode."
     ].join("\n");
 
+    const requestOpenRouter = async (timeoutMs: number) => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        return await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            model,
+            temperature: 0.45,
+            messages: [
+              {
+                role: "system",
+                content:
+                  "Ты senior web designer + frontend developer. Верни только JSON без markdown и пояснений. pageCode должен быть полноценным HTML+CSS документом."
+              },
+              { role: "user", content: prompt }
+            ]
+          }),
+          signal: controller.signal
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
+    };
+
     stage = "openrouter_request";
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-    let response: Response;
-    try {
-      response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          model,
-          temperature: 0.45,
-          messages: [
-            {
-              role: "system",
-              content:
-                "Ты senior web designer + frontend developer. Верни только JSON без markdown и пояснений. pageCode должен быть полноценным HTML+CSS документом."
-            },
-            { role: "user", content: prompt }
-          ]
-        }),
-        signal: controller.signal
+    let response: Response | null = null;
+    let requestError = "";
+    for (const timeoutMs of [12000, 22000]) {
+      try {
+        response = await requestOpenRouter(timeoutMs);
+        requestError = "";
+        break;
+      } catch (error: any) {
+        requestError = compact(error?.message || "openrouter_request_failed");
+        if (String(error?.name || "").toLowerCase() !== "aborterror") break;
+      }
+    }
+
+    if (!response) {
+      const timeoutDraft: DraftLike = { ...base, styleLabel: `${base.styleLabel} · Safe fallback` };
+      res.status(200).json({
+        specVersion: "v1-lite",
+        debug: { id: debugId, stage: "fallback_timeout", code: "OPENROUTER_TIMEOUT_FALLBACK", message: requestError },
+        sessionId,
+        round,
+        engine: "openrouter",
+        draft: timeoutDraft,
+        profile,
+        stages: [{ id: "fallback", ms: 1, source: "local" }],
+        candidates: [{ id: "fallback", engine: "openrouter", score: 100, label: "Safe Fallback" }],
+        selectedCandidateId: "fallback",
+        totalMs: 1,
+        history: []
       });
-    } finally {
-      clearTimeout(timeout);
+      return;
     }
 
     stage = "openrouter_read";
     const data = await response.json().catch(() => ({} as any));
     if (!response.ok) {
-      res.status(502).json({
-        error: "OpenRouter request failed",
-        debug: {
-          id: debugId,
-          stage,
-          status: response.status,
-          code: "OPENROUTER_HTTP_ERROR",
-          details: compact(data?.error?.message || data?.error || "unknown_openrouter_error")
-        }
+      const safeDraft: DraftLike = { ...base, styleLabel: `${base.styleLabel} · API fallback` };
+      res.status(200).json({
+        specVersion: "v1-lite",
+        debug: { id: debugId, stage: "fallback_http_error", code: "OPENROUTER_HTTP_ERROR", status: response.status, details: compact(data?.error?.message || data?.error || "unknown_openrouter_error") },
+        sessionId,
+        round,
+        engine: "openrouter",
+        draft: safeDraft,
+        profile,
+        stages: [{ id: "fallback", ms: 1, source: "local" }],
+        candidates: [{ id: "fallback", engine: "openrouter", score: 100, label: "Safe Fallback" }],
+        selectedCandidateId: "fallback",
+        totalMs: 1,
+        history: []
       });
       return;
     }
@@ -335,9 +373,20 @@ export default async function handler(req: any, res: any) {
           : "";
     const parsed = parseJson(text);
     if (!parsed || typeof parsed !== "object") {
-      res.status(502).json({
-        error: "Model returned non-JSON draft",
-        debug: { id: debugId, stage, code: "INVALID_MODEL_JSON", snippet: compact(text) }
+      const safeDraft: DraftLike = { ...base, styleLabel: `${base.styleLabel} · Parse fallback` };
+      res.status(200).json({
+        specVersion: "v1-lite",
+        debug: { id: debugId, stage: "fallback_invalid_json", code: "INVALID_MODEL_JSON", snippet: compact(text) },
+        sessionId,
+        round,
+        engine: "openrouter",
+        draft: safeDraft,
+        profile,
+        stages: [{ id: "fallback", ms: 1, source: "local" }],
+        candidates: [{ id: "fallback", engine: "openrouter", score: 100, label: "Safe Fallback" }],
+        selectedCandidateId: "fallback",
+        totalMs: 1,
+        history: []
       });
       return;
     }
