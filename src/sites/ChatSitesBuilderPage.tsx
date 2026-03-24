@@ -915,6 +915,10 @@ function extractCity(text: string) {
   if (lower.includes("спб") || lower.includes("питер") || lower.includes("санкт")) return "Санкт-Петербург";
   if (lower.includes("казан")) return "Казань";
   if (lower.includes("екб") || lower.includes("екатерин")) return "Екатеринбург";
+  const explicit = text.match(/(?:город|в городе|локация)\s*[:\-]?\s*([a-zа-яё\- ]{2,40})/i);
+  if (explicit?.[1]) return explicit[1].trim();
+  const simple = text.match(/\bв\s+([A-ZА-ЯЁ][a-zа-яё\-]{2,30})\b/);
+  if (simple?.[1]) return simple[1].trim();
   return "";
 }
 
@@ -924,6 +928,8 @@ function extractNiche(text: string) {
   if (lower.includes("салон") || lower.includes("nails") || lower.includes("маник")) return "Nail Studio";
   if (lower.includes("клиник") || lower.includes("стомат")) return "Clinic";
   if (lower.includes("юрист") || lower.includes("адвокат")) return "Legal";
+  const explicit = text.match(/(?:ниша|бизнес|проект|сайт для)\s*[:\-]?\s*([a-zа-яё0-9\- ]{2,60})/i);
+  if (explicit?.[1]) return explicit[1].trim();
   return "";
 }
 
@@ -1012,19 +1018,13 @@ function normalizeProfile(raw: Partial<AgentProfile>): AgentProfile {
 
 function getMissingProfileFields(profile: AgentProfile) {
   const missing: Array<"businessName" | "niche" | "city"> = [];
-  if (!profile.businessName.trim()) missing.push("businessName");
-  if (!profile.niche.trim()) missing.push("niche");
-  if (!profile.city.trim()) missing.push("city");
+  // We no longer hard-block generation by profile completeness.
   return missing;
 }
 
 function nextClarifyingQuestion(profile: AgentProfile) {
-  const missing = getMissingProfileFields(profile);
-  const first = missing[0];
-  if (first === "businessName") return "Как называется бизнес? Напиши: «название <имя>».";
-  if (first === "niche") return "Какая ниша? Например: барбершоп, салон, клиника, юр. услуги.";
-  if (first === "city") return "В каком городе работаете?";
-  return "";
+  if (!profile.businessName.trim()) return "Как называется ваш бизнес?";
+  return "Опиши стиль, услуги и что важно на первом экране.";
 }
 
 function shouldForceGenerate(text: string) {
@@ -1741,16 +1741,8 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
 
     const profilePatch = parseProfileFromMessage(text);
     const mergedProfile = mergeProfile(profile, profilePatch);
-    const needsClarification = getMissingProfileFields(mergedProfile).length > 0;
-    const forceGenerate = shouldForceGenerate(text);
 
     if (!draft) {
-      if (needsClarification && !forceGenerate) {
-        setProfile(mergedProfile);
-        const question = nextClarifyingQuestion(mergedProfile);
-        addMessage("assistant", question || "Уточни, пожалуйста, пару деталей и сразу соберу сайт.", "soft");
-        return;
-      }
       void generateFromProfile(mergedProfile, text, 1);
       return;
     }
@@ -1769,16 +1761,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
       return;
     }
 
-    setGenerationStatus("loading");
-    setIsWorking(true);
-    setWorkingText("Updating pages...");
-
-    window.setTimeout(() => {
-      applyEditPrompt(text);
-      addMessage("assistant", "Обновил. Проверяй справа preview, если нужно - сделаю еще варианты.", "soft");
-      setGenerationStatus("success");
-      setIsWorking(false);
-    }, 520);
+    void generateFromProfile(mergedProfile, text, generationRound + 1);
   };
 
   const onSubmit = (event: FormEvent) => {
