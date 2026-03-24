@@ -59,6 +59,16 @@ const KV_API_URL = process.env.KV_REST_API_URL;
 const KV_TOKEN = process.env.KV_REST_API_TOKEN;
 const SITE_KEY_PREFIX = "clientsflow:site:";
 
+function hasValidKvConfig() {
+  if (!KV_API_URL || !KV_TOKEN) return false;
+  try {
+    const parsed = new URL(KV_API_URL);
+    return parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 function memoryStore(): Map<string, string> {
   const root = globalThis as unknown as { __clientsflowSitesStore?: Map<string, string> };
   if (!root.__clientsflowSitesStore) root.__clientsflowSitesStore = new Map<string, string>();
@@ -66,27 +76,35 @@ function memoryStore(): Map<string, string> {
 }
 
 async function kvGet(key: string): Promise<string | null> {
-  if (!KV_API_URL || !KV_TOKEN) {
+  if (!hasValidKvConfig()) {
     return memoryStore().get(key) ?? null;
   }
-  const response = await fetch(`${KV_API_URL}/get/${encodeURIComponent(key)}`, {
-    headers: { Authorization: `Bearer ${KV_TOKEN}` }
-  });
-  if (!response.ok) return null;
-  const data = (await response.json()) as { result?: string | null };
-  return typeof data.result === "string" ? data.result : null;
+  try {
+    const response = await fetch(`${KV_API_URL}/get/${encodeURIComponent(key)}`, {
+      headers: { Authorization: `Bearer ${KV_TOKEN}` }
+    });
+    if (!response.ok) return memoryStore().get(key) ?? null;
+    const data = (await response.json()) as { result?: string | null };
+    return typeof data.result === "string" ? data.result : memoryStore().get(key) ?? null;
+  } catch {
+    return memoryStore().get(key) ?? null;
+  }
 }
 
 async function kvSet(key: string, value: string): Promise<void> {
-  if (!KV_API_URL || !KV_TOKEN) {
+  if (!hasValidKvConfig()) {
     memoryStore().set(key, value);
     return;
   }
-  await fetch(`${KV_API_URL}/set/${encodeURIComponent(key)}`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${KV_TOKEN}`, "Content-Type": "application/json" },
-    body: JSON.stringify(value)
-  });
+  try {
+    await fetch(`${KV_API_URL}/set/${encodeURIComponent(key)}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${KV_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify(value)
+    });
+  } catch {
+    memoryStore().set(key, value);
+  }
 }
 
 function slugBase(raw: string): string {

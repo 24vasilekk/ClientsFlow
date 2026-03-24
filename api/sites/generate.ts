@@ -496,7 +496,17 @@ async function tryOpenRouterGeneration(profile: AgentProfile, guidance: string, 
   if (!apiKey) return null;
 
   const model = process.env.OPENROUTER_MODEL || "google/gemini-2.5-flash";
-  const referer = process.env.OPENROUTER_SITE_URL || "https://clients-flow-ten.vercel.app";
+  let referer = "https://clients-flow-ten.vercel.app";
+  if (process.env.OPENROUTER_SITE_URL) {
+    try {
+      const parsed = new URL(process.env.OPENROUTER_SITE_URL);
+      if (parsed.protocol === "https:" || parsed.protocol === "http:") {
+        referer = parsed.toString();
+      }
+    } catch {
+      referer = "https://clients-flow-ten.vercel.app";
+    }
+  }
 
   const prompt = [
     "Собери индивидуальный сайт в формате JSON на русском языке.",
