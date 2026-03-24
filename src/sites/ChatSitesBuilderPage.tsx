@@ -177,38 +177,21 @@ const SITE_SESSION_STORAGE_KEY = "clientsflow_sites_generation_session";
 const PUBLISH_REDIRECT_DELAY_MS = 1200;
 
 const navItems = [
-  { key: "chat", label: "Chat", icon: "💬" },
-  { key: "brain", label: "Brain", icon: "🧠" },
-  { key: "tasks", label: "Tasks", icon: "🕒" },
-  { key: "artifacts", label: "Artifacts", icon: "◻︎" },
-  { key: "files", label: "Files", icon: "📁" },
-  { key: "settings", label: "Settings", icon: "⚙︎" }
+  { key: "create-site", label: "Создать сайт", icon: "✨" }
 ];
 
 const quickPrompts = [
-  "Сайт для салона красоты в Москве",
-  "Сделай дорогой минималистичный стиль",
-  "Добавь акцент на онлайн-запись",
-  "Собери блок услуг с ценами"
+  "Создать сайт под мой бизнес"
 ];
 
-const suggestions = [
-  "Сделай блок отзывов",
-  "Добавь команду мастеров",
-  "Усиль оффер первого экрана"
-];
-
-const channelPills = [
-  { id: "wa", label: "WhatsApp", tone: "text-emerald-600" },
-  { id: "tg", label: "Telegram", tone: "text-sky-600" }
-];
+const suggestions = ["Создать сайт"];
 
 const designPresets: DesignPreset[] = [
   {
     id: "workspace-ash",
     label: "Workspace Ash",
-    accent: "#f97316",
-    pageBg: "#f3f3f4",
+    accent: "#0ea5e9",
+    pageBg: "#eff8ff",
     surfaceBg: "#ffffff",
     headlineStyle: "sans"
   },
@@ -1629,7 +1612,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
             onClick={() => {
               if (publishPath) onNavigate(publishPath);
             }}
-            className="rounded-xl bg-[#f97316] px-3 py-1.5 text-sm font-semibold text-white transition hover:brightness-95"
+            className="rounded-xl bg-sky-500 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-sky-600"
           >
             ↗ Open App
           </button>
@@ -1991,16 +1974,16 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
   }, [messages, isWorking, workingText]);
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#f3f3f4]">
-      <div aria-hidden className="pointer-events-none absolute inset-0 opacity-70" style={{ backgroundImage: "radial-gradient(circle at 20% 8%, rgba(148,163,184,.18), transparent 24%), radial-gradient(circle at 80% 80%, rgba(99,102,241,.12), transparent 26%)" }} />
+    <div className="relative min-h-screen overflow-hidden bg-[#edf8ff]">
+      <div aria-hidden className="pointer-events-none absolute inset-0 opacity-80" style={{ backgroundImage: "radial-gradient(circle at 20% 8%, rgba(56,189,248,.18), transparent 24%), radial-gradient(circle at 80% 80%, rgba(14,165,233,.16), transparent 26%)" }} />
       <div className="mx-auto flex min-h-screen w-full max-w-[1820px]">
-        <aside className="relative hidden w-[290px] border-r border-slate-200/80 bg-white/78 p-4 backdrop-blur md:flex md:flex-col">
+        <aside className="relative hidden w-[290px] border-r border-sky-100 bg-white/85 p-4 backdrop-blur md:flex md:flex-col">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-b from-orange-500 to-orange-600 text-white">▤</div>
+              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-b from-sky-500 to-cyan-600 text-white">◈</div>
               <div>
-                <p className="text-lg font-semibold text-slate-900">Agent</p>
-                <p className="text-sm text-slate-500">My Workspace</p>
+                <p className="text-lg font-semibold text-slate-900">CFlow Agent</p>
+                <p className="text-sm text-slate-500">Website Builder</p>
               </div>
             </div>
             <button type="button" className="rounded-lg p-2 text-sm text-slate-600 transition hover:bg-slate-100">◫</button>
@@ -2012,8 +1995,8 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
                 key={item.key}
                 type="button"
                 className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left transition ${
-                  item.key === "chat"
-                    ? "bg-gradient-to-r from-slate-100 to-slate-50 shadow-[inset_0_0_0_1px_rgba(148,163,184,.25)]"
+                  item.key === "create-site"
+                    ? "bg-gradient-to-r from-sky-100 to-cyan-50 shadow-[inset_0_0_0_1px_rgba(56,189,248,.35)]"
                     : "hover:bg-slate-50"
                 }`}
               >
@@ -2021,21 +2004,9 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
                   <span>{item.icon}</span>
                   <span>{item.label}</span>
                 </span>
-                {item.key !== "chat" ? <span className="text-base text-slate-500">›</span> : null}
+                <span className="text-base text-slate-500">›</span>
               </button>
             ))}
-          </div>
-
-          <div className="mt-6">
-            <p className="text-sm text-slate-500">Channels</p>
-            <div className="mt-2 space-y-1">
-              <button type="button" className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-base text-slate-800 transition hover:bg-slate-50">🟢 Continue on WhatsApp</button>
-              <button type="button" className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-base text-slate-800 transition hover:bg-slate-50">🔵 Continue on Telegram</button>
-            </div>
-          </div>
-
-          <div className="mt-auto pt-4">
-            <button type="button" className="flex items-center gap-2 text-base text-slate-700 hover:text-slate-900">💬 Leave feedback</button>
           </div>
         </aside>
 
@@ -2066,20 +2037,9 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
           </div>
 
           <div className="fixed bottom-4 left-1/2 z-30 w-[calc(100%-1rem)] max-w-[980px] -translate-x-1/2 sm:bottom-6">
-            <div className="mb-2 flex items-center justify-center">
-              <div className="rounded-2xl border border-slate-200 bg-white/90 px-4 py-2 text-sm text-slate-500 shadow-[0_12px_30px_-24px_rgba(15,23,42,.45)]">
-                Chat with me from an app you already use ·{" "}
-                {channelPills.map((item) => (
-                  <span key={item.id} className={`mr-2 font-semibold ${item.tone}`}>
-                    {item.label}
-                  </span>
-                ))}
-              </div>
-            </div>
-
             <form
               onSubmit={onSubmit}
-              className="flex items-center gap-2 rounded-[22px] border border-[#b7c0ff] bg-white/96 px-3 py-2 shadow-[0_24px_65px_-44px_rgba(15,23,42,.45)] backdrop-blur transition focus-within:shadow-[0_28px_70px_-40px_rgba(99,102,241,.5)]"
+              className="flex items-center gap-2 rounded-[22px] border border-sky-300 bg-white/96 px-3 py-2 shadow-[0_24px_65px_-44px_rgba(14,165,233,.35)] backdrop-blur transition focus-within:shadow-[0_28px_70px_-40px_rgba(14,165,233,.55)]"
             >
               <button type="button" className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-xl text-slate-700 transition hover:bg-slate-100">+</button>
               <input
@@ -2089,11 +2049,11 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
                 className="h-11 flex-1 border-none bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
               />
               <button type="button" className="inline-flex h-10 w-10 items-center justify-center rounded-full text-lg text-slate-700 transition hover:bg-slate-100">◉</button>
-              <button type="submit" className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-300 text-sm text-slate-700 transition hover:bg-slate-400">➤</button>
+              <button type="submit" className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-sky-500 text-sm text-white transition hover:bg-sky-600">➤</button>
             </form>
 
             <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-500">
-              <span className="font-semibold">Suggestions</span>
+              <span className="font-semibold">Быстро</span>
               {suggestions.map((item) => (
                 <button key={item} type="button" onClick={() => onSend(item)} className="rounded-full border border-slate-200 bg-white px-2.5 py-1 transition hover:border-slate-300 hover:bg-slate-50">
                   {item}
