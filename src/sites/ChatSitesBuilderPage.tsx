@@ -594,6 +594,130 @@ function draftToPayload(draft: DraftState): PublishPayload {
   };
 }
 
+function parseJsonFromModelReply(reply: string) {
+  const clean = reply.trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim();
+  try {
+    return JSON.parse(clean);
+  } catch {
+    const start = clean.indexOf("{");
+    const end = clean.lastIndexOf("}");
+    if (start >= 0 && end > start) {
+      try {
+        return JSON.parse(clean.slice(start, end + 1));
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+}
+
+function isSectionKey(value: string): value is SectionKey {
+  return ["about", "services", "team", "reviews", "faq", "booking", "contacts", "gallery"].includes(value);
+}
+
+function normalizeSectionOrder(input: unknown, fallback: SectionKey[]) {
+  if (!Array.isArray(input)) return fallback;
+  const normalized = input
+    .map((item) => (typeof item === "string" ? item : ""))
+    .filter((item): item is SectionKey => isSectionKey(item));
+  return normalized.length ? Array.from(new Set(normalized)) : fallback;
+}
+
+function normalizeSectionsEnabled(input: unknown, fallback: Record<SectionKey, boolean>) {
+  if (!input || typeof input !== "object") return fallback;
+  const next = { ...fallback };
+  for (const key of Object.keys(next) as SectionKey[]) {
+    const value = (input as any)[key];
+    if (typeof value === "boolean") next[key] = value;
+  }
+  return next;
+}
+
+function normalizeAiDraftPatch(raw: any): Partial<DraftState> | null {
+  if (!raw || typeof raw !== "object") return null;
+  const patch: Partial<DraftState> = {};
+
+  const strings: Array<keyof DraftState> = [
+    "businessName",
+    "city",
+    "niche",
+    "accentColor",
+    "pageBg",
+    "surfaceBg",
+    "styleLabel",
+    "heroTitle",
+    "heroSubtitle",
+    "aboutTitle",
+    "aboutBody",
+    "primaryCta",
+    "secondaryCta",
+    "contactLine"
+  ];
+  for (const key of strings) {
+    const value = raw[key];
+    if (typeof value === "string" && value.trim()) (patch as any)[key] = value.trim();
+  }
+
+  if (raw.headlineStyle === "serif" || raw.headlineStyle === "sans") patch.headlineStyle = raw.headlineStyle;
+
+  if (Array.isArray(raw.navItems)) {
+    patch.navItems = raw.navItems.filter((item: unknown) => typeof item === "string" && item.trim()).slice(0, 8);
+  }
+
+  if (Array.isArray(raw.summaryPoints)) {
+    patch.summaryPoints = raw.summaryPoints.filter((item: unknown) => typeof item === "string" && item.trim()).slice(0, 7);
+  }
+
+  if (Array.isArray(raw.services)) {
+    patch.services = raw.services
+      .filter((item: any) => item && typeof item.title === "string")
+      .slice(0, 8)
+      .map((item: any) => ({
+        id: uid(),
+        emoji: typeof item.emoji === "string" && item.emoji.trim() ? item.emoji.trim() : "•",
+        title: item.title.trim(),
+        duration: typeof item.duration === "string" && item.duration.trim() ? item.duration.trim() : "по записи",
+        price: typeof item.price === "string" && item.price.trim() ? item.price.trim() : "по запросу"
+      }));
+  }
+
+  if (Array.isArray(raw.team)) {
+    patch.team = raw.team
+      .filter((item: any) => item && typeof item.name === "string")
+      .slice(0, 6)
+      .map((item: any) => ({
+        id: uid(),
+        name: item.name.trim(),
+        role: typeof item.role === "string" && item.role.trim() ? item.role.trim() : "Специалист"
+      }));
+  }
+
+  if (Array.isArray(raw.reviews)) {
+    patch.reviews = raw.reviews
+      .filter((item: any) => item && typeof item.text === "string")
+      .slice(0, 6)
+      .map((item: any) => ({
+        id: uid(),
+        author: typeof item.author === "string" && item.author.trim() ? item.author.trim() : "Клиент",
+        text: item.text.trim()
+      }));
+  }
+
+  if (Array.isArray(raw.faq)) {
+    patch.faq = raw.faq
+      .filter((item: any) => item && typeof item.q === "string" && typeof item.a === "string")
+      .slice(0, 8)
+      .map((item: any) => ({
+        id: uid(),
+        q: item.q.trim(),
+        a: item.a.trim()
+      }));
+  }
+
+  return patch;
+}
+
 export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPageProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -618,6 +742,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
   const [overlayMessage, setOverlayMessage] = useState("Публикуем сайт...");
   const [previewExpanded, setPreviewExpanded] = useState(true);
   const [generationRound, setGenerationRound] = useState(1);
+  const [generationEngine, setGenerationEngine] = useState<"openrouter" | "algorithm">("algorithm");
   const [profile, setProfile] = useState<AgentProfile>({
     businessName: "",
     niche: "",
@@ -674,7 +799,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
     });
   };
 
-  const generateFromProfile = (nextProfile: AgentProfile, guidance: string, nextRound: number) => {
+  const generateFromProfile = async (nextProfile: AgentProfile, guidance: string, nextRound: number) => {
     setError(null);
     setGenerationStatus("loading");
     setPaymentStatus("idle");
@@ -683,24 +808,98 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
     setIsWorking(true);
     setWorkingText("Saving in my memory...");
 
-    window.setTimeout(() => {
-      addMessage("assistant", "Окей, понял задачу. Делаю структуру и дизайн под твой запрос.", "soft");
-      setWorkingText("Updating pages...");
-    }, 260);
+    addMessage("assistant", "Окей, понял задачу. Делаю структуру и дизайн под твой запрос.", "soft");
+    setWorkingText("Updating pages...");
 
-    window.setTimeout(() => {
-      const nextDraft = createDraftFromProfile(nextProfile, guidance, nextRound);
-      setDraft(nextDraft);
-      setGenerationRound(nextRound);
-      setProfile(nextProfile);
-      const summary = nextDraft.summaryPoints.map((point) => `• ${point}`).join("\n");
-      addMessage(
-        "assistant",
-        `Готово. Собрал индивидуальный вариант #${nextRound} для «${nextDraft.businessName}».\n\nЧто уже есть:\n${summary}\n\nЕсли нужно, напиши «перегенерируй» — сделаю новый дизайн с нуля под тот же бриф.`
-      );
-      setGenerationStatus("success");
-      setIsWorking(false);
-    }, 1100);
+    const fallbackDraft = createDraftFromProfile(nextProfile, guidance, nextRound);
+    let finalDraft = fallbackDraft;
+    let engine: "openrouter" | "algorithm" = "algorithm";
+
+    try {
+      const prompt = [
+        "Собери индивидуальный сайт в формате JSON.",
+        `Бизнес: ${nextProfile.businessName || "без названия"}`,
+        `Ниша: ${nextProfile.niche || "service"}`,
+        `Город: ${nextProfile.city || "не указан"}`,
+        `Цель: ${nextProfile.goal || "увеличить заявки"}`,
+        `Стиль: ${nextProfile.style || "современный premium"}`,
+        `Обязательные блоки: ${nextProfile.mustHave.join(", ") || "о нас, услуги, отзывы, запись"}`,
+        `Guidance: ${guidance || "-"}`,
+        `Round: ${nextRound}`,
+        "Верни только JSON со структурой:",
+        "{",
+        '  "businessName": "...",',
+        '  "city": "...",',
+        '  "niche": "...",',
+        '  "accentColor": "#hex",',
+        '  "pageBg": "#hex",',
+        '  "surfaceBg": "#hex",',
+        '  "headlineStyle": "serif|sans",',
+        '  "styleLabel": "...",',
+        '  "heroTitle": "...",',
+        '  "heroSubtitle": "...",',
+        '  "aboutTitle": "...",',
+        '  "aboutBody": "...",',
+        '  "primaryCta": "...",',
+        '  "secondaryCta": "...",',
+        '  "contactLine": "...",',
+        '  "navItems": ["..."],',
+        '  "services": [{"emoji":"...","title":"...","duration":"...","price":"..."}],',
+        '  "team": [{"name":"...","role":"..."}],',
+        '  "reviews": [{"author":"...","text":"..."}],',
+        '  "faq": [{"q":"...","a":"..."}],',
+        '  "sectionOrder": ["about","services","team","reviews","faq","booking","contacts","gallery"],',
+        '  "sectionsEnabled": {"about":true,"services":true,"team":true,"reviews":true,"faq":true,"booking":true,"contacts":true,"gallery":false},',
+        '  "summaryPoints": ["...", "..."]',
+        "}"
+      ].join("\n");
+
+      const response = await fetch("/api/openrouter/sites-copy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [{ role: "user", content: prompt }]
+        })
+      });
+
+      if (response.ok) {
+        const body = (await response.json()) as { reply?: string };
+        const parsed = parseJsonFromModelReply(body.reply || "");
+        const aiPatch = normalizeAiDraftPatch(parsed);
+
+        if (aiPatch) {
+          engine = "openrouter";
+          const sectionsEnabled = normalizeSectionsEnabled(parsed?.sectionsEnabled, fallbackDraft.sectionsEnabled);
+          const sectionOrder = normalizeSectionOrder(parsed?.sectionOrder, fallbackDraft.sectionOrder).filter((key) => sectionsEnabled[key]);
+          finalDraft = {
+            ...fallbackDraft,
+            ...aiPatch,
+            navItems: aiPatch.navItems?.length ? aiPatch.navItems : fallbackDraft.navItems,
+            services: aiPatch.services?.length ? aiPatch.services : fallbackDraft.services,
+            team: aiPatch.team?.length ? aiPatch.team : fallbackDraft.team,
+            reviews: aiPatch.reviews?.length ? aiPatch.reviews : fallbackDraft.reviews,
+            faq: aiPatch.faq?.length ? aiPatch.faq : fallbackDraft.faq,
+            sectionOrder,
+            sectionsEnabled,
+            summaryPoints: aiPatch.summaryPoints?.length ? aiPatch.summaryPoints : fallbackDraft.summaryPoints
+          };
+        }
+      }
+    } catch {
+      // fallback to algorithmic generation
+    }
+
+    setGenerationEngine(engine);
+    setDraft(finalDraft);
+    setGenerationRound(nextRound);
+    setProfile(nextProfile);
+    const summary = finalDraft.summaryPoints.map((point) => `• ${point}`).join("\n");
+    addMessage(
+      "assistant",
+      `Готово. Собрал индивидуальный вариант #${nextRound} для «${finalDraft.businessName}».\n\nЧто уже есть:\n${summary}\n\nЕсли нужно, напиши «перегенерируй» — сделаю новый дизайн с нуля под тот же бриф.`
+    );
+    setGenerationStatus("success");
+    setIsWorking(false);
   };
 
   const onSend = (raw: string) => {
@@ -723,12 +922,12 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
         addMessage("assistant", question || "Уточни, пожалуйста, пару деталей и сразу соберу сайт.", "soft");
         return;
       }
-      generateFromProfile(mergedProfile, text, 1);
+      void generateFromProfile(mergedProfile, text, 1);
       return;
     }
 
     if (detectRegenerateIntent(text)) {
-      generateFromProfile(mergedProfile, text, generationRound + 1);
+      void generateFromProfile(mergedProfile, text, generationRound + 1);
       return;
     }
 
@@ -849,6 +1048,9 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
           <span className={`ml-auto rounded-full border px-2 py-1 text-xs ${statusClass(generationStatus)}`}>Build</span>
           <span className={`rounded-full border px-2 py-1 text-xs ${statusClass(paymentStatus)}`}>Pay</span>
           <span className={`rounded-full border px-2 py-1 text-xs ${statusClass(publishStatus)}`}>Publish</span>
+          <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-600">
+            Engine: {generationEngine}
+          </span>
         </div>
 
         {previewExpanded ? (
