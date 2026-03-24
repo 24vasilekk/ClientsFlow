@@ -380,6 +380,7 @@ export default async function handler(req: any, res: any) {
     const sessionId = String(req.body?.sessionId || "").trim() || `session-${Math.random().toString(36).slice(2, 10)}`;
     const round = Math.max(1, Number(req.body?.round || 1));
     const guidance = String(req.body?.guidance || "").trim();
+    const qualityMode = String(req.body?.qualityMode || "fast").toLowerCase() === "pro" ? "pro" : "fast";
     const currentPageCode = String(req.body?.currentPageCode || "").trim();
     const profile: AgentProfile = {
       businessName: String(profileRaw.businessName || ""),
@@ -395,7 +396,9 @@ export default async function handler(req: any, res: any) {
     const apiKey = String(process.env.OPENROUTER_API_KEY || "")
       .replace(/[\r\n\s\u200B-\u200D\uFEFF]+/g, "")
       .trim();
-    const model = String(process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini").trim();
+    const fastModel = String(process.env.OPENROUTER_MODEL_FAST || process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini").trim();
+    const proModel = String(process.env.OPENROUTER_MODEL_PRO || "openai/gpt-4o").trim();
+    const model = qualityMode === "pro" ? proModel : fastModel;
     const base = fallbackDraft(profile, guidance);
     const finishWithFallback = (code: string, message: string) => {
       res.status(502).json({
@@ -455,8 +458,8 @@ export default async function handler(req: any, res: any) {
           },
           body: JSON.stringify({
             model,
-            temperature: 0.55,
-            max_tokens: 1800,
+            temperature: qualityMode === "pro" ? 0.7 : 0.55,
+            max_tokens: qualityMode === "pro" ? 2600 : 1800,
             messages: [
               {
                 role: "system",
@@ -508,7 +511,7 @@ export default async function handler(req: any, res: any) {
     }
 
     let draft = normalizeDraft(parsed, base);
-    if (looksLowQualityPageCode(draft.pageCode)) {
+    if (qualityMode === "pro" || looksLowQualityPageCode(draft.pageCode)) {
       stage = "quality_refine_request";
       const refinePrompt = [
         "Улучши дизайн ниже до premium-уровня и верни только JSON с теми же полями.",
@@ -560,8 +563,8 @@ export default async function handler(req: any, res: any) {
       engine: "openrouter",
       draft,
       profile,
-      stages: [{ id: "openrouter", ms: Date.now() - startedAt, source: "openrouter" }],
-      candidates: [{ id: "ai-main", engine: "openrouter", score: 100, label: "AI Main" }],
+      stages: [{ id: "openrouter", ms: Date.now() - startedAt, source: `openrouter:${qualityMode}` }],
+      candidates: [{ id: "ai-main", engine: "openrouter", score: 100, label: `AI Main (${qualityMode})` }],
       selectedCandidateId: "ai-main",
       totalMs: Date.now() - startedAt,
       history: []

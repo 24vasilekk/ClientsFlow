@@ -130,6 +130,7 @@ type GenerationHistoryItem = {
   engine: "openrouter" | "algorithm";
   createdAt: string;
 };
+type QualityMode = "fast" | "pro";
 
 type DesignPreset = {
   id: string;
@@ -1830,6 +1831,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
   const [previewExpanded, setPreviewExpanded] = useState(true);
   const [generationRound, setGenerationRound] = useState(1);
   const [generationEngine, setGenerationEngine] = useState<"openrouter" | "algorithm">("openrouter");
+  const [qualityMode, setQualityMode] = useState<QualityMode>("fast");
   const [generationSessionId, setGenerationSessionId] = useState(() => {
     if (typeof window === "undefined") return `session-${uid()}`;
     return sanitizeSessionId(localStorage.getItem(SITE_SESSION_STORAGE_KEY) || `session-${uid()}`);
@@ -1906,6 +1908,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
               profile: nextProfile,
               guidance,
               round: nextRound,
+              qualityMode,
               currentPageCode: currentDraft?.pageCode || "",
               currentBusinessName: currentDraft?.businessName || ""
             })
@@ -2011,6 +2014,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
+              model: qualityMode === "pro" ? "openai/gpt-4o" : "openai/gpt-4o-mini",
               messages: [{ role: "user", content: recoveryPrompt }]
             })
           });
@@ -2342,8 +2346,24 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
           <span className={`rounded-full border px-2 py-1 text-xs ${statusClass(paymentStatus)}`}>Pay</span>
           <span className={`rounded-full border px-2 py-1 text-xs ${statusClass(publishStatus)}`}>Publish</span>
           <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-600">
-            Engine: {generationEngine}
+            Engine: {generationEngine} · {qualityMode}
           </span>
+          <div className="flex items-center gap-1 rounded-full border border-slate-200 bg-white p-1">
+            <button
+              type="button"
+              onClick={() => setQualityMode("fast")}
+              className={`rounded-full px-2.5 py-1 text-xs font-semibold ${qualityMode === "fast" ? "bg-sky-500 text-white" : "text-slate-600 hover:bg-slate-100"}`}
+            >
+              Fast
+            </button>
+            <button
+              type="button"
+              onClick={() => setQualityMode("pro")}
+              className={`rounded-full px-2.5 py-1 text-xs font-semibold ${qualityMode === "pro" ? "bg-indigo-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}
+            >
+              Pro
+            </button>
+          </div>
         </div>
         {generationHistory.length > 0 ? (
           <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
@@ -2376,243 +2396,6 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
 {draft?.pageCode || ""}
                 </pre>
               </details>
-            </div>
-
-            <div style={{ backgroundColor: draft?.pageBg || "#f6f2f3", fontFamily: previewBodyFont }}>
-              <div className="flex items-center justify-between border-b border-[#e8d8da] bg-white/80 px-6 py-4">
-                <p className="text-3xl font-semibold" style={{ color: draft?.accentColor || "#c77a7a", fontFamily: previewHeadingFont }}>
-                  ✿ {draft?.businessName || "Studio"}
-                </p>
-                <div className="hidden items-center gap-6 text-base text-slate-700 2xl:flex">
-                  {(draft?.navItems || ["О нас", "Услуги", "Отзывы", "Запись"]).map((item) => (
-                    <span key={item}>{item}</span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="mx-auto max-w-[980px] px-6 py-8">
-                <div className="mb-2 flex justify-center">
-                  <span className="rounded-full border border-slate-200 bg-white/80 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
-                    {draft?.styleLabel || "Generated"}
-                  </span>
-                </div>
-                <div className="mt-8 space-y-6">
-                  {(draft?.pageDsl?.length || draft?.layoutSpec?.length) ? (
-                    <div className="rounded-xl border border-slate-200 bg-white/75 px-3 py-2 text-xs text-slate-500">
-                      Blocks: {((draft?.pageDsl && draft.pageDsl.length ? draft.pageDsl : draft?.layoutSpec) || []).map((block: any, index: number) => `#${index + 1}:${block.id}`).join(" · ")}
-                    </div>
-                  ) : null}
-                  {((draft?.pageDsl && draft.pageDsl.length ? draft.pageDsl : draft?.layoutSpec) || []).map((block: any) => {
-                    if (block.type === "hero") {
-                      return (
-                        <section key={block.id} className={block.variant === "split" ? "grid gap-4 md:grid-cols-2" : "text-center"}>
-                          <div>
-                            <p className="text-xs uppercase tracking-[0.35em]" style={{ color: draft?.accentColor || "#c77a7a" }}>
-                              {draft?.aboutTitle || "О нас"}
-                            </p>
-                            <h3
-                              className={`mt-3 text-4xl leading-tight text-slate-800 md:text-5xl ${draft?.headlineStyle === "serif" ? "font-serif" : "font-semibold"} ${block.variant === "centered" ? "text-center" : ""}`}
-                              style={{ fontFamily: previewHeadingFont }}
-                            >
-                              {block.title}
-                            </h3>
-                            <p className={`mt-4 text-lg leading-[1.55] text-slate-600 ${block.variant === "centered" ? "mx-auto max-w-[820px] text-center" : "max-w-[520px]"}`}>
-                              {block.subtitle}
-                            </p>
-                            <div className={`mt-4 flex flex-wrap gap-2 ${block.variant === "centered" ? "justify-center" : ""}`}>
-                              <button type="button" className="rounded-full px-4 py-2 text-sm font-semibold text-white" style={{ backgroundColor: draft?.accentColor || "#c77a7a" }}>
-                                {block.primaryCta}
-                              </button>
-                              <button type="button" className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
-                                {block.secondaryCta}
-                              </button>
-                            </div>
-                          </div>
-                          {block.variant === "split" ? (
-                            <div
-                              className="border bg-white/80"
-                              style={{ backgroundColor: draft?.surfaceBg || "#fffafb", borderRadius: previewRadiusValue, padding: previewSectionPaddingValue, borderColor: previewCardBorder }}
-                            >
-                              <p className="text-sm text-slate-700">Индивидуальная компоновка: AI выбрал split hero под ваш запрос и стиль.</p>
-                            </div>
-                          ) : null}
-                        </section>
-                      );
-                    }
-                    if (block.type === "about") {
-                      return (
-                        <section
-                          key={block.id}
-                          className="border bg-white/80 text-slate-700"
-                          style={{ backgroundColor: draft?.surfaceBg || "#fffafb", borderRadius: previewRadiusValue, padding: previewSectionPaddingValue, borderColor: previewCardBorder }}
-                        >
-                          <p className="text-xs uppercase tracking-[0.24em]" style={{ color: draft?.accentColor || "#c77a7a" }}>{block.title}</p>
-                          <p className="mt-2 text-base leading-7">{block.body}</p>
-                        </section>
-                      );
-                    }
-                    if (block.type === "services") {
-                      return (
-                        <section key={block.id}>
-                          <p className="mb-3 text-center text-xs uppercase tracking-[0.24em]" style={{ color: draft?.accentColor || "#c77a7a" }}>Прайс</p>
-                          <div className={block.variant === "rows" ? "space-y-2" : "grid gap-3 lg:grid-cols-2"}>
-                            {(block.items || []).slice(0, 6).map((service: any, index: number) => (
-                              <div
-                                key={`${service.title}-${index}`}
-                                className="border bg-white/90 px-4 py-3"
-                                style={{ backgroundColor: draft?.surfaceBg || "#fffafb", borderRadius: previewRadiusValue, borderColor: previewCardBorder }}
-                              >
-                                <div className="flex items-start justify-between gap-2">
-                                  <div>
-                                    <p className="text-2xl">{service.emoji}</p>
-                                    <p className="mt-1 text-xl font-semibold leading-snug text-slate-800" style={{ fontFamily: previewHeadingFont }}>{service.title}</p>
-                                    <p className="mt-1 text-sm text-slate-500">{service.duration}</p>
-                                  </div>
-                                  <p className="pt-2 text-2xl font-semibold" style={{ color: draft?.accentColor || "#c77a7a" }}>
-                                    {service.price}
-                                  </p>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </section>
-                      );
-                    }
-                    if (block.type === "team") {
-                      return (
-                        <section key={block.id}>
-                          <p className="mb-3 text-center text-xs uppercase tracking-[0.24em]" style={{ color: draft?.accentColor || "#c77a7a" }}>Команда</p>
-                          <div className={block.variant === "list" ? "space-y-2" : "grid gap-3 md:grid-cols-3"}>
-                            {(block.items || []).map((member: any, index: number) => (
-                              <div
-                                key={`${member.name}-${index}`}
-                                className="border bg-white/90 p-4 text-center"
-                                style={{ backgroundColor: draft?.surfaceBg || "#fffafb", borderRadius: previewRadiusValue, borderColor: previewCardBorder }}
-                              >
-                                <p className="text-lg font-semibold text-slate-800" style={{ fontFamily: previewHeadingFont }}>{member.name}</p>
-                                <p className="mt-1 text-sm text-slate-500">{member.role}</p>
-                              </div>
-                            ))}
-                          </div>
-                        </section>
-                      );
-                    }
-                    if (block.type === "reviews") {
-                      return (
-                        <section key={block.id}>
-                          <p className="mb-3 text-center text-xs uppercase tracking-[0.24em]" style={{ color: draft?.accentColor || "#c77a7a" }}>Отзывы</p>
-                          <div className={block.variant === "quotes" ? "space-y-2" : "grid gap-3 md:grid-cols-2"}>
-                            {(block.items || []).map((review: any, index: number) => (
-                              <div
-                                key={`${review.author}-${index}`}
-                                className="border bg-white/90 p-4"
-                                style={{ backgroundColor: draft?.surfaceBg || "#fffafb", borderRadius: previewRadiusValue, borderColor: previewCardBorder }}
-                              >
-                                <p className="text-sm leading-6 text-slate-700">“{review.text}”</p>
-                                <p className="mt-2 text-xs font-semibold text-slate-500">{review.author}</p>
-                              </div>
-                            ))}
-                          </div>
-                        </section>
-                      );
-                    }
-                    if (block.type === "faq") {
-                      return (
-                        <section key={block.id}>
-                          <p className="mb-3 text-center text-xs uppercase tracking-[0.24em]" style={{ color: draft?.accentColor || "#c77a7a" }}>FAQ</p>
-                          <div className="space-y-2">
-                            {(block.items || []).map((item: any, index: number) => (
-                              <div
-                                key={`${item.q}-${index}`}
-                                className="border bg-white/90 p-3"
-                                style={{ backgroundColor: draft?.surfaceBg || "#fffafb", borderRadius: Math.max(10, previewRadiusValue - 4), borderColor: previewCardBorder }}
-                              >
-                                <p className="text-sm font-semibold text-slate-800" style={{ fontFamily: previewHeadingFont }}>{item.q}</p>
-                                <p className="mt-1 text-sm text-slate-600">{item.a}</p>
-                              </div>
-                            ))}
-                          </div>
-                        </section>
-                      );
-                    }
-                    if (block.type === "booking") {
-                      return (
-                        <section
-                          key={block.id}
-                          className="border bg-white/90 text-center"
-                          style={{ backgroundColor: draft?.surfaceBg || "#fffafb", borderRadius: previewRadiusValue, padding: previewSectionPaddingValue, borderColor: previewCardBorder }}
-                        >
-                          <p className="text-lg font-semibold text-slate-800" style={{ fontFamily: previewHeadingFont }}>Онлайн-запись</p>
-                          <p className="mt-1 text-sm text-slate-600">Форма записи с выбором услуги, даты и времени.</p>
-                          <button type="button" className="mt-3 rounded-full px-4 py-2 text-sm font-semibold text-white" style={{ backgroundColor: draft?.accentColor || "#c77a7a" }}>
-                            {block.primaryCta || draft?.primaryCta || "Записаться"}
-                          </button>
-                        </section>
-                      );
-                    }
-                    if (block.type === "contacts") {
-                      return (
-                        <section
-                          key={block.id}
-                          className="border bg-white/90 text-center"
-                          style={{ backgroundColor: draft?.surfaceBg || "#fffafb", borderRadius: previewRadiusValue, padding: previewSectionPaddingValue, borderColor: previewCardBorder }}
-                        >
-                          <p className="text-lg font-semibold text-slate-800" style={{ fontFamily: previewHeadingFont }}>Контакты</p>
-                          <p className="mt-1 text-sm text-slate-600">{block.line}</p>
-                        </section>
-                      );
-                    }
-                    if (block.type === "stats") {
-                      return (
-                        <section key={block.id}>
-                          <div className={block.variant === "inline" ? "grid gap-3 sm:grid-cols-3" : "grid gap-3 sm:grid-cols-3"}>
-                            {(Array.isArray(block.items) ? block.items : []).map((item: any, index: number) => (
-                              <div key={`${index}-${item.label || "stat"}`} className="border bg-white/90 p-3 text-center" style={{ backgroundColor: draft?.surfaceBg || "#fffafb", borderRadius: previewRadiusValue, borderColor: previewCardBorder }}>
-                                <p className="text-[11px] uppercase tracking-[0.15em] text-slate-500">{String(item.label || "Метрика")}</p>
-                                <p className="mt-1 text-xl font-semibold text-slate-800" style={{ fontFamily: previewHeadingFont }}>{String(item.value || "—")}</p>
-                              </div>
-                            ))}
-                          </div>
-                        </section>
-                      );
-                    }
-                    if (block.type === "cta") {
-                      return (
-                        <section key={block.id} className="border bg-white/90 text-center" style={{ backgroundColor: draft?.surfaceBg || "#fffafb", borderRadius: previewRadiusValue, padding: previewSectionPaddingValue, borderColor: previewCardBorder }}>
-                          <p className="text-2xl font-semibold text-slate-800" style={{ fontFamily: previewHeadingFont }}>{block.title || "Готовы начать?"}</p>
-                          <p className="mt-2 text-sm text-slate-600">{block.subtitle || "Оставьте заявку и получите ответ в ближайшее время."}</p>
-                          <div className="mt-3 flex flex-wrap justify-center gap-2">
-                            <button type="button" className="rounded-full px-4 py-2 text-sm font-semibold text-white" style={{ backgroundColor: draft?.accentColor || "#c77a7a" }}>
-                              {block.primaryCta || draft?.primaryCta || "Записаться"}
-                            </button>
-                            <button type="button" className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
-                              {block.secondaryCta || draft?.secondaryCta || "Подробнее"}
-                            </button>
-                          </div>
-                        </section>
-                      );
-                    }
-                    if (block.type === "text") {
-                      return (
-                        <section key={block.id} className="border bg-white/90" style={{ backgroundColor: draft?.surfaceBg || "#fffafb", borderRadius: previewRadiusValue, padding: previewSectionPaddingValue, borderColor: previewCardBorder }}>
-                          <p className="text-xs uppercase tracking-[0.24em]" style={{ color: draft?.accentColor || "#c77a7a" }}>{block.title || "Секция"}</p>
-                          <p className="mt-2 text-base leading-7 text-slate-700">{block.body || "Контент секции формируется по вашему запросу."}</p>
-                        </section>
-                      );
-                    }
-                    return (
-                      <section
-                        key={block.id}
-                        className="border bg-white/90 text-center"
-                        style={{ backgroundColor: draft?.surfaceBg || "#fffafb", borderRadius: previewRadiusValue, padding: previewSectionPaddingValue, borderColor: previewCardBorder }}
-                      >
-                        <p className="text-lg font-semibold text-slate-800" style={{ fontFamily: previewHeadingFont }}>Галерея</p>
-                        <p className="mt-1 text-sm text-slate-600">Блок галереи работ готов к наполнению фото.</p>
-                      </section>
-                    );
-                  })}
-                </div>
-              </div>
             </div>
           </div>
         ) : null}

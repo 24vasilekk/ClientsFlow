@@ -19,7 +19,8 @@ export default async function handler(req: any, res: any) {
 
   try {
     const messages = Array.isArray(req.body?.messages) ? req.body.messages : [];
-    const model = process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini";
+    const requestedModel = typeof req.body?.model === "string" ? req.body.model.trim() : "";
+    const model = requestedModel || process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini";
     const referer = process.env.OPENROUTER_SITE_URL || "https://clients-flow-ten.vercel.app";
 
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
