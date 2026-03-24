@@ -248,6 +248,23 @@ function statusClass(status: BuilderStatus) {
   return "border-slate-200 bg-slate-100 text-slate-600";
 }
 
+function humanizeGenerationError(raw: string) {
+  const text = String(raw || "").toLowerCase();
+  if (text.includes("did not match the expected pattern")) {
+    return "Сервер вернул ошибку формата переменных. Сделай redeploy и повтори запрос.";
+  }
+  if (text.includes("failed to fetch") || text.includes("networkerror")) {
+    return "Сервер генерации сейчас недоступен. Повтори через 10-20 секунд.";
+  }
+  if (text.includes("openrouter_api_key") || text.includes("ai engine is not configured")) {
+    return "Для этого окружения Vercel не настроен OPENROUTER_API_KEY.";
+  }
+  if (text.includes("ai generation failed")) {
+    return "OpenRouter не вернул валидный JSON сайта. Повтори запрос или уточни задачу.";
+  }
+  return raw || "Ошибка генерации сайта.";
+}
+
 function hashString(input: string) {
   let hash = 2166136261;
   for (let i = 0; i < input.length; i += 1) {
@@ -1534,16 +1551,26 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
     setWorkingText("Updating pages...");
 
     try {
-      const response = await fetch("/api/sites/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sessionId: generationSessionId,
-          profile: nextProfile,
-          guidance,
-          round: nextRound
-        })
-      });
+      const requestGeneration = async (sessionId: string) =>
+        fetch("/api/sites/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId,
+            profile: nextProfile,
+            guidance,
+            round: nextRound
+          })
+        });
+
+      let response: Response;
+      try {
+        response = await requestGeneration(generationSessionId);
+      } catch {
+        const freshSessionId = `session-${uid()}`;
+        setGenerationSessionId(freshSessionId);
+        response = await requestGeneration(freshSessionId);
+      }
 
       const body = (await response.json()) as {
         error?: string;
@@ -1587,11 +1614,12 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
       setGenerationStatus("success");
     } catch (error: any) {
       const message = String(error?.message || "AI generation failed");
+      const userMessage = humanizeGenerationError(message);
       setGenerationStatus("error");
-      setError(message);
+      setError(userMessage);
       addMessage(
         "assistant",
-        `Не смог собрать сайт через AI: ${message}. Проверь OPENROUTER_API_KEY/OPENROUTER_MODEL в Vercel и повтори запрос.`,
+        `Не смог собрать сайт через AI: ${userMessage}`,
         "soft"
       );
     } finally {
