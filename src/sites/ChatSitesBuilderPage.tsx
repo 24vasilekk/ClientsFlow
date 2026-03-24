@@ -237,6 +237,22 @@ function uid() {
   return Math.random().toString(36).slice(2, 10);
 }
 
+function sanitizeSessionId(raw: string) {
+  const cleaned = String(raw || "")
+    .replace(/[^\w-]/g, "")
+    .slice(0, 64);
+  return cleaned || `session-${uid()}`;
+}
+
+function sitesGenerateEndpoint() {
+  if (typeof window === "undefined") return "/api/sites/generate";
+  try {
+    return new URL("/api/sites/generate", window.location.origin).toString();
+  } catch {
+    return "/api/sites/generate";
+  }
+}
+
 function nowTime() {
   return new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
 }
@@ -1440,7 +1456,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
   const [generationEngine, setGenerationEngine] = useState<"openrouter" | "algorithm">("openrouter");
   const [generationSessionId, setGenerationSessionId] = useState(() => {
     if (typeof window === "undefined") return `session-${uid()}`;
-    return localStorage.getItem(SITE_SESSION_STORAGE_KEY) || `session-${uid()}`;
+    return sanitizeSessionId(localStorage.getItem(SITE_SESSION_STORAGE_KEY) || `session-${uid()}`);
   });
   const [generationHistory, setGenerationHistory] = useState<GenerationHistoryItem[]>([]);
   const [profile, setProfile] = useState<AgentProfile>({
@@ -1456,7 +1472,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
   const canPublish = paymentStatus === "success" && publishStatus !== "loading" && !!draft;
 
   useEffect(() => {
-    localStorage.setItem(SITE_SESSION_STORAGE_KEY, generationSessionId);
+    localStorage.setItem(SITE_SESSION_STORAGE_KEY, sanitizeSessionId(generationSessionId));
   }, [generationSessionId]);
 
   useEffect(() => {
@@ -1464,7 +1480,9 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
     const loadHistory = async () => {
       if (!generationSessionId) return;
       try {
-        const response = await fetch(`/api/sites/generate?sessionId=${encodeURIComponent(generationSessionId)}`);
+        const safeSessionId = sanitizeSessionId(generationSessionId);
+        const endpoint = sitesGenerateEndpoint();
+        const response = await fetch(`${endpoint}?sessionId=${encodeURIComponent(safeSessionId)}`);
         if (!response.ok) return;
         const body = (await response.json()) as { history?: GenerationHistoryItem[] };
         if (cancelled || !Array.isArray(body.history)) return;
@@ -1551,25 +1569,34 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
     setWorkingText("Updating pages...");
 
     try {
-      const requestGeneration = async (sessionId: string) =>
-        fetch("/api/sites/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            sessionId,
-            profile: nextProfile,
-            guidance,
-            round: nextRound
-          })
-        });
+      const requestGeneration = async (sessionId: string) => {
+        const endpoint = sitesGenerateEndpoint();
+        try {
+          return await fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sessionId: sanitizeSessionId(sessionId),
+              profile: nextProfile,
+              guidance,
+              round: nextRound
+            })
+          });
+        } catch (error: any) {
+          const name = String(error?.name || "FetchError");
+          const message = String(error?.message || "request_failed");
+          throw new Error(`request_failed:${name}:${message}`);
+        }
+      };
 
       let response: Response;
       try {
-        response = await requestGeneration(generationSessionId);
+        response = await requestGeneration(sanitizeSessionId(generationSessionId));
       } catch {
         const freshSessionId = `session-${uid()}`;
-        setGenerationSessionId(freshSessionId);
-        response = await requestGeneration(freshSessionId);
+        const safeFreshSessionId = sanitizeSessionId(freshSessionId);
+        setGenerationSessionId(safeFreshSessionId);
+        response = await requestGeneration(safeFreshSessionId);
       }
 
       const body = (await response.json()) as {
@@ -1639,7 +1666,9 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
     setIsWorking(true);
     setWorkingText(`Восстанавливаю вариант #${targetRound}...`);
     try {
-      const response = await fetch(`/api/sites/generate?sessionId=${encodeURIComponent(generationSessionId)}`);
+      const safeSessionId = sanitizeSessionId(generationSessionId);
+      const endpoint = sitesGenerateEndpoint();
+      const response = await fetch(`${endpoint}?sessionId=${encodeURIComponent(safeSessionId)}`);
       if (!response.ok) {
         addMessage("assistant", "История сейчас недоступна. Попробуй чуть позже.", "soft");
         return;
