@@ -1,9 +1,9 @@
 declare const process: { env: Record<string, string | undefined> };
 
 const SYSTEM_PROMPT =
-  "Ты senior UX-copywriter для премиального B2B SaaS. " +
-  "Пиши только по-русски, без hype, без клише. " +
-  "Верни строго JSON без markdown и без пояснений.";
+  "Ты senior web designer и frontend developer. " +
+  "Пиши по-русски. Генерируй полноценный современный лендинг и возвращай строго JSON без markdown и без пояснений. " +
+  "Обязательно верни поле pageCode с полным HTML документом и встроенным CSS.";
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
@@ -33,7 +33,7 @@ export default async function handler(req: any, res: any) {
       },
       body: JSON.stringify({
         model,
-        temperature: 0.4,
+        temperature: 0.6,
         messages: [{ role: "system", content: SYSTEM_PROMPT }, ...messages]
       })
     });

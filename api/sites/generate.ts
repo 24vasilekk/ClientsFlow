@@ -130,6 +130,19 @@ function parseJson(raw: string): any | null {
   return null;
 }
 
+function extractHtmlDocument(raw: string): string | null {
+  const text = String(raw || "").trim();
+  if (!text) return null;
+  const fencedHtml = text.match(/```html\s*([\s\S]*?)```/i) || text.match(/```\s*([\s\S]*?)```/i);
+  const candidate = fencedHtml?.[1]?.trim() || text;
+  if (!candidate) return null;
+  const lower = candidate.toLowerCase();
+  if (lower.includes("<!doctype html") || (lower.includes("<html") && lower.includes("</html>"))) {
+    return candidate;
+  }
+  return null;
+}
+
 function isComputerClubLike(profile: AgentProfile, guidance: string) {
   const joined = `${profile.niche} ${profile.goal} ${profile.style} ${profile.styleReference} ${guidance}`.toLowerCase();
   return (
@@ -504,10 +517,24 @@ export default async function handler(req: any, res: any) {
         : Array.isArray(content)
           ? content.map((item: any) => item?.text || "").join("\n")
           : "";
-    const parsed = parseJson(text);
+    let parsed = parseJson(text);
     if (!parsed || typeof parsed !== "object") {
-      finishWithFallback("INVALID_MODEL_JSON", compact(text));
-      return;
+      const htmlDoc = extractHtmlDocument(text);
+      if (htmlDoc) {
+        parsed = {
+          heroTitle: base.heroTitle,
+          heroSubtitle: base.heroSubtitle,
+          aboutBody: base.aboutBody,
+          services: base.services,
+          faq: base.faq,
+          pageDsl: base.pageDsl,
+          summaryPoints: ["Собрано напрямую из HTML-ответа модели", "Preview показывает ровно сгенерированный код"],
+          pageCode: htmlDoc
+        };
+      } else {
+        finishWithFallback("INVALID_MODEL_JSON", compact(text));
+        return;
+      }
     }
 
     let draft = normalizeDraft(parsed, base);
