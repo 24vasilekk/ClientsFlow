@@ -849,10 +849,217 @@ function escapeHtml(value: string) {
     .replace(/'/g, "&#039;");
 }
 
-function buildPageCode(draft: Pick<DraftState, "businessName" | "accentColor" | "pageBg" | "surfaceBg" | "fontHeading" | "fontBody" | "density" | "radius" | "contrast" | "pageDsl">) {
+function buildPageCode(draft: Pick<DraftState, "businessName" | "niche" | "city" | "accentColor" | "pageBg" | "surfaceBg" | "fontHeading" | "fontBody" | "density" | "radius" | "contrast" | "pageDsl">) {
   const radius = draft.radius === "rounded" ? 24 : draft.radius === "sharp" ? 10 : 16;
   const sectionPad = draft.density === "compact" ? "14px" : draft.density === "airy" ? "28px" : "20px";
   const borderColor = draft.contrast === "high" ? "rgba(15,23,42,.28)" : "rgba(148,163,184,.28)";
+  const lowerNiche = `${draft.niche || ""}`.toLowerCase();
+  const isComputerClub =
+    lowerNiche.includes("computer") ||
+    lowerNiche.includes("компьютер") ||
+    lowerNiche.includes("кибер") ||
+    lowerNiche.includes("gaming") ||
+    lowerNiche.includes("esport");
+
+  if (isComputerClub) {
+    const hero = draft.pageDsl.find((block) => block.type === "hero");
+    const services = draft.pageDsl.find((block) => block.type === "services")?.items || [];
+    const stats = draft.pageDsl.find((block) => block.type === "stats")?.items || [
+      { label: "Игровых мест", value: "50+" },
+      { label: "Игр в библиотеке", value: "2000+" },
+      { label: "Режим работы", value: "24/7" },
+      { label: "Топ-железо", value: "RTX 4080" }
+    ];
+    const reviews = draft.pageDsl.find((block) => block.type === "reviews")?.items || [];
+    const faq = draft.pageDsl.find((block) => block.type === "faq")?.items || [];
+    const cta = draft.pageDsl.find((block) => block.type === "cta");
+    const contacts = draft.pageDsl.find((block) => block.type === "contacts");
+    const heroTitle = hero?.title || `${draft.businessName}: кибер-клуб с топовым железом`;
+    const heroSubtitle = hero?.subtitle || `Мощное железо, честные цены и атмосферные игровые зоны в ${draft.city || "вашем городе"}.`;
+    const primaryCta = hero?.primaryCta || cta?.primaryCta || "Забронировать место";
+    const secondaryCta = hero?.secondaryCta || cta?.secondaryCta || "Смотреть зоны";
+    const zones = services.length
+      ? services
+      : [
+          { emoji: "🖥️", title: "Standard", duration: "RTX 4060 · 144 Hz", price: "от 120 ₽/час" },
+          { emoji: "⚡", title: "PRO Zone", duration: "RTX 4070 Super · 240 Hz", price: "от 220 ₽/час" },
+          { emoji: "👑", title: "VIP Solo", duration: "RTX 4080 · private room", price: "от 390 ₽/час" },
+          { emoji: "🎮", title: "PlayStation 5", duration: "4K TV · до 4 игроков", price: "от 350 ₽/час" }
+        ];
+    const games = [
+      { icon: "🔫", title: "Counter-Strike 2", subtitle: "Prime" },
+      { icon: "⚔️", title: "Dota 2", subtitle: "Calibrated" },
+      { icon: "💥", title: "Valorant", subtitle: "Ranked / Unrated" },
+      { icon: "🚗", title: "GTA V Online", subtitle: "Rockstar account" },
+      { icon: "🥊", title: "Mortal Kombat", subtitle: "PS5" },
+      { icon: "🎯", title: "Warzone", subtitle: "Battle Royale" }
+    ];
+    const neonAccent = draft.accentColor || "#15c9ff";
+    return `<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${escapeHtml(draft.businessName)}</title>
+  <style>
+    :root { --accent: ${neonAccent}; --bg:#050816; --bg2:#090d22; --card:#0c122a; --line:rgba(88, 120, 255, .26); --txt:#eaf2ff; --muted:#9db1cf; }
+    * { box-sizing: border-box; }
+    html, body { margin:0; padding:0; font-family: ${draft.fontBody}, "Segoe UI", sans-serif; color: var(--txt); background:
+      radial-gradient(1200px 700px at 10% -10%, rgba(21,201,255,.2), transparent 55%),
+      radial-gradient(900px 600px at 100% 0%, rgba(124,58,237,.16), transparent 48%),
+      linear-gradient(180deg, var(--bg), #06091a 40%, #050816);
+    }
+    .wrap { max-width: 1160px; margin: 0 auto; padding: 28px 20px 60px; }
+    .nav { position: sticky; top: 0; z-index: 20; backdrop-filter: blur(12px); background: rgba(4,8,22,.75); border-bottom: 1px solid rgba(148,163,184,.18); }
+    .nav-inner { max-width: 1160px; margin: 0 auto; padding: 14px 20px; display:flex; align-items:center; justify-content:space-between; }
+    .brand { font-weight: 800; letter-spacing: .02em; font-size: 32px; font-family: ${draft.fontHeading}, "Segoe UI", sans-serif; }
+    .brand b { color: var(--accent); }
+    .menu { display:flex; gap:24px; color:#d4e0f7; font-weight:600; font-size:15px; }
+    .menu a { color:inherit; text-decoration:none; opacity:.88; }
+    .btn { border:0; font:inherit; font-weight:700; border-radius: 12px; padding: 11px 18px; cursor:pointer; }
+    .btn-primary { background: var(--accent); color:#04111b; box-shadow: 0 0 0 1px rgba(255,255,255,.08) inset, 0 14px 36px rgba(21,201,255,.25); }
+    .btn-secondary { background: transparent; color: var(--txt); border:1px solid var(--line); }
+    .hero { padding: 72px 0 44px; text-align:center; }
+    .eyebrow { color: var(--accent); letter-spacing: .28em; text-transform: uppercase; font-size: 12px; font-weight: 700; margin:0 0 16px; }
+    h1 { margin:0; font-family: ${draft.fontHeading}, "Segoe UI", sans-serif; font-size: clamp(44px, 8vw, 108px); line-height: .95; letter-spacing: -.02em; }
+    .subtitle { max-width: 780px; margin: 24px auto 0; color: var(--muted); font-size: clamp(18px, 2.2vw, 36px); line-height: 1.35; }
+    .cta-row { display:flex; justify-content:center; gap:12px; margin: 34px 0 0; flex-wrap:wrap; }
+    .stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin: 28px 0 10px; }
+    .stat { border:1px solid var(--line); border-radius: 14px; padding: 16px; background: linear-gradient(180deg, rgba(14,23,52,.72), rgba(9,13,34,.72)); }
+    .stat .v { color: var(--accent); font-size: 36px; font-weight: 800; letter-spacing: -.02em; }
+    .stat .l { color:#8ea4c9; font-size: 14px; margin-top: 6px; }
+    .section { margin-top: 46px; border:1px solid var(--line); border-radius: 20px; padding: 26px; background: linear-gradient(180deg, rgba(12,18,42,.86), rgba(9,13,34,.9)); }
+    .section h2 { margin:0 0 16px; font-size: clamp(30px, 4vw, 54px); line-height: 1.05; font-family: ${draft.fontHeading}, "Segoe UI", sans-serif; }
+    .section .lead { margin:0 0 20px; color: var(--muted); font-size: 18px; }
+    .zones { display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap:12px; }
+    .zone { border:1px solid var(--line); border-radius: 14px; padding: 16px; background: rgba(5,8,22,.58); }
+    .zone .title { margin: 8px 0 0; font-size: 24px; font-weight: 800; font-family: ${draft.fontHeading}, "Segoe UI", sans-serif; }
+    .zone .meta { margin: 8px 0 0; color:#8ea4c9; font-size:14px; }
+    .zone .price { margin: 12px 0 0; color: var(--accent); font-weight: 800; font-size: 30px; }
+    .games { display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:12px; }
+    .game { border:1px solid var(--line); border-radius: 14px; padding: 14px; background: rgba(5,8,22,.58); }
+    .game .title { margin-top:8px; font-size: 18px; font-weight:700; }
+    .game .meta { margin-top: 6px; font-size: 14px; color:#8ea4c9; }
+    .reviews { display:grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap:12px; }
+    .review { border:1px solid var(--line); border-radius: 14px; padding: 16px; background: rgba(5,8,22,.58); color:#dbe7ff; line-height:1.6; }
+    .review .author { margin-top: 10px; color: var(--accent); font-weight:700; font-size:14px; }
+    .faq details { border-top:1px solid rgba(148,163,184,.2); padding:12px 0; }
+    .faq summary { cursor:pointer; font-weight:700; color:#e7f1ff; }
+    .faq p { margin:8px 0 0; color:#8ea4c9; line-height:1.55; }
+    .booking { margin-top: 20px; display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+    .field { border:1px solid var(--line); border-radius: 10px; padding: 12px; background: rgba(5,8,22,.66); color:#dce8ff; }
+    .full { grid-column: 1 / -1; }
+    .footer { margin-top: 34px; text-align:center; color:#8ea4c9; line-height:1.7; }
+    @media (max-width: 980px) {
+      .menu { display:none; }
+      .stats { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .zones { grid-template-columns:1fr 1fr; }
+      .games { grid-template-columns:1fr 1fr; }
+      .reviews { grid-template-columns:1fr; }
+      .booking { grid-template-columns:1fr; }
+    }
+    @media (max-width: 640px) {
+      .zones, .games, .stats { grid-template-columns:1fr; }
+      .brand { font-size: 26px; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <div class="nav-inner">
+      <div class="brand"><b>${escapeHtml(draft.businessName.split(" ")[0] || draft.businessName)}</b> ${escapeHtml(draft.businessName.split(" ").slice(1).join(" ") || "Gaming Club")}</div>
+      <div class="menu">
+        <a href="#zones">Зоны</a><a href="#prices">Цены</a><a href="#games">Игры</a><a href="#reviews">Отзывы</a><a href="#faq">FAQ</a>
+      </div>
+      <button class="btn btn-primary">Записаться</button>
+    </div>
+  </nav>
+  <main class="wrap">
+    <section class="hero">
+      <p class="eyebrow">${escapeHtml(draft.city || "Россия")} • Gaming Club</p>
+      <h1>${escapeHtml(heroTitle)}</h1>
+      <p class="subtitle">${escapeHtml(heroSubtitle)}</p>
+      <div class="cta-row">
+        <button class="btn btn-primary">${escapeHtml(primaryCta)}</button>
+        <button class="btn btn-secondary">${escapeHtml(secondaryCta)}</button>
+      </div>
+      <div class="stats">
+        ${stats
+          .map((item) => `<div class="stat"><div class="v">${escapeHtml(item.value || "")}</div><div class="l">${escapeHtml(item.label || "")}</div></div>`)
+          .join("")}
+      </div>
+    </section>
+
+    <section id="zones" class="section">
+      <h2>Выбери своё место</h2>
+      <p class="lead">Игровые зоны под любой формат: катки с друзьями, турниры, стримы, консольные вечера.</p>
+      <div class="zones">
+        ${zones
+          .map(
+            (item) => `<article class="zone"><div>${escapeHtml(item.emoji || "🎮")}</div><p class="title">${escapeHtml(item.title || "")}</p><p class="meta">${escapeHtml(item.duration || "")}</p><p class="price">${escapeHtml(item.price || "")}</p></article>`
+          )
+          .join("")}
+      </div>
+    </section>
+
+    <section id="games" class="section">
+      <h2>2000+ игр</h2>
+      <p class="lead">От соревновательных шутеров до больших кооперативных тайтлов.</p>
+      <div class="games">${games
+        .map((item) => `<article class="game"><div>${item.icon}</div><div class="title">${escapeHtml(item.title)}</div><div class="meta">${escapeHtml(item.subtitle)}</div></article>`)
+        .join("")}</div>
+    </section>
+
+    <section id="prices" class="section">
+      <h2>Тарифы</h2>
+      <p class="lead">Гибкая сетка цен: будни, выходные и ночные пакеты.</p>
+      <div class="zones">
+        ${zones
+          .map(
+            (item) => `<article class="zone"><p class="title">${escapeHtml(item.title || "")}</p><p class="meta">${escapeHtml(item.duration || "по запросу")}</p><p class="price">${escapeHtml(item.price || "по запросу")}</p></article>`
+          )
+          .join("")}
+      </div>
+    </section>
+
+    <section id="reviews" class="section">
+      <h2>Отзывы</h2>
+      <div class="reviews">
+        ${(reviews.length ? reviews : [{ author: "Гость клуба", text: "Атмосфера мощная, железо топ, админы всегда на связи." }])
+          .map((item) => `<article class="review">“${escapeHtml(item.text || "")}”<div class="author">${escapeHtml(item.author || "Клиент")}</div></article>`)
+          .join("")}
+      </div>
+    </section>
+
+    <section id="faq" class="section faq">
+      <h2>FAQ</h2>
+      ${(faq.length
+        ? faq
+        : [
+            { q: "Можно забронировать зону заранее?", a: "Да, оставьте заявку и мы подтвердим слот в течение 10-15 минут." },
+            { q: "Есть ли ночные тарифы?", a: "Да, доступны ночные пакеты с фиксированной ценой." }
+          ]
+      )
+        .map((item) => `<details><summary>${escapeHtml(item.q || "")}</summary><p>${escapeHtml(item.a || "")}</p></details>`)
+        .join("")}
+    </section>
+
+    <section class="section">
+      <h2>${escapeHtml(cta?.title || "Забронируй место")}</h2>
+      <p class="lead">${escapeHtml(cta?.subtitle || "Оставь контакт, и админ быстро подтвердит удобное время.")}</p>
+      <div class="booking">
+        <input class="field" placeholder="Твое имя или ник" />
+        <input class="field" placeholder="Телефон / Telegram" />
+        <select class="field full"><option>Выбери зону</option></select>
+        <button class="btn btn-primary full">${escapeHtml(primaryCta)}</button>
+      </div>
+      <div class="footer">${escapeHtml(contacts?.line || `${draft.businessName} • ${draft.city || "Россия"}`)}</div>
+    </section>
+  </main>
+</body>
+</html>`;
+  }
+
   const blocks = (draft.pageDsl || [])
     .map((block) => {
       if (block.type === "hero") {
@@ -899,7 +1106,7 @@ function buildPageCode(draft: Pick<DraftState, "businessName" | "accentColor" | 
       if (block.type === "contacts") {
         return `<section class="card"><h2>Контакты</h2><p>${escapeHtml(block.line || "")}</p></section>`;
       }
-      return `<section class="card"><h2>${escapeHtml(block.title || "Секция")}</h2><p>${escapeHtml(block.body || "Контент обновляется по вашему запросу.")}</p></section>`;
+      return `<section class="card"><h2>${escapeHtml(block.title || "Раздел")}</h2><p>${escapeHtml(block.body || "Контент заполнен AI под ваш запрос.")}</p></section>`;
     })
     .join("\n");
 
@@ -1829,7 +2036,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
         addMessage("assistant", `Кандидаты: ${candidateLine}. Выбран: ${body.selectedCandidateId || body.candidates[0].id}`, "soft");
       }
       setGenerationEngine("openrouter");
-      setDraft(finalizeDraft(finalDraft));
+      setDraft(finalDraft);
       setGenerationRound(nextRound);
       setProfile(nextProfile);
       const summary = finalDraft.summaryPoints.map((point) => `• ${point}`).join("\n");
@@ -1867,7 +2074,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
             const aiJson = parseMaybeJsonObject(recoveryBody.reply);
             const recoveredDraft = aiJson ? hydrateGeneratedDraft(aiJson, fallbackDraft) : fallbackDraft;
             setGenerationEngine("openrouter");
-            setDraft(finalizeDraft(recoveredDraft));
+            setDraft(recoveredDraft);
             setGenerationRound(nextRound);
             setProfile(nextProfile);
             setGenerationStatus("success");
@@ -2063,9 +2270,14 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
       return;
     }
 
-    if (detectCopyToneIntent(text) || detectAiEditIntent(text)) {
+    if (detectCopyToneIntent(text)) {
       applyEditPrompt(text);
       addMessage("assistant", "Обновил текущий вариант по твоему запросу. Если нужен полный редизайн, напиши «перегенерируй».", "soft");
+      return;
+    }
+
+    if (detectAiEditIntent(text)) {
+      void generateFromProfile(mergedProfile, text, generationRound + 1);
       return;
     }
 

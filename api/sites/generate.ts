@@ -81,37 +81,108 @@ function parseJson(raw: string): any | null {
   return null;
 }
 
+function isComputerClubLike(profile: AgentProfile, guidance: string) {
+  const joined = `${profile.niche} ${profile.goal} ${profile.style} ${profile.styleReference} ${guidance}`.toLowerCase();
+  return (
+    joined.includes("computer club") ||
+    joined.includes("gaming") ||
+    joined.includes("esport") ||
+    joined.includes("кибер") ||
+    joined.includes("компьютер") ||
+    joined.includes("игров")
+  );
+}
+
 function fallbackDraft(profile: AgentProfile, guidance: string): DraftLike {
-  const businessName = profile.businessName || "Studio Name";
+  const isComputerClub = isComputerClubLike(profile, guidance);
+  const businessName = profile.businessName || (isComputerClub ? "AirDrop Gaming Club" : "Studio Name");
   const city = profile.city || "Москва";
-  const niche = profile.niche || "сервис";
-  const accent = "#0ea5e9";
-  const pageBg = "#eff8ff";
-  const surfaceBg = "#ffffff";
-  const services = [
-    { emoji: "✨", title: "Базовая услуга", duration: "60 мин", price: "от 2 000 ₽" },
-    { emoji: "⚡", title: "Расширенная услуга", duration: "90 мин", price: "от 3 500 ₽" }
-  ];
-  const pageDsl = [
-    {
-      id: "hero-1",
-      type: "hero",
-      variant: "centered",
-      title: `${businessName}: современный сайт под ${niche}`,
-      subtitle: `Собрали персональный сайт для бизнеса в ${city}. Фокус на конверсии и онлайн-записи.`,
-      primaryCta: "Записаться",
-      secondaryCta: "Смотреть услуги"
-    },
-    { id: "services-1", type: "services", variant: "cards", items: services },
-    {
-      id: "cta-1",
-      type: "cta",
-      title: "Готовы запустить поток клиентов?",
-      subtitle: "Оставьте заявку и получите первые лиды уже сегодня.",
-      primaryCta: "Оставить заявку",
-      secondaryCta: "Получить консультацию"
-    }
-  ];
+  const niche = profile.niche || (isComputerClub ? "компьютерный клуб" : "сервис");
+  const accent = isComputerClub ? "#16d2ff" : "#0ea5e9";
+  const pageBg = isComputerClub ? "#060a1c" : "#eff8ff";
+  const surfaceBg = isComputerClub ? "#0d1330" : "#ffffff";
+  const services = isComputerClub
+    ? [
+        { emoji: "🖥️", title: "Standard Zone", duration: "RTX 4060 · 144 Hz", price: "от 120 ₽/час" },
+        { emoji: "⚡", title: "PRO Zone", duration: "RTX 4070 Super · 240 Hz", price: "от 220 ₽/час" },
+        { emoji: "👑", title: "VIP Solo", duration: "RTX 4080 · private room", price: "от 390 ₽/час" },
+        { emoji: "🎮", title: "PlayStation 5", duration: "4K TV · до 4 игроков", price: "от 350 ₽/час" }
+      ]
+    : [
+        { emoji: "✨", title: "Базовая услуга", duration: "60 мин", price: "от 2 000 ₽" },
+        { emoji: "⚡", title: "Расширенная услуга", duration: "90 мин", price: "от 3 500 ₽" }
+      ];
+  const pageDsl = isComputerClub
+    ? [
+        {
+          id: "hero-1",
+          type: "hero",
+          variant: "centered",
+          title: `${businessName}: киберклуб, где важны FPS и атмосфера`,
+          subtitle: `Собрали сайт для ${businessName} в ${city}: топ-железо, честные тарифы, онлайн-бронь.`,
+          primaryCta: "Забронировать место",
+          secondaryCta: "Смотреть зоны"
+        },
+        {
+          id: "stats-1",
+          type: "stats",
+          variant: "inline",
+          items: [
+            { label: "Игровых мест", value: "50+" },
+            { label: "Игр", value: "2000+" },
+            { label: "Режим", value: "24/7" },
+            { label: "Железо", value: "RTX 4080" }
+          ]
+        },
+        { id: "services-1", type: "services", variant: "cards", items: services },
+        {
+          id: "reviews-1",
+          type: "reviews",
+          variant: "cards",
+          items: [
+            { author: "Гость клуба", text: "Чистые места, сильное железо, без лагов даже в прайм-тайм." },
+            { author: "Постоянный клиент", text: "Удобная бронь и реально адекватные цены." }
+          ]
+        },
+        {
+          id: "faq-1",
+          type: "faq",
+          variant: "accordion",
+          items: [
+            { q: "Можно забронировать заранее?", a: "Да, бронь доступна через форму на сайте." },
+            { q: "Есть ночные пакеты?", a: "Да, действуют фиксированные ночные тарифы." }
+          ]
+        },
+        {
+          id: "cta-1",
+          type: "cta",
+          title: "Готовы занять свое место?",
+          subtitle: "Оставьте заявку, и администратор подтвердит бронь.",
+          primaryCta: "Забронировать сейчас",
+          secondaryCta: "Связаться с админом"
+        },
+        { id: "contacts-1", type: "contacts", line: `${businessName}, ${city}` }
+      ]
+    : [
+        {
+          id: "hero-1",
+          type: "hero",
+          variant: "centered",
+          title: `${businessName}: современный сайт под ${niche}`,
+          subtitle: `Собрали персональный сайт для бизнеса в ${city}. Фокус на конверсии и онлайн-записи.`,
+          primaryCta: "Записаться",
+          secondaryCta: "Смотреть услуги"
+        },
+        { id: "services-1", type: "services", variant: "cards", items: services },
+        {
+          id: "cta-1",
+          type: "cta",
+          title: "Готовы запустить поток клиентов?",
+          subtitle: "Оставьте заявку и получите первые лиды уже сегодня.",
+          primaryCta: "Оставить заявку",
+          secondaryCta: "Получить консультацию"
+        }
+      ];
   return {
     businessName,
     city,
@@ -120,19 +191,33 @@ function fallbackDraft(profile: AgentProfile, guidance: string): DraftLike {
     pageBg,
     surfaceBg,
     headlineStyle: "sans",
-    styleLabel: "AI Generated",
-    heroTitle: `${businessName}: сайт, который приводит клиентов`,
-    heroSubtitle: `Персональный дизайн под ${niche} в ${city}`,
-    aboutTitle: "О проекте",
-    aboutBody: `${businessName} — индивидуальный сайт под задачу бизнеса.`,
-    primaryCta: "Записаться",
-    secondaryCta: "Подробнее",
+    styleLabel: isComputerClub ? "AI Generated · Cyber Arena" : "AI Generated",
+    heroTitle: isComputerClub ? `${businessName}: забронируй место в лучшей зоне` : `${businessName}: сайт, который приводит клиентов`,
+    heroSubtitle: isComputerClub ? `Персональный дизайн под ${niche} в ${city}` : `Персональный дизайн под ${niche} в ${city}`,
+    aboutTitle: isComputerClub ? "О клубе" : "О проекте",
+    aboutBody: isComputerClub
+      ? `${businessName} — игровое пространство с современным железом, гибкими тарифами и быстрой бронью онлайн.`
+      : `${businessName} — индивидуальный сайт под задачу бизнеса.`,
+    primaryCta: isComputerClub ? "Забронировать место" : "Записаться",
+    secondaryCta: isComputerClub ? "Выбрать зону" : "Подробнее",
     contactLine: `${businessName}, ${city}`,
-    navItems: ["О нас", "Услуги", "Отзывы", "Контакты"],
+    navItems: isComputerClub ? ["Зоны", "Цены", "Игры", "Отзывы", "FAQ", "Запись"] : ["О нас", "Услуги", "Отзывы", "Контакты"],
     services,
-    team: [{ name: "Команда", role: "Специалисты" }],
-    reviews: [{ author: "Клиент", text: "Отличный сервис и результат." }],
-    faq: [{ q: "Можно изменить дизайн?", a: "Да, просто напишите в чат, что изменить." }],
+    team: isComputerClub
+      ? [{ name: "Администратор смены", role: "Подтверждение брони и поддержка гостей" }]
+      : [{ name: "Команда", role: "Специалисты" }],
+    reviews: isComputerClub
+      ? [
+          { author: "Игрок", text: "Железо действительно мощное, пинг стабильный." },
+          { author: "Команда турнира", text: "Организация и атмосфера на высоком уровне." }
+        ]
+      : [{ author: "Клиент", text: "Отличный сервис и результат." }],
+    faq: isComputerClub
+      ? [
+          { q: "Можно прийти ночью?", a: "Да, клуб работает 24/7, ночные тарифы доступны." },
+          { q: "Как подтвердить бронь?", a: "После заявки администратор свяжется с вами в мессенджере." }
+        ]
+      : [{ q: "Можно изменить дизайн?", a: "Да, просто напишите в чат, что изменить." }],
     sectionOrder: ["about", "services", "reviews", "faq", "booking", "contacts", "team", "gallery"],
     sectionsEnabled: {
       about: true,
@@ -144,12 +229,14 @@ function fallbackDraft(profile: AgentProfile, guidance: string): DraftLike {
       contacts: true,
       gallery: false
     },
-    summaryPoints: ["Индивидуальный первый экран", "Секции под нишу", "Готово к публикации"],
+    summaryPoints: isComputerClub
+      ? ["Неоновый dark-first визуал", "Зоны и тарифы под киберклуб", "Готово к бронированию и публикации"]
+      : ["Индивидуальный первый экран", "Секции под нишу", "Готово к публикации"],
     fontHeading: '"Inter", "Segoe UI", sans-serif',
     fontBody: '"Inter", "Segoe UI", sans-serif',
     density: "balanced",
     radius: "rounded",
-    contrast: "medium",
+    contrast: isComputerClub ? "high" : "medium",
     layoutSpec: [],
     pageDsl,
     pageCode: ""
@@ -307,7 +394,8 @@ export default async function handler(req: any, res: any) {
           },
           body: JSON.stringify({
             model,
-            temperature: 0.45,
+            temperature: 0.55,
+            max_tokens: 1800,
             messages: [
               {
                 role: "system",
@@ -325,13 +413,13 @@ export default async function handler(req: any, res: any) {
     };
 
     stage = "openrouter_request";
-    if (Date.now() - startedAt > 4500) {
+    if (Date.now() - startedAt > 20000) {
       finishWithFallback("EARLY_TIMEOUT_GUARD", "Function time budget exceeded before OpenRouter call");
       return;
     }
     let response: Response | null = null;
     try {
-      response = await requestOpenRouter(3500);
+      response = await requestOpenRouter(18000);
     } catch (error: any) {
       finishWithFallback("OPENROUTER_TIMEOUT_FALLBACK", compact(error?.message || "openrouter_request_failed"));
       return;
