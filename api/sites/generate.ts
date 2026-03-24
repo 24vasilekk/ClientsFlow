@@ -42,6 +42,7 @@ type DraftLike = {
   density: "airy" | "balanced" | "compact";
   radius: "soft" | "rounded" | "sharp";
   contrast: "soft" | "medium" | "high";
+  layoutSpec: Array<Record<string, unknown>>;
 };
 
 type DesignPreset = {
@@ -187,7 +188,8 @@ function sanitizeDraft(raw: any, fallback: DraftLike): DraftLike {
     fontBody: typeof raw.fontBody === "string" && raw.fontBody.trim() ? raw.fontBody.trim() : fallback.fontBody,
     density: raw.density === "airy" || raw.density === "balanced" || raw.density === "compact" ? raw.density : fallback.density,
     radius: raw.radius === "soft" || raw.radius === "rounded" || raw.radius === "sharp" ? raw.radius : fallback.radius,
-    contrast: raw.contrast === "soft" || raw.contrast === "medium" || raw.contrast === "high" ? raw.contrast : fallback.contrast
+    contrast: raw.contrast === "soft" || raw.contrast === "medium" || raw.contrast === "high" ? raw.contrast : fallback.contrast,
+    layoutSpec: Array.isArray(raw.layoutSpec) ? raw.layoutSpec.slice(0, 32).filter((item: unknown) => item && typeof item === "object").map((item) => item as Record<string, unknown>) : fallback.layoutSpec
   };
 
   safe.sectionOrder = safe.sectionOrder.filter((key) => safe.sectionsEnabled[key]);
@@ -248,6 +250,27 @@ function buildAlgorithmicDraft(profile: AgentProfile, guidance: string, round: n
     gallery: profile.mustHave.some((item) => item.toLowerCase().includes("галер"))
   };
   const sectionOrder = SECTION_KEYS.filter((key) => sectionsEnabled[key]);
+  const layoutSpec: Array<Record<string, unknown>> = [
+    {
+      id: `b-${uid()}`,
+      type: "hero",
+      variant: rnd() > 0.5 ? "split" : "centered",
+      title: isClinic ? "Точный сервис и доверие в каждом касании" : "Место, где сервис - это искусство",
+      subtitle: `Индивидуальный сайт для ${businessName} в ${profile.city || "вашем городе"}.`,
+      primaryCta: profile.goal.includes("звон") ? "Позвонить сейчас" : "Записаться",
+      secondaryCta: "Открыть прайс"
+    }
+  ];
+  for (const section of sectionOrder) {
+    if (section === "about") layoutSpec.push({ id: `b-${uid()}`, type: "about", variant: rnd() > 0.5 ? "story" : "statement", title: "О нас", body: "Структура и тексты собраны под бизнес-задачу: сильный оффер, ясный путь к записи и блоки доверия." });
+    if (section === "services") layoutSpec.push({ id: `b-${uid()}`, type: "services", variant: rnd() > 0.5 ? "cards" : "rows", items: services });
+    if (section === "team") layoutSpec.push({ id: `b-${uid()}`, type: "team", variant: rnd() > 0.5 ? "grid" : "list", items: [{ name: "Анастасия", role: isBarber ? "Барбер" : "Старший мастер" }, { name: "Екатерина", role: isBarber ? "Барбер-стилист" : "Мастер" }, { name: "Мария", role: isBarber ? "Администратор" : "Топ-специалист" }] });
+    if (section === "reviews") layoutSpec.push({ id: `b-${uid()}`, type: "reviews", variant: rnd() > 0.5 ? "cards" : "quotes", items: [{ author: "Клиент", text: "Очень понравился сервис и результат. Записалась онлайн за пару минут." }, { author: "Постоянный клиент", text: "Сильная команда, аккуратная подача и всегда понятная коммуникация." }] });
+    if (section === "faq") layoutSpec.push({ id: `b-${uid()}`, type: "faq", variant: rnd() > 0.5 ? "accordion" : "list", items: [{ q: "Как быстро можно записаться?", a: "Обычно на ближайшие слоты можно попасть в день обращения или на следующий день." }, { q: "Можно изменить дизайн?", a: "Да, можно перегенерировать архитектуру и визуальную концепцию прямо в чате." }] });
+    if (section === "booking") layoutSpec.push({ id: `b-${uid()}`, type: "booking", variant: "panel", primaryCta: profile.goal.includes("звон") ? "Позвонить сейчас" : "Записаться" });
+    if (section === "contacts") layoutSpec.push({ id: `b-${uid()}`, type: "contacts", variant: rnd() > 0.5 ? "panel" : "minimal", line: `${businessName}, ${profile.city || "Москва"}` });
+    if (section === "gallery") layoutSpec.push({ id: `b-${uid()}`, type: "gallery", variant: rnd() > 0.5 ? "masonry" : "tiles", title: "Галерея" });
+  }
 
   return {
     businessName,
@@ -293,6 +316,8 @@ function buildAlgorithmicDraft(profile: AgentProfile, guidance: string, round: n
     density: styleContext.includes("минимал") ? "airy" : "balanced",
     radius: styleContext.includes("workspace") ? "rounded" : "soft",
     contrast: styleContext.includes("dark") ? "high" : "medium"
+    ,
+    layoutSpec
   };
 }
 
@@ -343,7 +368,8 @@ async function tryOpenRouterGeneration(profile: AgentProfile, guidance: string, 
     '  "fontBody": "\"Inter\", \"Segoe UI\", sans-serif",',
     '  "density": "airy|balanced|compact",',
     '  "radius": "soft|rounded|sharp",',
-    '  "contrast": "soft|medium|high"',
+    '  "contrast": "soft|medium|high",',
+    '  "layoutSpec": [{"type":"hero","variant":"centered|split","title":"...","subtitle":"...","primaryCta":"...","secondaryCta":"..."},{"type":"services","variant":"cards|rows","items":[{"emoji":"...","title":"...","duration":"...","price":"..."}]}]',
     "}"
   ].join("\n");
 

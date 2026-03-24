@@ -58,7 +58,8 @@ export default async function handler(req: any, res: any) {
                   ? payload.theme.contrast
                   : "medium"
             }
-          : { fontHeading: "", fontBody: "", density: "balanced", radius: "soft", contrast: "medium" }
+          : { fontHeading: "", fontBody: "", density: "balanced", radius: "soft", contrast: "medium" },
+      layoutSpec: Array.isArray(payload.layoutSpec) ? payload.layoutSpec.slice(0, 32) : []
     };
 
     const doc = await createPublishedSite(safePayload);

@@ -45,6 +45,16 @@ type SectionKey = "about" | "services" | "team" | "reviews" | "faq" | "booking" 
 type ThemeDensity = "airy" | "balanced" | "compact";
 type ThemeRadius = "soft" | "rounded" | "sharp";
 type ThemeContrast = "soft" | "medium" | "high";
+type LayoutBlock =
+  | { id: string; type: "hero"; variant: "centered" | "split"; title: string; subtitle: string; primaryCta: string; secondaryCta: string }
+  | { id: string; type: "about"; variant: "story" | "statement"; title: string; body: string }
+  | { id: string; type: "services"; variant: "cards" | "rows"; items: Array<{ emoji: string; title: string; duration: string; price: string }> }
+  | { id: string; type: "team"; variant: "grid" | "list"; items: Array<{ name: string; role: string }> }
+  | { id: string; type: "reviews"; variant: "cards" | "quotes"; items: Array<{ author: string; text: string }> }
+  | { id: string; type: "faq"; variant: "accordion" | "list"; items: Array<{ q: string; a: string }> }
+  | { id: string; type: "booking"; variant: "panel"; primaryCta: string }
+  | { id: string; type: "contacts"; variant: "panel" | "minimal"; line: string }
+  | { id: string; type: "gallery"; variant: "masonry" | "tiles"; title: string };
 type DslAction =
   | { kind: "regenerate"; guidance: string }
   | { kind: "styleLike"; reference: string }
@@ -85,6 +95,7 @@ type DraftState = {
   density: ThemeDensity;
   radius: ThemeRadius;
   contrast: ThemeContrast;
+  layoutSpec: LayoutBlock[];
 };
 
 type AgentProfile = {
@@ -144,6 +155,7 @@ type PublishPayload = {
     radius?: ThemeRadius;
     contrast?: ThemeContrast;
   };
+  layoutSpec?: LayoutBlock[];
 };
 
 const LOCAL_PUBLISHED_SITE_PREFIX = "clientsflow_local_published_site:";
@@ -375,6 +387,161 @@ function sectionPadding(density: ThemeDensity) {
   if (density === "compact") return "14px";
   if (density === "airy") return "26px";
   return "20px";
+}
+
+function composeLayoutSpec(draft: Pick<DraftState, "businessName" | "styleLabel" | "heroTitle" | "heroSubtitle" | "primaryCta" | "secondaryCta" | "aboutTitle" | "aboutBody" | "services" | "team" | "reviews" | "faq" | "contactLine" | "sectionOrder" | "sectionsEnabled">): LayoutBlock[] {
+  const rnd = seeded(hashString(`${draft.businessName}|${draft.styleLabel}|${draft.heroTitle}`));
+  const heroBlock: LayoutBlock = {
+    id: uid(),
+    type: "hero",
+    variant: rnd() > 0.5 ? "split" : "centered",
+    title: draft.heroTitle,
+    subtitle: draft.heroSubtitle,
+    primaryCta: draft.primaryCta,
+    secondaryCta: draft.secondaryCta
+  };
+
+  const blocks: LayoutBlock[] = [heroBlock];
+  for (const section of draft.sectionOrder) {
+    if (!draft.sectionsEnabled[section]) continue;
+    if (section === "about") {
+      blocks.push({ id: uid(), type: "about", variant: rnd() > 0.5 ? "story" : "statement", title: draft.aboutTitle, body: draft.aboutBody });
+      continue;
+    }
+    if (section === "services") {
+      blocks.push({
+        id: uid(),
+        type: "services",
+        variant: rnd() > 0.5 ? "cards" : "rows",
+        items: draft.services.map((item) => ({ emoji: item.emoji, title: item.title, duration: item.duration, price: item.price }))
+      });
+      continue;
+    }
+    if (section === "team") {
+      blocks.push({ id: uid(), type: "team", variant: rnd() > 0.5 ? "grid" : "list", items: draft.team.map((item) => ({ name: item.name, role: item.role })) });
+      continue;
+    }
+    if (section === "reviews") {
+      blocks.push({ id: uid(), type: "reviews", variant: rnd() > 0.5 ? "cards" : "quotes", items: draft.reviews.map((item) => ({ author: item.author, text: item.text })) });
+      continue;
+    }
+    if (section === "faq") {
+      blocks.push({ id: uid(), type: "faq", variant: rnd() > 0.5 ? "accordion" : "list", items: draft.faq.map((item) => ({ q: item.q, a: item.a })) });
+      continue;
+    }
+    if (section === "booking") {
+      blocks.push({ id: uid(), type: "booking", variant: "panel", primaryCta: draft.primaryCta });
+      continue;
+    }
+    if (section === "contacts") {
+      blocks.push({ id: uid(), type: "contacts", variant: rnd() > 0.5 ? "panel" : "minimal", line: draft.contactLine });
+      continue;
+    }
+    blocks.push({ id: uid(), type: "gallery", variant: rnd() > 0.5 ? "masonry" : "tiles", title: "Галерея" });
+  }
+  return blocks;
+}
+
+function normalizeLayoutSpec(raw: unknown, fallback: DraftState): LayoutBlock[] {
+  if (!Array.isArray(raw)) return composeLayoutSpec(fallback);
+  const result: LayoutBlock[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const type = typeof (item as any).type === "string" ? (item as any).type : "";
+    if (type === "hero") {
+      result.push({
+        id: uid(),
+        type: "hero",
+        variant: (item as any).variant === "split" ? "split" : "centered",
+        title: String((item as any).title || fallback.heroTitle),
+        subtitle: String((item as any).subtitle || fallback.heroSubtitle),
+        primaryCta: String((item as any).primaryCta || fallback.primaryCta),
+        secondaryCta: String((item as any).secondaryCta || fallback.secondaryCta)
+      });
+      continue;
+    }
+    if (type === "about") {
+      result.push({
+        id: uid(),
+        type: "about",
+        variant: (item as any).variant === "statement" ? "statement" : "story",
+        title: String((item as any).title || fallback.aboutTitle),
+        body: String((item as any).body || fallback.aboutBody)
+      });
+      continue;
+    }
+    if (type === "services") {
+      const rows = Array.isArray((item as any).items) ? (item as any).items : [];
+      result.push({
+        id: uid(),
+        type: "services",
+        variant: (item as any).variant === "rows" ? "rows" : "cards",
+        items: rows
+          .filter((row: any) => row && typeof row.title === "string")
+          .slice(0, 8)
+          .map((row: any) => ({
+            emoji: String(row.emoji || "•"),
+            title: String(row.title || ""),
+            duration: String(row.duration || "по записи"),
+            price: String(row.price || "по запросу")
+          }))
+      });
+      continue;
+    }
+    if (type === "team") {
+      const rows = Array.isArray((item as any).items) ? (item as any).items : [];
+      result.push({
+        id: uid(),
+        type: "team",
+        variant: (item as any).variant === "list" ? "list" : "grid",
+        items: rows.filter((row: any) => row && typeof row.name === "string").slice(0, 8).map((row: any) => ({ name: String(row.name || ""), role: String(row.role || "Специалист") }))
+      });
+      continue;
+    }
+    if (type === "reviews") {
+      const rows = Array.isArray((item as any).items) ? (item as any).items : [];
+      result.push({
+        id: uid(),
+        type: "reviews",
+        variant: (item as any).variant === "quotes" ? "quotes" : "cards",
+        items: rows.filter((row: any) => row && typeof row.text === "string").slice(0, 8).map((row: any) => ({ author: String(row.author || "Клиент"), text: String(row.text || "") }))
+      });
+      continue;
+    }
+    if (type === "faq") {
+      const rows = Array.isArray((item as any).items) ? (item as any).items : [];
+      result.push({
+        id: uid(),
+        type: "faq",
+        variant: (item as any).variant === "list" ? "list" : "accordion",
+        items: rows.filter((row: any) => row && typeof row.q === "string" && typeof row.a === "string").slice(0, 8).map((row: any) => ({ q: String(row.q || ""), a: String(row.a || "") }))
+      });
+      continue;
+    }
+    if (type === "booking") {
+      result.push({ id: uid(), type: "booking", variant: "panel", primaryCta: String((item as any).primaryCta || fallback.primaryCta) });
+      continue;
+    }
+    if (type === "contacts") {
+      result.push({
+        id: uid(),
+        type: "contacts",
+        variant: (item as any).variant === "minimal" ? "minimal" : "panel",
+        line: String((item as any).line || fallback.contactLine)
+      });
+      continue;
+    }
+    if (type === "gallery") {
+      result.push({
+        id: uid(),
+        type: "gallery",
+        variant: (item as any).variant === "tiles" ? "tiles" : "masonry",
+        title: String((item as any).title || "Галерея")
+      });
+    }
+  }
+  if (!result.length) return composeLayoutSpec(fallback);
+  return result;
 }
 
 const sectionKeywords: Array<{ key: SectionKey; words: string[] }> = [
@@ -681,7 +848,7 @@ function createDraftFromProfile(profile: AgentProfile, guidance = "", round = 1)
     "Готов к публикации и дальнейшей перегенерации"
   ];
 
-  return {
+  const nextDraft: DraftState = {
     businessName,
     city: profile.city || "Москва",
     niche: normalizedNiche,
@@ -722,8 +889,11 @@ function createDraftFromProfile(profile: AgentProfile, guidance = "", round = 1)
     fontBody: '"Inter", "Segoe UI", sans-serif',
     density: styleContext.includes("минимал") ? "airy" : "balanced",
     radius: styleContext.includes("workspace") ? "rounded" : "soft",
-    contrast: styleContext.includes("dark") ? "high" : "medium"
+    contrast: styleContext.includes("dark") ? "high" : "medium",
+    layoutSpec: []
   };
+  nextDraft.layoutSpec = composeLayoutSpec(nextDraft);
+  return nextDraft;
 }
 
 function draftToPayload(draft: DraftState): PublishPayload {
@@ -780,7 +950,8 @@ function draftToPayload(draft: DraftState): PublishPayload {
       density: draft.density,
       radius: draft.radius,
       contrast: draft.contrast
-    }
+    },
+    layoutSpec: draft.layoutSpec
   };
 }
 
@@ -900,7 +1071,7 @@ function hydrateGeneratedDraft(raw: any, fallback: DraftState): DraftState {
   if (!patch) return fallback;
   const sectionsEnabled = normalizeSectionsEnabled(raw?.sectionsEnabled, fallback.sectionsEnabled);
   const sectionOrder = normalizeSectionOrder(raw?.sectionOrder, fallback.sectionOrder).filter((key) => sectionsEnabled[key]);
-  return {
+  const merged: DraftState = {
     ...fallback,
     ...patch,
     navItems: patch.navItems?.length ? patch.navItems : fallback.navItems,
@@ -910,8 +1081,11 @@ function hydrateGeneratedDraft(raw: any, fallback: DraftState): DraftState {
     faq: patch.faq?.length ? patch.faq : fallback.faq,
     sectionOrder,
     sectionsEnabled,
-    summaryPoints: patch.summaryPoints?.length ? patch.summaryPoints : fallback.summaryPoints
+    summaryPoints: patch.summaryPoints?.length ? patch.summaryPoints : fallback.summaryPoints,
+    layoutSpec: []
   };
+  merged.layoutSpec = normalizeLayoutSpec(raw?.layoutSpec, merged);
+  return merged;
 }
 
 export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPageProps) {
@@ -1035,6 +1209,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
         next.niche = profilePatch.niche;
       }
       next = applySectionCommand(next, text);
+      next.layoutSpec = composeLayoutSpec(next);
       return next;
     });
   };
@@ -1188,7 +1363,8 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
           if (!prev) return prev;
           const nextEnabled = { ...prev.sectionsEnabled, [dsl.section]: true };
           const nextOrder = prev.sectionOrder.includes(dsl.section) ? prev.sectionOrder : [...prev.sectionOrder, dsl.section];
-          return { ...prev, sectionsEnabled: nextEnabled, sectionOrder: nextOrder };
+          const nextDraft = { ...prev, sectionsEnabled: nextEnabled, sectionOrder: nextOrder };
+          return { ...nextDraft, layoutSpec: composeLayoutSpec(nextDraft) };
         });
         addMessage("assistant", `Секция ${dsl.section} включена.`, "soft");
         return;
@@ -1198,7 +1374,8 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
           if (!prev) return prev;
           const nextEnabled = { ...prev.sectionsEnabled, [dsl.section]: false };
           const nextOrder = prev.sectionOrder.filter((item) => item !== dsl.section);
-          return { ...prev, sectionsEnabled: nextEnabled, sectionOrder: nextOrder };
+          const nextDraft = { ...prev, sectionsEnabled: nextEnabled, sectionOrder: nextOrder };
+          return { ...nextDraft, layoutSpec: composeLayoutSpec(nextDraft) };
         });
         addMessage("assistant", `Секция ${dsl.section} выключена.`, "soft");
         return;
@@ -1208,7 +1385,11 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
           addMessage("assistant", "Используй формат: /rewrite-hero <новый оффер>.", "soft");
           return;
         }
-        setDraft((prev) => (prev ? { ...prev, heroTitle: dsl.text } : prev));
+        setDraft((prev) => {
+          if (!prev) return prev;
+          const nextDraft = { ...prev, heroTitle: dsl.text };
+          return { ...nextDraft, layoutSpec: composeLayoutSpec(nextDraft) };
+        });
         addMessage("assistant", "Hero-заголовок обновлен.", "soft");
         return;
       }
@@ -1398,38 +1579,64 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
                     {draft?.styleLabel || "Generated"}
                   </span>
                 </div>
-                <p className="text-center text-xs uppercase tracking-[0.35em]" style={{ color: draft?.accentColor || "#c77a7a" }}>
-                  {draft?.aboutTitle || "О нас"}
-                </p>
-                <h3 className={`mt-3 text-center text-4xl leading-tight text-slate-800 md:text-5xl ${draft?.headlineStyle === "serif" ? "font-serif" : "font-semibold"}`} style={{ fontFamily: previewHeadingFont }}>
-                  {draft?.heroTitle || "Место, где сервис - это искусство"}
-                </h3>
-                <p className="mx-auto mt-4 max-w-[820px] text-center text-lg leading-[1.55] text-slate-600">
-                  {draft?.heroSubtitle || "Собери сайт из чата и управляй контентом в одном интерфейсе."}
-                </p>
-
                 <div className="mt-8 space-y-6">
-                  {(draft?.sectionOrder || []).filter((section) => draft?.sectionsEnabled?.[section]).map((section) => {
-                    if (section === "about") {
+                  {(draft?.layoutSpec || []).map((block) => {
+                    if (block.type === "hero") {
                       return (
-                        <section
-                          key={section}
-                          className="border bg-white/80 text-slate-700"
-                          style={{ backgroundColor: draft?.surfaceBg || "#fffafb", borderRadius: previewRadiusValue, padding: previewSectionPaddingValue, borderColor: previewCardBorder }}
-                        >
-                          <p className="text-xs uppercase tracking-[0.24em]" style={{ color: draft?.accentColor || "#c77a7a" }}>О проекте</p>
-                          <p className="mt-2 text-base leading-7">{draft?.aboutBody}</p>
+                        <section key={block.id} className={block.variant === "split" ? "grid gap-4 md:grid-cols-2" : "text-center"}>
+                          <div>
+                            <p className="text-xs uppercase tracking-[0.35em]" style={{ color: draft?.accentColor || "#c77a7a" }}>
+                              {draft?.aboutTitle || "О нас"}
+                            </p>
+                            <h3
+                              className={`mt-3 text-4xl leading-tight text-slate-800 md:text-5xl ${draft?.headlineStyle === "serif" ? "font-serif" : "font-semibold"} ${block.variant === "centered" ? "text-center" : ""}`}
+                              style={{ fontFamily: previewHeadingFont }}
+                            >
+                              {block.title}
+                            </h3>
+                            <p className={`mt-4 text-lg leading-[1.55] text-slate-600 ${block.variant === "centered" ? "mx-auto max-w-[820px] text-center" : "max-w-[520px]"}`}>
+                              {block.subtitle}
+                            </p>
+                            <div className={`mt-4 flex flex-wrap gap-2 ${block.variant === "centered" ? "justify-center" : ""}`}>
+                              <button type="button" className="rounded-full px-4 py-2 text-sm font-semibold text-white" style={{ backgroundColor: draft?.accentColor || "#c77a7a" }}>
+                                {block.primaryCta}
+                              </button>
+                              <button type="button" className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
+                                {block.secondaryCta}
+                              </button>
+                            </div>
+                          </div>
+                          {block.variant === "split" ? (
+                            <div
+                              className="border bg-white/80"
+                              style={{ backgroundColor: draft?.surfaceBg || "#fffafb", borderRadius: previewRadiusValue, padding: previewSectionPaddingValue, borderColor: previewCardBorder }}
+                            >
+                              <p className="text-sm text-slate-700">Индивидуальная компоновка: AI выбрал split hero под ваш запрос и стиль.</p>
+                            </div>
+                          ) : null}
                         </section>
                       );
                     }
-                    if (section === "services") {
+                    if (block.type === "about") {
                       return (
-                        <section key={section}>
+                        <section
+                          key={block.id}
+                          className="border bg-white/80 text-slate-700"
+                          style={{ backgroundColor: draft?.surfaceBg || "#fffafb", borderRadius: previewRadiusValue, padding: previewSectionPaddingValue, borderColor: previewCardBorder }}
+                        >
+                          <p className="text-xs uppercase tracking-[0.24em]" style={{ color: draft?.accentColor || "#c77a7a" }}>{block.title}</p>
+                          <p className="mt-2 text-base leading-7">{block.body}</p>
+                        </section>
+                      );
+                    }
+                    if (block.type === "services") {
+                      return (
+                        <section key={block.id}>
                           <p className="mb-3 text-center text-xs uppercase tracking-[0.24em]" style={{ color: draft?.accentColor || "#c77a7a" }}>Прайс</p>
-                          <div className="grid gap-3 lg:grid-cols-2">
-                            {(draft?.services || []).slice(0, 6).map((service) => (
+                          <div className={block.variant === "rows" ? "space-y-2" : "grid gap-3 lg:grid-cols-2"}>
+                            {(block.items || []).slice(0, 6).map((service, index) => (
                               <div
-                                key={service.id}
+                                key={`${service.title}-${index}`}
                                 className="border bg-white/90 px-4 py-3"
                                 style={{ backgroundColor: draft?.surfaceBg || "#fffafb", borderRadius: previewRadiusValue, borderColor: previewCardBorder }}
                               >
@@ -1449,14 +1656,14 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
                         </section>
                       );
                     }
-                    if (section === "team") {
+                    if (block.type === "team") {
                       return (
-                        <section key={section}>
+                        <section key={block.id}>
                           <p className="mb-3 text-center text-xs uppercase tracking-[0.24em]" style={{ color: draft?.accentColor || "#c77a7a" }}>Команда</p>
-                          <div className="grid gap-3 md:grid-cols-3">
-                            {(draft?.team || []).map((member) => (
+                          <div className={block.variant === "list" ? "space-y-2" : "grid gap-3 md:grid-cols-3"}>
+                            {block.items.map((member, index) => (
                               <div
-                                key={member.id}
+                                key={`${member.name}-${index}`}
                                 className="border bg-white/90 p-4 text-center"
                                 style={{ backgroundColor: draft?.surfaceBg || "#fffafb", borderRadius: previewRadiusValue, borderColor: previewCardBorder }}
                               >
@@ -1468,14 +1675,14 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
                         </section>
                       );
                     }
-                    if (section === "reviews") {
+                    if (block.type === "reviews") {
                       return (
-                        <section key={section}>
+                        <section key={block.id}>
                           <p className="mb-3 text-center text-xs uppercase tracking-[0.24em]" style={{ color: draft?.accentColor || "#c77a7a" }}>Отзывы</p>
-                          <div className="grid gap-3 md:grid-cols-2">
-                            {(draft?.reviews || []).map((review) => (
+                          <div className={block.variant === "quotes" ? "space-y-2" : "grid gap-3 md:grid-cols-2"}>
+                            {block.items.map((review, index) => (
                               <div
-                                key={review.id}
+                                key={`${review.author}-${index}`}
                                 className="border bg-white/90 p-4"
                                 style={{ backgroundColor: draft?.surfaceBg || "#fffafb", borderRadius: previewRadiusValue, borderColor: previewCardBorder }}
                               >
@@ -1487,14 +1694,14 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
                         </section>
                       );
                     }
-                    if (section === "faq") {
+                    if (block.type === "faq") {
                       return (
-                        <section key={section}>
+                        <section key={block.id}>
                           <p className="mb-3 text-center text-xs uppercase tracking-[0.24em]" style={{ color: draft?.accentColor || "#c77a7a" }}>FAQ</p>
                           <div className="space-y-2">
-                            {(draft?.faq || []).map((item) => (
+                            {block.items.map((item, index) => (
                               <div
-                                key={item.id}
+                                key={`${item.q}-${index}`}
                                 className="border bg-white/90 p-3"
                                 style={{ backgroundColor: draft?.surfaceBg || "#fffafb", borderRadius: Math.max(10, previewRadiusValue - 4), borderColor: previewCardBorder }}
                               >
@@ -1506,36 +1713,36 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
                         </section>
                       );
                     }
-                    if (section === "booking") {
+                    if (block.type === "booking") {
                       return (
                         <section
-                          key={section}
+                          key={block.id}
                           className="border bg-white/90 text-center"
                           style={{ backgroundColor: draft?.surfaceBg || "#fffafb", borderRadius: previewRadiusValue, padding: previewSectionPaddingValue, borderColor: previewCardBorder }}
                         >
                           <p className="text-lg font-semibold text-slate-800" style={{ fontFamily: previewHeadingFont }}>Онлайн-запись</p>
                           <p className="mt-1 text-sm text-slate-600">Форма записи с выбором услуги, даты и времени.</p>
                           <button type="button" className="mt-3 rounded-full px-4 py-2 text-sm font-semibold text-white" style={{ backgroundColor: draft?.accentColor || "#c77a7a" }}>
-                            {draft?.primaryCta || "Записаться"}
+                            {block.primaryCta || draft?.primaryCta || "Записаться"}
                           </button>
                         </section>
                       );
                     }
-                    if (section === "contacts") {
+                    if (block.type === "contacts") {
                       return (
                         <section
-                          key={section}
+                          key={block.id}
                           className="border bg-white/90 text-center"
                           style={{ backgroundColor: draft?.surfaceBg || "#fffafb", borderRadius: previewRadiusValue, padding: previewSectionPaddingValue, borderColor: previewCardBorder }}
                         >
                           <p className="text-lg font-semibold text-slate-800" style={{ fontFamily: previewHeadingFont }}>Контакты</p>
-                          <p className="mt-1 text-sm text-slate-600">{draft?.contactLine}</p>
+                          <p className="mt-1 text-sm text-slate-600">{block.line}</p>
                         </section>
                       );
                     }
                     return (
                       <section
-                        key={section}
+                        key={block.id}
                         className="border bg-white/90 text-center"
                         style={{ backgroundColor: draft?.surfaceBg || "#fffafb", borderRadius: previewRadiusValue, padding: previewSectionPaddingValue, borderColor: previewCardBorder }}
                       >

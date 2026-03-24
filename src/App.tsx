@@ -220,6 +220,18 @@ type PublishedSiteData = {
       radius?: "soft" | "rounded" | "sharp";
       contrast?: "soft" | "medium" | "high";
     };
+    layoutSpec?: Array<{
+      id?: string;
+      type?: string;
+      variant?: string;
+      title?: string;
+      subtitle?: string;
+      primaryCta?: string;
+      secondaryCta?: string;
+      body?: string;
+      line?: string;
+      items?: Array<Record<string, unknown>>;
+    }>;
   };
 };
 
@@ -999,7 +1011,6 @@ function PublishedSitePage({ path, onNavigate }: { path: `/s/${string}`; onNavig
   }
 
   const p = data.payload;
-  const sections = p.sections || {};
   const openedProduct = p.products.find((item) => item.id === openedProductId) || null;
   const socialLinks = p.socialLinks || {};
   const tabs: Array<{ id: "home" | "services" | "reviews" | "cabinet"; label: string }> = [
@@ -1008,13 +1019,6 @@ function PublishedSitePage({ path, onNavigate }: { path: `/s/${string}`; onNavig
     { id: "reviews", label: "Отзывы" },
     { id: "cabinet", label: "Личный кабинет" }
   ];
-  const visibleByTab: Record<typeof activeTab, string[]> = {
-    home: ["services", "process", "gallery", "map"],
-    services: ["services"],
-    reviews: ["testimonials", "faq"],
-    cabinet: ["cabinet"]
-  };
-  const show = (key: string) => sections[key] !== false && visibleByTab[activeTab].includes(key);
   const toHref = (value?: string) => {
     const raw = (value || "").trim();
     if (!raw) return "";
@@ -1039,6 +1043,16 @@ function PublishedSitePage({ path, onNavigate }: { path: `/s/${string}`; onNavig
   const radius = theme.radius === "rounded" ? 24 : theme.radius === "sharp" ? 10 : 16;
   const cardBorder = theme.contrast === "high" ? "rgba(15,23,42,0.24)" : "rgba(148,163,184,0.28)";
   const blockPadding = theme.density === "compact" ? "12px" : theme.density === "airy" ? "22px" : "16px";
+  const layoutBlocks = Array.isArray(p.layoutSpec) ? p.layoutSpec : [];
+  const hasDynamicLayout = layoutBlocks.length > 0;
+  const runtimeBlocks = hasDynamicLayout
+    ? layoutBlocks
+    : [
+        { id: "fallback-services", type: "services", variant: "cards", items: p.products.map((item) => ({ title: item.title, price: item.price, duration: "", emoji: "•" })) },
+        { id: "fallback-reviews", type: "reviews", variant: "cards", items: p.testimonials.map((item) => ({ author: item.name, text: item.text })) },
+        { id: "fallback-faq", type: "faq", variant: "accordion", items: p.faq.map((item) => ({ q: item.q, a: item.a })) },
+        { id: "fallback-contacts", type: "contacts", variant: "panel", line: p.contactLine }
+      ];
 
   return (
     <div className="min-h-screen text-slate-900" style={{ backgroundColor: p.baseColor || "#f8fafc", fontFamily: fontBody }}>
@@ -1122,96 +1136,86 @@ function PublishedSitePage({ path, onNavigate }: { path: `/s/${string}`; onNavig
         ) : null}
 
         <div className="mt-4 space-y-3">
-          {show("services") ? (
-            <div className="border bg-white p-3" style={{ borderColor: cardBorder, borderRadius: Math.max(10, radius - 4) }}>
-              <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Услуги и товары</p>
-              <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                {p.products?.map((product) => (
-                  <button
-                    key={product.id}
-                    onClick={() => setOpenedProductId(product.id)}
-                    className="border bg-slate-50 p-2 text-left transition hover:border-slate-400"
-                    style={{ borderColor: cardBorder, borderRadius: Math.max(8, radius - 6) }}
-                  >
-                    <div className="h-20 overflow-hidden border bg-white" style={{ borderColor: cardBorder, borderRadius: Math.max(6, radius - 8) }}>
-                      {product.images?.[0] ? <img src={product.images[0]} alt={product.title} className="h-full w-full object-cover" /> : null}
+          {runtimeBlocks.map((block: any) => {
+            if (block.type === "hero") {
+              return (
+                <div key={block.id || uid()} className={block.variant === "split" ? "grid gap-3 rounded-xl border bg-white p-4 md:grid-cols-2" : "rounded-xl border bg-white p-4 text-center"} style={{ borderColor: cardBorder, borderRadius: Math.max(10, radius - 4) }}>
+                  <div>
+                    <h3 className="text-3xl font-extrabold tracking-tight text-slate-900" style={{ fontFamily: fontHeading }}>{String(block.title || p.heroTitle)}</h3>
+                    <p className="mt-2 text-sm text-slate-600">{String(block.subtitle || p.heroSubtitle)}</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button className="rounded-full px-4 py-2 text-xs font-semibold text-white" style={{ backgroundColor: p.accentColor }}>{String(block.primaryCta || p.primaryCta)}</button>
+                      <button className="rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700">{String(block.secondaryCta || p.secondaryCta)}</button>
                     </div>
-                    <p className="mt-2 text-xs font-semibold text-slate-900">{product.title}</p>
-                    <p className="text-xs text-slate-600">{product.price}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          {show("process") ? (
-            <div className="border bg-white p-3" style={{ borderColor: cardBorder, borderRadius: Math.max(10, radius - 4) }}>
-              <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Как это работает</p>
-              <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                {p.processSteps?.map((step, index) => (
-                  <div key={step} className="border bg-slate-50 p-2 text-xs text-slate-700" style={{ borderColor: cardBorder, borderRadius: Math.max(8, radius - 6) }}><span className="font-semibold text-slate-900">{index + 1}. </span>{step}</div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          {show("gallery") && p.galleryUrls?.length ? (
-            <div className="border bg-white p-3" style={{ borderColor: cardBorder, borderRadius: Math.max(10, radius - 4) }}>
-              <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Галерея</p>
-              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {p.galleryUrls.map((url, index) => <img key={`${url}-${index}`} src={url} alt={`gallery-${index}`} className="h-24 w-full border object-cover" style={{ borderColor: cardBorder, borderRadius: Math.max(8, radius - 6) }} />)}
-              </div>
-            </div>
-          ) : null}
-
-          {show("testimonials") ? (
-            <div className="border bg-white p-3" style={{ borderColor: cardBorder, borderRadius: Math.max(10, radius - 4) }}>
-              <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Отзывы</p>
-              <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                {p.testimonials?.map((item) => (
-                  <div key={item.name} className="border bg-slate-50 p-2" style={{ borderColor: cardBorder, borderRadius: Math.max(8, radius - 6) }}>
-                    <p className="text-xs font-semibold text-slate-900">{item.name}</p>
-                    <p className="text-[11px] text-slate-500">{item.role}</p>
-                    <p className="mt-1 text-xs text-slate-700">{item.text}</p>
                   </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          {show("faq") ? (
-            <div className="border bg-white p-4" style={{ borderColor: cardBorder, borderRadius: Math.max(10, radius - 4) }}>
-              <div className="grid gap-4 md:grid-cols-[0.8fr_1.2fr]">
-                <h4 className="text-3xl font-extrabold tracking-tight text-slate-900" style={{ fontFamily: fontHeading }}>Частые вопросы</h4>
-                <div>
-                  {p.faq?.map((item) => {
-                    const isOpen = openFaq === item.q;
-                    return (
-                      <div key={item.q} className="border-t border-slate-200 py-3">
-                        <button onClick={() => setOpenFaq(isOpen ? null : item.q)} className="flex w-full items-center justify-between gap-2 text-left">
-                          <span className="text-base font-semibold text-slate-900">{item.q}</span>
-                          <span className="text-xl text-slate-500">{isOpen ? "−" : "+"}</span>
-                        </button>
-                        {isOpen ? <p className="mt-2 text-sm text-slate-600">{item.a}</p> : null}
-                      </div>
-                    );
-                  })}
+                  {block.variant === "split" ? <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">Layout под этот проект сгенерирован динамически.</div> : null}
                 </div>
-              </div>
-            </div>
-          ) : null}
-
-          {show("cabinet") && p.cabinetEnabled ? (
-            <div className="border bg-white p-3" style={{ borderColor: cardBorder, borderRadius: Math.max(10, radius - 4) }}>
-              <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Личный кабинет</p>
-              <div className="mt-2 border p-3" style={{ borderColor: `${p.accentColor}40`, backgroundColor: `${p.accentColor}12`, borderRadius: Math.max(8, radius - 6) }}>
-                <p className="text-xs font-semibold text-slate-900">Вход через Telegram</p>
-                <button className="mt-2 rounded-full px-3 py-1.5 text-[11px] font-semibold text-white" style={{ backgroundColor: p.accentColor }}>
-                  {p.telegramBot || "Войти через Telegram"}
-                </button>
-              </div>
-            </div>
-          ) : null}
+              );
+            }
+            if (block.type === "services") {
+              const items: any[] = Array.isArray(block.items) ? block.items : [];
+              return (
+                <div key={block.id || uid()} className="border bg-white p-3" style={{ borderColor: cardBorder, borderRadius: Math.max(10, radius - 4) }}>
+                  <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Услуги</p>
+                  <div className={block.variant === "rows" ? "mt-2 space-y-2" : "mt-2 grid gap-2 sm:grid-cols-3"}>
+                    {items.map((item: any, idx: number) => (
+                      <div key={`${idx}-${String(item.title || "")}`} className="border bg-slate-50 p-2" style={{ borderColor: cardBorder, borderRadius: Math.max(8, radius - 6) }}>
+                        <p className="text-xs font-semibold text-slate-900">{String(item.title || "")}</p>
+                        <p className="text-xs text-slate-600">{String(item.price || "")}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            }
+            if (block.type === "faq") {
+              const items: any[] = Array.isArray(block.items) ? block.items : [];
+              return (
+                <div key={block.id || uid()} className="border bg-white p-4" style={{ borderColor: cardBorder, borderRadius: Math.max(10, radius - 4) }}>
+                  <h4 className="text-3xl font-extrabold tracking-tight text-slate-900" style={{ fontFamily: fontHeading }}>Частые вопросы</h4>
+                  <div className="mt-2">
+                    {items.map((item: any, idx: number) => {
+                      const q = String(item.q || "");
+                      const isOpen = openFaq === q;
+                      return (
+                        <div key={`${q}-${idx}`} className="border-t border-slate-200 py-3">
+                          <button onClick={() => setOpenFaq(isOpen ? null : q)} className="flex w-full items-center justify-between gap-2 text-left">
+                            <span className="text-base font-semibold text-slate-900">{q}</span>
+                            <span className="text-xl text-slate-500">{isOpen ? "−" : "+"}</span>
+                          </button>
+                          {isOpen ? <p className="mt-2 text-sm text-slate-600">{String(item.a || "")}</p> : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            }
+            if (block.type === "reviews") {
+              const items: any[] = Array.isArray(block.items) ? block.items : [];
+              return (
+                <div key={block.id || uid()} className="border bg-white p-3" style={{ borderColor: cardBorder, borderRadius: Math.max(10, radius - 4) }}>
+                  <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Отзывы</p>
+                  <div className={block.variant === "quotes" ? "mt-2 space-y-2" : "mt-2 grid gap-2 sm:grid-cols-3"}>
+                    {items.map((item: any, idx: number) => (
+                      <div key={`${idx}-${String(item.author || "")}`} className="border bg-slate-50 p-2" style={{ borderColor: cardBorder, borderRadius: Math.max(8, radius - 6) }}>
+                        <p className="text-xs font-semibold text-slate-900">{String(item.author || "Клиент")}</p>
+                        <p className="mt-1 text-xs text-slate-700">{String(item.text || "")}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            }
+            if (block.type === "contacts") {
+              return (
+                <div key={block.id || uid()} className="rounded-xl border border-cyan-200 bg-cyan-50 p-3" style={{ borderRadius: Math.max(10, radius - 4) }}>
+                  <p className="text-sm font-semibold text-slate-900">{String(block.line || p.contactLine)}</p>
+                </div>
+              );
+            }
+            return null;
+          })}
         </div>
 
         <div className="mt-4 rounded-xl border border-cyan-200 bg-cyan-50 p-3">

@@ -33,6 +33,12 @@ export type PublishedSitePayload = {
     radius?: "soft" | "rounded" | "sharp";
     contrast?: "soft" | "medium" | "high";
   };
+  layoutSpec?: Array<{
+    id?: string;
+    type?: string;
+    variant?: string;
+    [key: string]: unknown;
+  }>;
 };
 
 export type PublishedSiteDoc = {
