@@ -1568,10 +1568,15 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
     addMessage("assistant", "Окей, понял задачу. Делаю структуру и дизайн под твой запрос.", "soft");
     setWorkingText("Updating pages...");
 
+    let debugStage = "init";
+    let debugEndpoint = "";
+    let debugSession = sanitizeSessionId(generationSessionId);
     try {
       const requestGeneration = async (sessionId: string) => {
         const endpoint = sitesGenerateEndpoint();
+        debugEndpoint = endpoint;
         try {
+          debugStage = "fetch_request";
           return await fetch(endpoint, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -1585,20 +1590,24 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
         } catch (error: any) {
           const name = String(error?.name || "FetchError");
           const message = String(error?.message || "request_failed");
-          throw new Error(`request_failed:${name}:${message}`);
+          throw new Error(`request_failed:${name}:${message}:endpoint=${endpoint}:session=${sanitizeSessionId(sessionId)}`);
         }
       };
 
       let response: Response;
       try {
+        debugStage = "first_attempt";
         response = await requestGeneration(sanitizeSessionId(generationSessionId));
       } catch {
         const freshSessionId = `session-${uid()}`;
         const safeFreshSessionId = sanitizeSessionId(freshSessionId);
         setGenerationSessionId(safeFreshSessionId);
+        debugSession = safeFreshSessionId;
+        debugStage = "retry_attempt";
         response = await requestGeneration(safeFreshSessionId);
       }
 
+      debugStage = "read_json";
       const body = (await response.json()) as {
         error?: string;
         debug?: unknown;
@@ -1614,13 +1623,16 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
       if (!response.ok) {
         const debugText =
           body.debug && typeof body.debug === "object" ? JSON.stringify(body.debug) : body.debug ? String(body.debug) : "";
+        debugStage = "response_not_ok";
         throw new Error(debugText ? `${body.error || "AI generation request failed"} | debug: ${debugText}` : body.error || "AI generation request failed");
       }
 
       if (body.sessionId) setGenerationSessionId(body.sessionId);
       if (body.engine !== "openrouter" || !body.draft) {
+        debugStage = "invalid_ai_draft";
         throw new Error("AI engine did not return a valid draft");
       }
+      debugStage = "hydrate_draft";
       const fallbackDraft = createDraftFromProfile(nextProfile, guidance, nextRound);
       const finalDraft = hydrateGeneratedDraft(body.draft, fallbackDraft);
       if (Array.isArray(body.history)) setGenerationHistory(body.history);
@@ -1645,11 +1657,12 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
     } catch (error: any) {
       const message = String(error?.message || "AI generation failed");
       const userMessage = humanizeGenerationError(message);
+      const debugTrace = `stage=${debugStage}; endpoint=${debugEndpoint || "n/a"}; session=${debugSession}; raw=${message}`;
       setGenerationStatus("error");
-      setError(`${userMessage}\n\nDEBUG: ${message}`);
+      setError(`${userMessage}\n\nDEBUG: ${debugTrace}`);
       addMessage(
         "assistant",
-        `Не смог собрать сайт через AI: ${userMessage}\n\nDEBUG: ${message}`,
+        `Не смог собрать сайт через AI: ${userMessage}\n\nDEBUG: ${debugTrace}`,
         "soft"
       );
     } finally {
