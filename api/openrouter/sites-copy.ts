@@ -2,8 +2,8 @@ declare const process: { env: Record<string, string | undefined> };
 
 const SYSTEM_PROMPT =
   "Ты senior web designer и frontend developer. " +
-  "Пиши по-русски. Генерируй полноценный современный лендинг и возвращай строго JSON без markdown и без пояснений. " +
-  "Обязательно верни поле pageCode с полным HTML документом и встроенным CSS.";
+  "Пиши по-русски. Генерируй полноценный современный лендинг. " +
+  "Формат ответа: либо JSON {\"pageCode\":\"<html...>\"}, либо сразу HTML документ. Никаких пояснений.";
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {

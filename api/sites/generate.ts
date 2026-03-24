@@ -438,7 +438,7 @@ export default async function handler(req: any, res: any) {
     const isEdit = isEditRequest(guidance);
     const designDirection = buildDesignDirection(profile, guidance);
     const prompt = [
-      "Сгенерируй JSON сайта на русском языке.",
+      "Сгенерируй код современного сайта на русском языке.",
       `Бизнес: ${base.businessName}`,
       `Ниша: ${base.niche}`,
       `Город: ${base.city}`,
@@ -450,13 +450,13 @@ export default async function handler(req: any, res: any) {
       isEdit && currentPageCode
         ? `ТЕКУЩИЙ HTML/CSS КОД (измени его по запросу и верни полную новую версию pageCode, не обнуляй структуру):\n${currentPageCode.slice(0, 22000)}`
         : "Собери новый код с нуля под запрос.",
-      "Ограничения качества:",
+      "Ограничения качества (обязательные):",
       "1) pageCode = полный HTML документ с CSS внутри <style>, без JS библиотек.",
       "2) Минимум 6 смысловых секций: hero, преимущества/о нас, услуги/пакеты, social proof, FAQ, финальный CTA/контакты.",
       "3) Не использовать заглушки: Studio Name, Блок, Секция, Lorem Ipsum.",
       "4) Добавь CSS variables (:root), хотя бы один градиент, responsive @media, hover-состояния кнопок/карточек.",
       "5) Визуал должен быть выразительным и не шаблонным: продуманные отступы, контрастная типографика, аккуратная глубина/тени.",
-      "Верни только JSON. Обязательные поля: heroTitle, heroSubtitle, aboutBody, services[], faq[], pageDsl[], summaryPoints[], pageCode."
+      'Формат ответа: либо JSON {"pageCode":"<html...>"} либо чистый HTML документ. Ничего кроме кода/JSON.'
     ].join("\n");
 
     const requestOpenRouter = async (timeoutMs: number, userPrompt: string = prompt) => {
@@ -477,7 +477,7 @@ export default async function handler(req: any, res: any) {
               {
                 role: "system",
                 content:
-                  "Ты арт-директор и senior frontend developer. Всегда выдаешь выразительный, современный, не-шаблонный лендинг. Верни только JSON без markdown и пояснений."
+                  "Ты арт-директор и senior frontend developer. Всегда выдаешь выразительный, современный, не-шаблонный лендинг."
               },
               { role: "user", content: userPrompt }
             ]
@@ -519,47 +519,31 @@ export default async function handler(req: any, res: any) {
           : "";
     let parsed = parseJson(text);
     if (!parsed || typeof parsed !== "object") {
+      parsed = {};
+    }
+    if (typeof (parsed as any).pageCode !== "string" || !(parsed as any).pageCode.trim()) {
       const htmlDoc = extractHtmlDocument(text);
       if (htmlDoc) {
-        parsed = {
-          heroTitle: base.heroTitle,
-          heroSubtitle: base.heroSubtitle,
-          aboutBody: base.aboutBody,
-          services: base.services,
-          faq: base.faq,
-          pageDsl: base.pageDsl,
-          summaryPoints: ["Собрано напрямую из HTML-ответа модели", "Preview показывает ровно сгенерированный код"],
-          pageCode: htmlDoc
-        };
-      } else {
-        finishWithFallback("INVALID_MODEL_JSON", compact(text));
-        return;
+        (parsed as any).pageCode = htmlDoc;
       }
+    }
+    if (typeof (parsed as any).pageCode !== "string" || !(parsed as any).pageCode.trim()) {
+      finishWithFallback("PAGE_CODE_MISSING", compact(text));
+      return;
     }
 
     let draft = normalizeDraft(parsed, base);
     if (qualityMode === "pro" || looksLowQualityPageCode(draft.pageCode)) {
       stage = "quality_refine_request";
       const refinePrompt = [
-        "Улучши дизайн ниже до premium-уровня и верни только JSON с теми же полями.",
-        "Сохрани бизнес-контекст и смысл блоков, но сделай визуал гораздо сильнее.",
+        "Улучши дизайн ниже до premium-уровня и верни только полный pageCode.",
+        "Сохрани бизнес-контекст и структуру, но сделай визуал гораздо сильнее.",
         "Запрещены заглушки и плоский серый шаблон.",
         `Бизнес: ${base.businessName}; Ниша: ${base.niche}; Город: ${base.city}`,
         `Запрос пользователя: ${guidance || "-"}`,
-        "Текущий JSON:",
-        JSON.stringify(
-          {
-            heroTitle: draft.heroTitle,
-            heroSubtitle: draft.heroSubtitle,
-            aboutBody: draft.aboutBody,
-            services: draft.services,
-            faq: draft.faq,
-            pageDsl: draft.pageDsl,
-            pageCode: draft.pageCode
-          },
-          null,
-          2
-        )
+        "Текущий pageCode:",
+        draft.pageCode,
+        'Формат ответа: либо JSON {"pageCode":"<html...>"} либо чистый HTML документ.'
       ].join("\n");
       try {
         const refineResponse = await requestOpenRouter(12000, refinePrompt);
@@ -573,8 +557,12 @@ export default async function handler(req: any, res: any) {
               : Array.isArray(refineContent)
                 ? refineContent.map((item: any) => item?.text || "").join("\n")
                 : "";
-          const refineParsed = parseJson(refineText);
-          if (refineParsed && typeof refineParsed === "object") {
+          const refineParsed = parseJson(refineText) || {};
+          if (typeof (refineParsed as any).pageCode !== "string" || !(refineParsed as any).pageCode.trim()) {
+            const refineHtml = extractHtmlDocument(refineText);
+            if (refineHtml) (refineParsed as any).pageCode = refineHtml;
+          }
+          if (typeof (refineParsed as any).pageCode === "string" && (refineParsed as any).pageCode.trim()) {
             draft = normalizeDraft(refineParsed, draft);
           }
         }
