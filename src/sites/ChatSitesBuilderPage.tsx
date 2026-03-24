@@ -44,6 +44,7 @@ type ReviewItem = {
 type SectionKey = "about" | "services" | "team" | "reviews" | "faq" | "booking" | "contacts" | "gallery";
 type DslAction =
   | { kind: "regenerate"; guidance: string }
+  | { kind: "styleLike"; reference: string }
   | { kind: "addSection"; section: SectionKey }
   | { kind: "removeSection"; section: SectionKey }
   | { kind: "rewriteHero"; text: string }
@@ -84,6 +85,7 @@ type AgentProfile = {
   city: string;
   goal: string;
   style: string;
+  styleReference: string;
   mustHave: string[];
 };
 
@@ -161,6 +163,14 @@ const channelPills = [
 ];
 
 const designPresets: DesignPreset[] = [
+  {
+    id: "workspace-ash",
+    label: "Workspace Ash",
+    accent: "#f97316",
+    pageBg: "#f3f3f4",
+    surfaceBg: "#ffffff",
+    headlineStyle: "sans"
+  },
   {
     id: "editorial-rose",
     label: "Editorial Rose",
@@ -242,6 +252,20 @@ function detectRegenerateIntent(text: string) {
   );
 }
 
+function detectRestyleIntent(text: string) {
+  const lower = text.toLowerCase();
+  return (
+    lower.includes("измени дизайн") ||
+    lower.includes("смени дизайн") ||
+    lower.includes("редизайн") ||
+    lower.includes("другой стиль") ||
+    lower.includes("в стиле") ||
+    lower.includes("по примеру") ||
+    lower.includes("как в") ||
+    lower.includes("как у")
+  );
+}
+
 function parseSectionArg(input: string): SectionKey | null {
   const normalized = input.trim().toLowerCase();
   if (!normalized) return null;
@@ -264,6 +288,7 @@ function parseDslCommand(text: string): DslAction {
   const cmd = command.toLowerCase();
 
   if (cmd === "regenerate") return { kind: "regenerate", guidance: rest };
+  if (cmd === "style-like") return rest ? { kind: "styleLike", reference: rest } : { kind: "none" };
   if (cmd === "undo") return { kind: "undo" };
   if (cmd === "revert") {
     const round = Number(rest);
@@ -382,6 +407,14 @@ function extractStyle(text: string) {
   return "";
 }
 
+function extractStyleReference(text: string) {
+  const url = text.match(/https?:\/\/\S+/i);
+  if (url?.[0]) return url[0];
+  const byPattern = text.match(/(?:по примеру|как в|как у|в стиле)\s+([a-zа-я0-9][a-zа-я0-9 .,:_/"'«»\-()]{2,100})/i);
+  if (byPattern?.[1]) return byPattern[1].trim();
+  return "";
+}
+
 function extractMustHave(text: string) {
   const lower = text.toLowerCase();
   const must: string[] = [];
@@ -400,6 +433,7 @@ function parseProfileFromMessage(text: string): Partial<AgentProfile> {
   const city = extractCity(text);
   const goal = extractGoal(text);
   const style = extractStyle(text);
+  const styleReference = extractStyleReference(text);
   const mustHave = extractMustHave(text);
   return {
     businessName,
@@ -407,6 +441,7 @@ function parseProfileFromMessage(text: string): Partial<AgentProfile> {
     city,
     goal,
     style,
+    styleReference,
     mustHave
   };
 }
@@ -418,10 +453,23 @@ function mergeProfile(current: AgentProfile, patch: Partial<AgentProfile>): Agen
   if (patch.city) next.city = patch.city;
   if (patch.goal) next.goal = patch.goal;
   if (patch.style) next.style = patch.style;
+  if (patch.styleReference) next.styleReference = patch.styleReference;
   if (patch.mustHave?.length) {
     next.mustHave = Array.from(new Set([...next.mustHave, ...patch.mustHave]));
   }
   return next;
+}
+
+function normalizeProfile(raw: Partial<AgentProfile>): AgentProfile {
+  return {
+    businessName: typeof raw.businessName === "string" ? raw.businessName : "",
+    niche: typeof raw.niche === "string" ? raw.niche : "",
+    city: typeof raw.city === "string" ? raw.city : "",
+    goal: typeof raw.goal === "string" ? raw.goal : "",
+    style: typeof raw.style === "string" ? raw.style : "",
+    styleReference: typeof raw.styleReference === "string" ? raw.styleReference : "",
+    mustHave: Array.isArray(raw.mustHave) ? raw.mustHave.map((item) => String(item)) : []
+  };
 }
 
 function getMissingProfileFields(profile: AgentProfile) {
@@ -459,7 +507,17 @@ function createDraftFromProfile(profile: AgentProfile, guidance = "", round = 1)
 
   const seed = hashString(`${profile.businessName}|${profile.niche}|${profile.city}|${profile.goal}|${profile.style}|${guidance}|${round}`);
   const rnd = seeded(seed);
-  const preset = pick(designPresets, rnd);
+  const styleContext = `${profile.style} ${profile.styleReference} ${guidance}`.toLowerCase();
+  const preset =
+    styleContext.includes("base44") || styleContext.includes("workspace")
+      ? designPresets.find((item) => item.id === "workspace-ash") || designPresets[0]
+      : styleContext.includes("dark") || styleContext.includes("темн")
+      ? designPresets.find((item) => item.id === "noir-modern") || designPresets[0]
+      : styleContext.includes("минимал")
+      ? designPresets.find((item) => item.id === "noir-modern") || designPresets[0]
+      : styleContext.includes("преми") || styleContext.includes("editorial")
+      ? designPresets.find((item) => item.id === "editorial-rose") || designPresets[0]
+      : pick(designPresets, rnd);
 
   const businessName = profile.businessName || (isBarber ? "Noe Barbershop" : isNails ? "Nails Beauty" : "Studio Name");
   const nav = isBarber
@@ -517,6 +575,8 @@ function createDraftFromProfile(profile: AgentProfile, guidance = "", round = 1)
     `Собрали индивидуальный сайт для ${businessName} в ${profile.city || "вашем городе"}.`,
     profile.goal ? `Фокус: ${profile.goal.toLowerCase()}.` : "Фокус на конверсии из первого экрана.",
     profile.style ? `Визуальный стиль: ${profile.style.toLowerCase()}.` : `Дизайн-концепт: ${preset.label}.`
+    ,
+    profile.styleReference ? `Референс: ${profile.styleReference}.` : ""
   ].join(" ");
 
   const mustHave = profile.mustHave.length ? profile.mustHave : ["Прайс", "Отзывы", "Онлайн-запись"];
@@ -802,6 +862,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
     city: "",
     goal: "",
     style: "",
+    styleReference: "",
     mustHave: []
   });
 
@@ -972,10 +1033,11 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
         addMessage("assistant", `Вариант #${targetRound} не найден.`, "soft");
         return;
       }
-      const fallback = createDraftFromProfile(record.profile, `restore-${targetRound}`, targetRound);
+      const restoredProfile = normalizeProfile(record.profile);
+      const fallback = createDraftFromProfile(restoredProfile, `restore-${targetRound}`, targetRound);
       const restored = hydrateGeneratedDraft(record.draft, fallback);
       setDraft(restored);
-      setProfile(record.profile);
+      setProfile(restoredProfile);
       setGenerationRound(targetRound);
       setGenerationEngine(record.engine);
       addMessage("assistant", `Готово. Восстановил вариант #${targetRound}.`, "soft");
@@ -1004,6 +1066,11 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
       if (dsl.kind === "regenerate") {
         const merged = mergeProfile(profile, parseProfileFromMessage(dsl.guidance || text));
         void generateFromProfile(merged, dsl.guidance || text, generationRound + 1);
+        return;
+      }
+      if (dsl.kind === "styleLike") {
+        const merged = mergeProfile(profile, { styleReference: dsl.reference });
+        void generateFromProfile(merged, `Сделай дизайн по примеру: ${dsl.reference}`, generationRound + 1);
         return;
       }
       if (dsl.kind === "undo") {
@@ -1061,7 +1128,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
       return;
     }
 
-    if (detectRegenerateIntent(text)) {
+    if (detectRegenerateIntent(text) || detectRestyleIntent(text)) {
       void generateFromProfile(mergedProfile, text, generationRound + 1);
       return;
     }
@@ -1546,7 +1613,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
               ))}
             </div>
             <p className="mt-2 text-xs text-slate-400">
-              DSL: <code>/regenerate premium dark</code> · <code>/add-section team</code> · <code>/remove-section faq</code> · <code>/rewrite-hero Новый оффер</code> · <code>/undo</code> · <code>/revert 2</code>
+              DSL: <code>/regenerate premium dark</code> · <code>/style-like base44 light workspace</code> · <code>/add-section team</code> · <code>/remove-section faq</code> · <code>/rewrite-hero Новый оффер</code> · <code>/undo</code> · <code>/revert 2</code>
             </p>
           </div>
         </main>

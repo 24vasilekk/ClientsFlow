@@ -9,6 +9,7 @@ type AgentProfile = {
   city: string;
   goal: string;
   style: string;
+  styleReference: string;
   mustHave: string[];
 };
 
@@ -48,6 +49,7 @@ type DesignPreset = {
 };
 
 const designPresets: DesignPreset[] = [
+  { id: "workspace-ash", label: "Workspace Ash", accent: "#f97316", pageBg: "#f3f3f4", surfaceBg: "#ffffff", headlineStyle: "sans" },
   { id: "editorial-rose", label: "Editorial Rose", accent: "#c77a7a", pageBg: "#f6f2f3", surfaceBg: "#fffafb", headlineStyle: "serif" },
   { id: "noir-modern", label: "Noir Modern", accent: "#334155", pageBg: "#f3f5f8", surfaceBg: "#f8fafc", headlineStyle: "sans" },
   { id: "deep-indigo", label: "Deep Indigo", accent: "#4f46e5", pageBg: "#f4f4ff", surfaceBg: "#f8f8ff", headlineStyle: "sans" },
@@ -192,7 +194,17 @@ function buildAlgorithmicDraft(profile: AgentProfile, guidance: string, round: n
 
   const seed = hashString(`${profile.businessName}|${profile.niche}|${profile.city}|${profile.goal}|${profile.style}|${guidance}|${round}`);
   const rnd = seeded(seed);
-  const preset = pick(designPresets, rnd);
+  const styleContext = `${profile.style} ${profile.styleReference} ${guidance}`.toLowerCase();
+  const preset =
+    styleContext.includes("base44") || styleContext.includes("workspace")
+      ? designPresets.find((item) => item.id === "workspace-ash") || designPresets[0]
+      : styleContext.includes("dark") || styleContext.includes("темн")
+      ? designPresets.find((item) => item.id === "noir-modern") || designPresets[0]
+      : styleContext.includes("минимал")
+      ? designPresets.find((item) => item.id === "noir-modern") || designPresets[0]
+      : styleContext.includes("преми") || styleContext.includes("editorial")
+      ? designPresets.find((item) => item.id === "editorial-rose") || designPresets[0]
+      : pick(designPresets, rnd);
 
   const businessName = profile.businessName || (isBarber ? "Noe Barbershop" : isNails ? "Nails Beauty" : "Studio Name");
   const nav = isBarber
@@ -237,7 +249,7 @@ function buildAlgorithmicDraft(profile: AgentProfile, guidance: string, round: n
     headlineStyle: preset.headlineStyle,
     styleLabel: preset.label,
     heroTitle: isClinic ? "Точный сервис и доверие в каждом касании" : "Место, где сервис - это искусство",
-    heroSubtitle: `Индивидуальный сайт для ${businessName} в ${profile.city || "вашем городе"}.`,
+    heroSubtitle: `Индивидуальный сайт для ${businessName} в ${profile.city || "вашем городе"}.${profile.styleReference ? ` Референс: ${profile.styleReference}.` : ""}`,
     aboutTitle: "О нас",
     aboutBody: "Структура и тексты собраны под бизнес-задачу: сильный оффер, ясный путь к записи и блоки доверия.",
     primaryCta: profile.goal.includes("звон") ? "Позвонить сейчас" : "Записаться",
@@ -283,6 +295,7 @@ async function tryOpenRouterGeneration(profile: AgentProfile, guidance: string, 
     `Город: ${profile.city || "не указан"}`,
     `Цель: ${profile.goal || "увеличить заявки"}`,
     `Стиль: ${profile.style || "современный premium"}`,
+    `Референс стиля: ${profile.styleReference || "-"}`,
     `Обязательные блоки: ${profile.mustHave.join(", ") || "о нас, услуги, отзывы, запись"}`,
     `Guidance: ${guidance || "-"}`,
     `Round: ${round}`,
@@ -332,7 +345,7 @@ async function tryOpenRouterGeneration(profile: AgentProfile, guidance: string, 
           {
             role: "system",
             content:
-              "Ты senior web designer + copywriter. Генерируй только JSON без markdown и пояснений. Сайт должен быть уникальным, не шаблонным."
+              "Ты senior web designer + copywriter. Генерируй только JSON без markdown и пояснений. Сайт должен быть уникальным, не шаблонным. Если есть референс стиля, перенеси визуальные принципы (ритм, контраст, плотность, типографику), но не копируй бренд и тексты 1-в-1."
           },
           { role: "user", content: prompt }
         ]
@@ -381,6 +394,7 @@ export default async function handler(req: any, res: any) {
       city: String(profileRaw.city || ""),
       goal: String(profileRaw.goal || ""),
       style: String(profileRaw.style || ""),
+      styleReference: String(profileRaw.styleReference || ""),
       mustHave: Array.isArray(profileRaw.mustHave) ? profileRaw.mustHave.map((item: unknown) => String(item)) : []
     };
     const guidance = String(req.body?.guidance || "");
