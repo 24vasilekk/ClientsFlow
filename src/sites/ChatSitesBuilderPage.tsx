@@ -111,6 +111,7 @@ type DraftState = {
   contrast: ThemeContrast;
   layoutSpec: LayoutBlock[];
   pageDsl: PageDslBlock[];
+  pageCode: string;
 };
 
 type AgentProfile = {
@@ -172,6 +173,7 @@ type PublishPayload = {
   };
   layoutSpec?: LayoutBlock[];
   pageDsl?: PageDslBlock[];
+  pageCode?: string;
 };
 
 const LOCAL_PUBLISHED_SITE_PREFIX = "clientsflow_local_published_site:";
@@ -662,6 +664,120 @@ function normalizePageDsl(raw: unknown, fallback: DraftState): PageDslBlock[] {
   return cleaned;
 }
 
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function buildPageCode(draft: Pick<DraftState, "businessName" | "accentColor" | "pageBg" | "surfaceBg" | "fontHeading" | "fontBody" | "density" | "radius" | "contrast" | "pageDsl">) {
+  const radius = draft.radius === "rounded" ? 24 : draft.radius === "sharp" ? 10 : 16;
+  const sectionPad = draft.density === "compact" ? "14px" : draft.density === "airy" ? "28px" : "20px";
+  const borderColor = draft.contrast === "high" ? "rgba(15,23,42,.28)" : "rgba(148,163,184,.28)";
+  const blocks = (draft.pageDsl || [])
+    .map((block) => {
+      if (block.type === "hero") {
+        return `<section class="card ${block.variant === "split" ? "hero-split" : "hero"}">
+  <div>
+    <p class="eyebrow">${escapeHtml(draft.businessName)}</p>
+    <h1>${escapeHtml(block.title || "Сайт вашего бизнеса")}</h1>
+    <p class="sub">${escapeHtml(block.subtitle || "")}</p>
+    <div class="cta-row">
+      <button class="cta-primary">${escapeHtml(block.primaryCta || "Записаться")}</button>
+      <button class="cta-secondary">${escapeHtml(block.secondaryCta || "Подробнее")}</button>
+    </div>
+  </div>
+  ${block.variant === "split" ? `<div class="hero-aside">Индивидуальный layout сгенерирован AI</div>` : ""}
+</section>`;
+      }
+      if (block.type === "services") {
+        const items = (block.items || [])
+          .map((item) => `<div class="tile"><p class="t">${escapeHtml(item.title || "")}</p><p class="m">${escapeHtml(item.duration || "")}</p><p class="p">${escapeHtml(item.price || "")}</p></div>`)
+          .join("");
+        return `<section class="card"><h2>Услуги</h2><div class="grid">${items}</div></section>`;
+      }
+      if (block.type === "reviews") {
+        const items = (block.items || [])
+          .map((item) => `<div class="tile"><p class="q">“${escapeHtml(item.text || "")}”</p><p class="m">${escapeHtml(item.author || "Клиент")}</p></div>`)
+          .join("");
+        return `<section class="card"><h2>Отзывы</h2><div class="grid">${items}</div></section>`;
+      }
+      if (block.type === "faq") {
+        const items = (block.items || [])
+          .map((item) => `<details class="faq"><summary>${escapeHtml(item.q || "")}</summary><p>${escapeHtml(item.a || "")}</p></details>`)
+          .join("");
+        return `<section class="card"><h2>FAQ</h2>${items}</section>`;
+      }
+      if (block.type === "stats") {
+        const items = (block.items || [])
+          .map((item) => `<div class="tile stat"><p class="m">${escapeHtml(item.label || "")}</p><p class="p">${escapeHtml(item.value || "")}</p></div>`)
+          .join("");
+        return `<section class="grid">${items}</section>`;
+      }
+      if (block.type === "cta") {
+        return `<section class="card center"><h2>${escapeHtml(block.title || "Готовы начать?")}</h2><p class="sub">${escapeHtml(block.subtitle || "")}</p><div class="cta-row"><button class="cta-primary">${escapeHtml(block.primaryCta || "Записаться")}</button><button class="cta-secondary">${escapeHtml(block.secondaryCta || "Подробнее")}</button></div></section>`;
+      }
+      if (block.type === "contacts") {
+        return `<section class="card"><h2>Контакты</h2><p>${escapeHtml(block.line || "")}</p></section>`;
+      }
+      return `<section class="card"><h2>${escapeHtml(block.title || "Блок")}</h2><p>${escapeHtml(block.body || "")}</p></section>`;
+    })
+    .join("\n");
+
+  return `<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${escapeHtml(draft.businessName)}</title>
+  <style>
+    :root { --accent:${draft.accentColor}; --bg:${draft.pageBg}; --surface:${draft.surfaceBg}; --border:${borderColor}; --radius:${radius}px; --pad:${sectionPad}; --fontH:${draft.fontHeading}; --fontB:${draft.fontBody}; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: var(--fontB), sans-serif; background: var(--bg); color:#0f172a; }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 24px; display: grid; gap: 14px; }
+    .card { border:1px solid var(--border); background: var(--surface); border-radius: var(--radius); padding: var(--pad); }
+    .hero { text-align: center; }
+    .hero-split { display:grid; gap:16px; grid-template-columns: 1.2fr .8fr; align-items: stretch; }
+    .hero-aside { border:1px dashed var(--border); border-radius: calc(var(--radius) - 4px); padding:16px; color:#475569; display:flex; align-items:center; justify-content:center; }
+    .eyebrow { margin:0; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); font-size:11px; font-weight:700; }
+    h1,h2 { font-family: var(--fontH), serif; margin: 0 0 10px; line-height: 1.15; }
+    h1 { font-size: 44px; }
+    h2 { font-size: 28px; }
+    .sub { color:#475569; margin:0; line-height:1.55; }
+    .grid { display:grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap:10px; }
+    .tile { border:1px solid var(--border); border-radius: calc(var(--radius) - 6px); padding:12px; background:#fff; }
+    .t { margin:0; font-weight:700; }
+    .m { margin:6px 0 0; color:#64748b; font-size:13px; }
+    .p { margin:8px 0 0; color:var(--accent); font-weight:700; font-size:20px; }
+    .q { margin:0; line-height:1.5; }
+    .faq { border-top:1px solid var(--border); padding:10px 0; }
+    .faq summary { cursor:pointer; font-weight:700; }
+    .faq p { color:#475569; margin:8px 0 0; }
+    .cta-row { display:flex; gap:8px; flex-wrap: wrap; margin-top:14px; }
+    button { border:0; font:inherit; cursor:pointer; }
+    .cta-primary { background: var(--accent); color:#fff; border-radius:999px; padding:10px 16px; font-weight:700; }
+    .cta-secondary { background:#fff; color:#0f172a; border-radius:999px; padding:10px 16px; border:1px solid var(--border); font-weight:700; }
+    .center { text-align: center; }
+    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } .hero-split { grid-template-columns: 1fr; } h1{font-size:34px;} }
+  </style>
+</head>
+<body>
+  <main class="wrap">${blocks}</main>
+</body>
+</html>`;
+}
+
+function finalizeDraft(draft: DraftState): DraftState {
+  const next = { ...draft };
+  if (!next.layoutSpec.length) next.layoutSpec = composeLayoutSpec(next);
+  if (!next.pageDsl.length) next.pageDsl = composePageDsl(next);
+  next.pageCode = buildPageCode(next);
+  return next;
+}
+
 function resolveBlockId(pageDsl: PageDslBlock[], ref: string): string | null {
   const token = ref.trim();
   if (!token) return null;
@@ -1075,11 +1191,10 @@ function createDraftFromProfile(profile: AgentProfile, guidance = "", round = 1)
     radius: styleContext.includes("workspace") ? "rounded" : "soft",
     contrast: styleContext.includes("dark") ? "high" : "medium",
     layoutSpec: [],
-    pageDsl: []
+    pageDsl: [],
+    pageCode: ""
   };
-  nextDraft.layoutSpec = composeLayoutSpec(nextDraft);
-  nextDraft.pageDsl = composePageDsl(nextDraft);
-  return nextDraft;
+  return finalizeDraft(nextDraft);
 }
 
 function draftToPayload(draft: DraftState): PublishPayload {
@@ -1138,7 +1253,8 @@ function draftToPayload(draft: DraftState): PublishPayload {
       contrast: draft.contrast
     },
     layoutSpec: draft.layoutSpec,
-    pageDsl: draft.pageDsl
+    pageDsl: draft.pageDsl,
+    pageCode: draft.pageCode
   };
 }
 
@@ -1270,11 +1386,14 @@ function hydrateGeneratedDraft(raw: any, fallback: DraftState): DraftState {
     sectionsEnabled,
     summaryPoints: patch.summaryPoints?.length ? patch.summaryPoints : fallback.summaryPoints,
     layoutSpec: [],
-    pageDsl: []
+    pageDsl: [],
+    pageCode: ""
   };
   merged.layoutSpec = normalizeLayoutSpec(raw?.layoutSpec, merged);
   merged.pageDsl = normalizePageDsl(raw?.pageDsl, merged);
-  return merged;
+  const finalized = finalizeDraft(merged);
+  if (typeof raw?.pageCode === "string" && raw.pageCode.trim()) finalized.pageCode = raw.pageCode;
+  return finalized;
 }
 
 export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPageProps) {
@@ -1398,9 +1517,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
         next.niche = profilePatch.niche;
       }
       next = applySectionCommand(next, text);
-      next.layoutSpec = composeLayoutSpec(next);
-      next.pageDsl = composePageDsl(next);
-      return next;
+      return finalizeDraft(next);
     });
   };
 
@@ -1460,7 +1577,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
     }
 
     setGenerationEngine(engine);
-    setDraft(finalDraft);
+    setDraft(finalizeDraft(finalDraft));
     setGenerationRound(nextRound);
     setProfile(nextProfile);
     if (engine === "algorithm") {
@@ -1567,7 +1684,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
           addMessage("assistant", "Блок не найден. Используй id из строки Blocks: #n:id.", "soft");
           return;
         }
-        setDraft((prev) => (prev ? { ...prev, pageDsl: updated.next } : prev));
+        setDraft((prev) => (prev ? finalizeDraft({ ...prev, pageDsl: updated.next }) : prev));
         addMessage("assistant", "Блок обновлен по DSL-команде.", "soft");
         return;
       }
@@ -1581,7 +1698,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
           addMessage("assistant", "Не удалось переставить блоки. Проверь id в строке Blocks: #n:id.", "soft");
           return;
         }
-        setDraft((prev) => (prev ? { ...prev, pageDsl: moved.next } : prev));
+        setDraft((prev) => (prev ? finalizeDraft({ ...prev, pageDsl: moved.next }) : prev));
         addMessage("assistant", "Порядок блоков обновлен.", "soft");
         return;
       }
@@ -1591,7 +1708,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
           const nextEnabled = { ...prev.sectionsEnabled, [dsl.section]: true };
           const nextOrder = prev.sectionOrder.includes(dsl.section) ? prev.sectionOrder : [...prev.sectionOrder, dsl.section];
           const nextDraft = { ...prev, sectionsEnabled: nextEnabled, sectionOrder: nextOrder };
-          return { ...nextDraft, layoutSpec: composeLayoutSpec(nextDraft), pageDsl: composePageDsl(nextDraft) };
+          return finalizeDraft(nextDraft);
         });
         addMessage("assistant", `Секция ${dsl.section} включена.`, "soft");
         return;
@@ -1602,7 +1719,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
           const nextEnabled = { ...prev.sectionsEnabled, [dsl.section]: false };
           const nextOrder = prev.sectionOrder.filter((item) => item !== dsl.section);
           const nextDraft = { ...prev, sectionsEnabled: nextEnabled, sectionOrder: nextOrder };
-          return { ...nextDraft, layoutSpec: composeLayoutSpec(nextDraft), pageDsl: composePageDsl(nextDraft) };
+          return finalizeDraft(nextDraft);
         });
         addMessage("assistant", `Секция ${dsl.section} выключена.`, "soft");
         return;
@@ -1615,7 +1732,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
         setDraft((prev) => {
           if (!prev) return prev;
           const nextDraft = { ...prev, heroTitle: dsl.text };
-          return { ...nextDraft, layoutSpec: composeLayoutSpec(nextDraft), pageDsl: composePageDsl(nextDraft) };
+          return finalizeDraft(nextDraft);
         });
         addMessage("assistant", "Hero-заголовок обновлен.", "soft");
         return;
@@ -1795,6 +1912,21 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
                 <span className="ml-2 truncate">https://preview.clientsflow.app/Home</span>
               </div>
               <span>↗</span>
+            </div>
+
+            <div className="border-b border-slate-200 bg-white p-2">
+              <iframe
+                title="Generated code preview"
+                sandbox="allow-scripts allow-forms allow-popups allow-modals"
+                srcDoc={draft?.pageCode || ""}
+                className="h-[520px] w-full rounded-xl border border-slate-200 bg-white"
+              />
+              <details className="mt-2 rounded-xl border border-slate-200 bg-slate-50 p-2">
+                <summary className="cursor-pointer text-xs font-semibold text-slate-600">Generated HTML/CSS Code</summary>
+                <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap rounded-lg bg-white p-2 text-[11px] leading-5 text-slate-700">
+{draft?.pageCode || ""}
+                </pre>
+              </details>
             </div>
 
             <div style={{ backgroundColor: draft?.pageBg || "#f6f2f3", fontFamily: previewBodyFont }}>

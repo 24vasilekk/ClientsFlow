@@ -60,7 +60,8 @@ export default async function handler(req: any, res: any) {
             }
           : { fontHeading: "", fontBody: "", density: "balanced", radius: "soft", contrast: "medium" },
       layoutSpec: Array.isArray(payload.layoutSpec) ? payload.layoutSpec.slice(0, 32) : [],
-      pageDsl: Array.isArray(payload.pageDsl) ? payload.pageDsl.slice(0, 32) : []
+      pageDsl: Array.isArray(payload.pageDsl) ? payload.pageDsl.slice(0, 32) : [],
+      pageCode: typeof payload.pageCode === "string" ? payload.pageCode : ""
     };
 
     const doc = await createPublishedSite(safePayload);

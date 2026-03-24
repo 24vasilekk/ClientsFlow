@@ -45,6 +45,7 @@ export type PublishedSitePayload = {
     variant?: string;
     [key: string]: unknown;
   }>;
+  pageCode?: string;
 };
 
 export type PublishedSiteDoc = {

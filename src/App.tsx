@@ -244,6 +244,7 @@ type PublishedSiteData = {
       line?: string;
       items?: Array<Record<string, unknown>>;
     }>;
+    pageCode?: string;
   };
 };
 
@@ -1023,6 +1024,19 @@ function PublishedSitePage({ path, onNavigate }: { path: `/s/${string}`; onNavig
   }
 
   const p = data.payload;
+  if (typeof p.pageCode === "string" && p.pageCode.trim()) {
+    return (
+      <div className="min-h-screen bg-[#f8fafc]">
+        <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3">
+          <p className="text-sm font-semibold text-slate-800">{p.businessName || "Published Site"}</p>
+          <button onClick={() => onNavigate("/sites")} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700">
+            Back to Builder
+          </button>
+        </div>
+        <iframe title="Published generated site" sandbox="allow-scripts allow-forms allow-popups allow-modals" srcDoc={p.pageCode} className="h-[calc(100vh-52px)] w-full border-0" />
+      </div>
+    );
+  }
   const openedProduct = p.products.find((item) => item.id === openedProductId) || null;
   const socialLinks = p.socialLinks || {};
   const tabs: Array<{ id: "home" | "services" | "reviews" | "cabinet"; label: string }> = [
