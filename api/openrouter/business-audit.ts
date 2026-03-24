@@ -1,3 +1,5 @@
+declare const process: { env: Record<string, string | undefined> };
+
 const SYSTEM_PROMPT =
   "Ты senior growth-аналитик и операционный консультант для сервисных бизнесов. " +
   "Пиши по-русски, структурно и конкретно. " +

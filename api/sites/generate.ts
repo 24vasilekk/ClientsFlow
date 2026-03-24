@@ -1,4 +1,6 @@
-import { appendSpecRecord, getSpecHistory } from "./_specStore";
+declare const process: { env: Record<string, string | undefined> };
+
+import { appendSpecRecord, getSpecHistory } from "../../lib/sites/specStore";
 
 export const config = {
   maxDuration: 60

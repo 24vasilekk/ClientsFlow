@@ -1,6 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import { createPublishedSite, getPublishedSite, type PublishedSitePayload } from "./api/sites/_store";
+import { createPublishedSite, getPublishedSite, type PublishedSitePayload } from "./lib/sites/store";
 
 function openRouterMiddleware() {
   const systemPrompt =

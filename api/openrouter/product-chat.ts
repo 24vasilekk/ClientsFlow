@@ -1,3 +1,5 @@
+declare const process: { env: Record<string, string | undefined> };
+
 const SYSTEM_PROMPT =
   "Ты продуктовый copilot ClientsFlow для владельцев малого и среднего бизнеса. " +
   "Пиши по-русски, профессионально и практично. " +

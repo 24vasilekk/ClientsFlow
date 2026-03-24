@@ -1,3 +1,5 @@
+declare const process: { env: Record<string, string | undefined> };
+
 const SYSTEM_PROMPT =
   "Ты продуктовый аналитик внедрения ClientsFlow для сервисных бизнесов. " +
   "Сгенерируй ОДИН следующий вопрос для брифа бизнеса. " +

@@ -1,3 +1,5 @@
+declare const process: { env: Record<string, string | undefined> };
+
 const SYSTEM_PROMPT =
   "Ты консультант ClientsFlow для B2B бизнеса. Пиши только по-русски. " +
   "Всегда отвечай как живой специалист, а не как технология. " +

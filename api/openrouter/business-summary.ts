@@ -1,3 +1,5 @@
+declare const process: { env: Record<string, string | undefined> };
+
 const SYSTEM_PROMPT =
   "Ты product strategist для сервисного бизнеса. " +
   "Сформируй краткий профиль бизнеса для внутреннего использования в ответах клиентам. " +

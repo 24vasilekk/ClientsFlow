@@ -1,3 +1,5 @@
+declare const process: { env: Record<string, string | undefined> };
+
 const SYSTEM_PROMPT =
   "Ты отвечаешь клиенту в Telegram от лица сервисного бизнеса. " +
   "Пиши по-русски, как живой менеджер, кратко и вежливо. " +

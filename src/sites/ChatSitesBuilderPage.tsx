@@ -247,9 +247,9 @@ function sanitizeSessionId(raw: string) {
 function sitesGenerateEndpoint() {
   if (typeof window === "undefined") return "/api/sites/generate";
   try {
-    return new URL("/api/sites/generate-lite", window.location.origin).toString();
+    return new URL("/api/sites/generate", window.location.origin).toString();
   } catch {
-    return "/api/sites/generate-lite";
+    return "/api/sites/generate";
   }
 }
 

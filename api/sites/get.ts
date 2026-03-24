@@ -1,4 +1,4 @@
-import { getPublishedSite } from "./_store";
+import { getPublishedSite } from "../../lib/sites/store";
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "GET") {

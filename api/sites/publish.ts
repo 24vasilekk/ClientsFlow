@@ -1,4 +1,6 @@
-import { createPublishedSite, type PublishedSitePayload } from "./_store";
+declare const process: { env: Record<string, string | undefined> };
+
+import { createPublishedSite, type PublishedSitePayload } from "../../lib/sites/store";
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {

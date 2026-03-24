@@ -1,3 +1,5 @@
+declare const process: { env: Record<string, string | undefined> };
+
 const SYSTEM_PROMPT =
   "Ты senior UX-copywriter для премиального B2B SaaS. " +
   "Пиши только по-русски, без hype, без клише. " +
