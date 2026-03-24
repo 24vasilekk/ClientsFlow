@@ -718,6 +718,25 @@ function normalizeAiDraftPatch(raw: any): Partial<DraftState> | null {
   return patch;
 }
 
+function hydrateGeneratedDraft(raw: any, fallback: DraftState): DraftState {
+  const patch = normalizeAiDraftPatch(raw);
+  if (!patch) return fallback;
+  const sectionsEnabled = normalizeSectionsEnabled(raw?.sectionsEnabled, fallback.sectionsEnabled);
+  const sectionOrder = normalizeSectionOrder(raw?.sectionOrder, fallback.sectionOrder).filter((key) => sectionsEnabled[key]);
+  return {
+    ...fallback,
+    ...patch,
+    navItems: patch.navItems?.length ? patch.navItems : fallback.navItems,
+    services: patch.services?.length ? patch.services : fallback.services,
+    team: patch.team?.length ? patch.team : fallback.team,
+    reviews: patch.reviews?.length ? patch.reviews : fallback.reviews,
+    faq: patch.faq?.length ? patch.faq : fallback.faq,
+    sectionOrder,
+    sectionsEnabled,
+    summaryPoints: patch.summaryPoints?.length ? patch.summaryPoints : fallback.summaryPoints
+  };
+}
+
 export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPageProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -816,74 +835,20 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
     let engine: "openrouter" | "algorithm" = "algorithm";
 
     try {
-      const prompt = [
-        "Собери индивидуальный сайт в формате JSON.",
-        `Бизнес: ${nextProfile.businessName || "без названия"}`,
-        `Ниша: ${nextProfile.niche || "service"}`,
-        `Город: ${nextProfile.city || "не указан"}`,
-        `Цель: ${nextProfile.goal || "увеличить заявки"}`,
-        `Стиль: ${nextProfile.style || "современный premium"}`,
-        `Обязательные блоки: ${nextProfile.mustHave.join(", ") || "о нас, услуги, отзывы, запись"}`,
-        `Guidance: ${guidance || "-"}`,
-        `Round: ${nextRound}`,
-        "Верни только JSON со структурой:",
-        "{",
-        '  "businessName": "...",',
-        '  "city": "...",',
-        '  "niche": "...",',
-        '  "accentColor": "#hex",',
-        '  "pageBg": "#hex",',
-        '  "surfaceBg": "#hex",',
-        '  "headlineStyle": "serif|sans",',
-        '  "styleLabel": "...",',
-        '  "heroTitle": "...",',
-        '  "heroSubtitle": "...",',
-        '  "aboutTitle": "...",',
-        '  "aboutBody": "...",',
-        '  "primaryCta": "...",',
-        '  "secondaryCta": "...",',
-        '  "contactLine": "...",',
-        '  "navItems": ["..."],',
-        '  "services": [{"emoji":"...","title":"...","duration":"...","price":"..."}],',
-        '  "team": [{"name":"...","role":"..."}],',
-        '  "reviews": [{"author":"...","text":"..."}],',
-        '  "faq": [{"q":"...","a":"..."}],',
-        '  "sectionOrder": ["about","services","team","reviews","faq","booking","contacts","gallery"],',
-        '  "sectionsEnabled": {"about":true,"services":true,"team":true,"reviews":true,"faq":true,"booking":true,"contacts":true,"gallery":false},',
-        '  "summaryPoints": ["...", "..."]',
-        "}"
-      ].join("\n");
-
-      const response = await fetch("/api/openrouter/sites-copy", {
+      const response = await fetch("/api/sites/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: [{ role: "user", content: prompt }]
+          profile: nextProfile,
+          guidance,
+          round: nextRound
         })
       });
 
       if (response.ok) {
-        const body = (await response.json()) as { reply?: string };
-        const parsed = parseJsonFromModelReply(body.reply || "");
-        const aiPatch = normalizeAiDraftPatch(parsed);
-
-        if (aiPatch) {
-          engine = "openrouter";
-          const sectionsEnabled = normalizeSectionsEnabled(parsed?.sectionsEnabled, fallbackDraft.sectionsEnabled);
-          const sectionOrder = normalizeSectionOrder(parsed?.sectionOrder, fallbackDraft.sectionOrder).filter((key) => sectionsEnabled[key]);
-          finalDraft = {
-            ...fallbackDraft,
-            ...aiPatch,
-            navItems: aiPatch.navItems?.length ? aiPatch.navItems : fallbackDraft.navItems,
-            services: aiPatch.services?.length ? aiPatch.services : fallbackDraft.services,
-            team: aiPatch.team?.length ? aiPatch.team : fallbackDraft.team,
-            reviews: aiPatch.reviews?.length ? aiPatch.reviews : fallbackDraft.reviews,
-            faq: aiPatch.faq?.length ? aiPatch.faq : fallbackDraft.faq,
-            sectionOrder,
-            sectionsEnabled,
-            summaryPoints: aiPatch.summaryPoints?.length ? aiPatch.summaryPoints : fallbackDraft.summaryPoints
-          };
-        }
+        const body = (await response.json()) as { engine?: "openrouter" | "algorithm"; draft?: unknown };
+        if (body.engine === "openrouter") engine = "openrouter";
+        if (body.draft) finalDraft = hydrateGeneratedDraft(body.draft, fallbackDraft);
       }
     } catch {
       // fallback to algorithmic generation
