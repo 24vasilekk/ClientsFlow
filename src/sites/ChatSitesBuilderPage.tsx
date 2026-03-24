@@ -1574,6 +1574,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
 
       const body = (await response.json()) as {
         error?: string;
+        debug?: unknown;
         sessionId?: string;
         engine?: "openrouter" | "algorithm";
         draft?: unknown;
@@ -1584,7 +1585,9 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
       };
 
       if (!response.ok) {
-        throw new Error(body.error || "AI generation request failed");
+        const debugText =
+          body.debug && typeof body.debug === "object" ? JSON.stringify(body.debug) : body.debug ? String(body.debug) : "";
+        throw new Error(debugText ? `${body.error || "AI generation request failed"} | debug: ${debugText}` : body.error || "AI generation request failed");
       }
 
       if (body.sessionId) setGenerationSessionId(body.sessionId);
@@ -1616,10 +1619,10 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
       const message = String(error?.message || "AI generation failed");
       const userMessage = humanizeGenerationError(message);
       setGenerationStatus("error");
-      setError(userMessage);
+      setError(`${userMessage}\n\nDEBUG: ${message}`);
       addMessage(
         "assistant",
-        `Не смог собрать сайт через AI: ${userMessage}`,
+        `Не смог собрать сайт через AI: ${userMessage}\n\nDEBUG: ${message}`,
         "soft"
       );
     } finally {

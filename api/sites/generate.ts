@@ -491,11 +491,18 @@ function buildAlgorithmicDraft(profile: AgentProfile, guidance: string, round: n
   return draft;
 }
 
-async function tryOpenRouterGeneration(profile: AgentProfile, guidance: string, round: number): Promise<DraftLike | null> {
+type OpenRouterAttempt = {
+  candidate: string;
+  draft: DraftLike | null;
+  error?: string;
+  status?: number;
+};
+
+async function tryOpenRouterGeneration(profile: AgentProfile, guidance: string, round: number, candidate: string): Promise<OpenRouterAttempt> {
   const apiKey = String(process.env.OPENROUTER_API_KEY || "")
     .replace(/[\r\n\s\u200B-\u200D\uFEFF]+/g, "")
     .trim();
-  if (!apiKey) return null;
+  if (!apiKey) return { candidate, draft: null, error: "openrouter_api_key_missing" };
 
   const model = String(process.env.OPENROUTER_MODEL || "google/gemini-2.5-flash").trim();
   const prompt = [
@@ -569,16 +576,26 @@ async function tryOpenRouterGeneration(profile: AgentProfile, guidance: string, 
       signal: controller.signal
     });
 
-    const data = await response.json();
-    if (!response.ok) return null;
+    const data = await response.json().catch(() => ({} as any));
+    if (!response.ok) {
+      const errorText =
+        String(data?.error?.message || data?.error || `openrouter_http_${response.status}`)
+          .replace(/\s+/g, " ")
+          .slice(0, 220);
+      return { candidate, draft: null, error: errorText, status: response.status };
+    }
 
     const content = data?.choices?.[0]?.message?.content;
     const reply = typeof content === "string" ? content : Array.isArray(content) ? content.map((item: any) => item?.text || "").join("\n") : "";
     const parsed = parseJson(reply);
-    if (!parsed) return null;
-    return sanitizeDraft(parsed, buildAlgorithmicDraft(profile, guidance, round));
-  } catch {
-    return null;
+    if (!parsed) return { candidate, draft: null, error: "invalid_json_from_model" };
+    return { candidate, draft: sanitizeDraft(parsed, buildAlgorithmicDraft(profile, guidance, round)) };
+  } catch (error: any) {
+    return {
+      candidate,
+      draft: null,
+      error: String(error?.message || "openrouter_fetch_failed").replace(/\s+/g, " ").slice(0, 220)
+    };
   } finally {
     clearTimeout(timeout);
   }
@@ -619,7 +636,10 @@ export default async function handler(req: any, res: any) {
     return;
   }
 
+  let debugStage = "init";
+  const debugId = `gen-${uid()}`;
   try {
+    debugStage = "parse_request";
     const profileRaw = req.body?.profile || {};
     const sessionId = String(req.body?.sessionId || "").trim() || `session-${uid()}`;
     const profile: AgentProfile = {
@@ -638,38 +658,47 @@ export default async function handler(req: any, res: any) {
       .trim();
     if (!hasApiKey) {
       res.status(503).json({
-        error: "AI engine is not configured. Set OPENROUTER_API_KEY in Vercel Environment Variables."
+        error: "AI engine is not configured. Set OPENROUTER_API_KEY in Vercel Environment Variables.",
+        debug: { id: debugId, stage: "config", code: "OPENROUTER_API_KEY_MISSING" }
       });
       return;
     }
 
     const startedAt = Date.now();
     const t1 = Date.now();
+    debugStage = "openrouter_generate";
     const [aiMain, aiAltA, aiAltB] = await Promise.all([
-      tryOpenRouterGeneration(profile, guidance, round),
+      tryOpenRouterGeneration(profile, guidance, round, "ai-main"),
       tryOpenRouterGeneration(
         profile,
         `${guidance}\nСобери альтернативу A: другая композиция секций, иная типографика и другой ритм отступов.`,
-        round + 101
+        round + 101,
+        "ai-alt-a"
       ),
       tryOpenRouterGeneration(
         profile,
         `${guidance}\nСобери альтернативу B: другая visual language, контраст и плотность, но та же бизнес-цель.`,
-        round + 202
+        round + 202,
+        "ai-alt-b"
       )
     ]);
     const t2 = Date.now();
     const candidatesPool: Array<{ id: string; engine: "openrouter" | "algorithm"; label: string; draft: DraftLike }> = [];
-    if (aiMain) candidatesPool.push({ id: "ai-main", engine: "openrouter", label: "AI Main", draft: aiMain });
-    if (aiAltA) candidatesPool.push({ id: "ai-alt-a", engine: "openrouter", label: "AI Alt A", draft: aiAltA });
-    if (aiAltB) candidatesPool.push({ id: "ai-alt-b", engine: "openrouter", label: "AI Alt B", draft: aiAltB });
+    if (aiMain.draft) candidatesPool.push({ id: "ai-main", engine: "openrouter", label: "AI Main", draft: aiMain.draft });
+    if (aiAltA.draft) candidatesPool.push({ id: "ai-alt-a", engine: "openrouter", label: "AI Alt A", draft: aiAltA.draft });
+    if (aiAltB.draft) candidatesPool.push({ id: "ai-alt-b", engine: "openrouter", label: "AI Alt B", draft: aiAltB.draft });
+    const aiErrors = [aiMain, aiAltA, aiAltB]
+      .filter((item) => !item.draft)
+      .map((item) => ({ candidate: item.candidate, status: item.status || null, error: item.error || "unknown_error" }));
     if (!candidatesPool.length) {
       res.status(502).json({
-        error: "AI generation failed. OpenRouter did not return a valid site draft. Please retry."
+        error: "AI generation failed. OpenRouter did not return a valid site draft. Please retry.",
+        debug: { id: debugId, stage: "openrouter_generate", code: "NO_VALID_DRAFT", model: process.env.OPENROUTER_MODEL || "google/gemini-2.5-flash", aiErrors }
       });
       return;
     }
 
+    debugStage = "rank_candidates";
     const scored = candidatesPool.map((candidate) => ({
       ...candidate,
       score: scoreCandidate(candidate.draft, guidance, profile)
@@ -689,6 +718,7 @@ export default async function handler(req: any, res: any) {
     ];
 
     let history: Array<{ id: string; round: number; engine: "openrouter" | "algorithm"; createdAt: string }> = [];
+    debugStage = "persist_history";
     try {
       const persisted = await appendSpecRecord({
         id: `spec-${uid()}`,
@@ -707,6 +737,7 @@ export default async function handler(req: any, res: any) {
 
     res.status(200).json({
       specVersion: "v1",
+      debug: { id: debugId },
       sessionId,
       round,
       engine,
@@ -719,6 +750,14 @@ export default async function handler(req: any, res: any) {
       history
     });
   } catch (error: any) {
-    res.status(500).json({ error: "Generate failed" });
+    res.status(500).json({
+      error: "Generate failed",
+      debug: {
+        id: debugId,
+        stage: debugStage,
+        code: "UNCAUGHT_EXCEPTION",
+        message: String(error?.message || "unknown").replace(/\s+/g, " ").slice(0, 260)
+      }
+    });
   }
 }
