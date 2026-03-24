@@ -73,6 +73,8 @@ type DslAction =
   | { kind: "addSection"; section: SectionKey }
   | { kind: "removeSection"; section: SectionKey }
   | { kind: "rewriteHero"; text: string }
+  | { kind: "rewriteBlock"; blockId: string; instruction: string }
+  | { kind: "moveBlock"; blockId: string; beforeId: string }
   | { kind: "undo" }
   | { kind: "revert"; round: number }
   | { kind: "none" };
@@ -327,6 +329,21 @@ function parseDslCommand(text: string): DslAction {
     return section ? { kind: "removeSection", section } : { kind: "none" };
   }
   if (cmd === "rewrite-hero") return { kind: "rewriteHero", text: rest };
+  if (cmd === "rewrite-block") {
+    const [blockId, ...instructionParts] = rest.split(" ");
+    const instruction = instructionParts.join(" ").trim();
+    return blockId && instruction ? { kind: "rewriteBlock", blockId: blockId.trim(), instruction } : { kind: "none" };
+  }
+  if (cmd === "move-block") {
+    const parts = rest.split(" ").filter(Boolean);
+    const beforeIndex = parts.findIndex((part) => part.toLowerCase() === "before");
+    if (beforeIndex > 0 && beforeIndex < parts.length - 1) {
+      const blockId = parts.slice(0, beforeIndex).join(" ").trim();
+      const beforeId = parts.slice(beforeIndex + 1).join(" ").trim();
+      if (blockId && beforeId) return { kind: "moveBlock", blockId, beforeId };
+    }
+    return { kind: "none" };
+  }
   return { kind: "none" };
 }
 
@@ -622,6 +639,72 @@ function normalizePageDsl(raw: unknown, fallback: DraftState): PageDslBlock[] {
     .slice(0, 24);
   if (!cleaned.length) return composePageDsl(fallback);
   return cleaned;
+}
+
+function resolveBlockId(pageDsl: PageDslBlock[], ref: string): string | null {
+  const token = ref.trim();
+  if (!token) return null;
+  const byId = pageDsl.find((block) => block.id === token);
+  if (byId) return byId.id;
+  const numeric = token.startsWith("#") ? Number(token.slice(1)) : Number(token);
+  if (Number.isFinite(numeric) && numeric >= 1) {
+    const block = pageDsl[Math.floor(numeric) - 1];
+    if (block) return block.id;
+  }
+  return null;
+}
+
+function rewriteDslBlock(pageDsl: PageDslBlock[], blockId: string, instruction: string): { next: PageDslBlock[]; ok: boolean } {
+  const targetId = resolveBlockId(pageDsl, blockId);
+  if (!targetId) return { next: pageDsl, ok: false };
+  const text = instruction.trim();
+  const next = pageDsl.map((block) => {
+    if (block.id !== targetId) return block;
+    const updated = { ...block };
+    const lowered = text.toLowerCase();
+    const setField = (field: keyof PageDslBlock, value: string) => {
+      (updated as any)[field] = value;
+    };
+    if (lowered.startsWith("title:")) {
+      setField("title", text.slice("title:".length).trim());
+    } else if (lowered.startsWith("subtitle:")) {
+      setField("subtitle", text.slice("subtitle:".length).trim());
+    } else if (lowered.startsWith("body:")) {
+      setField("body", text.slice("body:".length).trim());
+    } else if (lowered.startsWith("line:")) {
+      setField("line", text.slice("line:".length).trim());
+    } else if (lowered.startsWith("variant:")) {
+      setField("variant", text.slice("variant:".length).trim());
+    } else if (updated.title) {
+      updated.title = text;
+    } else if (updated.body) {
+      updated.body = text;
+    } else if (updated.subtitle) {
+      updated.subtitle = text;
+    } else if (updated.line) {
+      updated.line = text;
+    } else {
+      updated.body = text;
+    }
+    return updated;
+  });
+  return { next, ok: true };
+}
+
+function moveDslBlock(pageDsl: PageDslBlock[], blockId: string, beforeId: string): { next: PageDslBlock[]; ok: boolean } {
+  const sourceId = resolveBlockId(pageDsl, blockId);
+  const targetId = resolveBlockId(pageDsl, beforeId);
+  if (!sourceId || !targetId || sourceId === targetId) return { next: pageDsl, ok: false };
+  const sourceIndex = pageDsl.findIndex((block) => block.id === sourceId);
+  const targetIndex = pageDsl.findIndex((block) => block.id === targetId);
+  if (sourceIndex < 0 || targetIndex < 0) return { next: pageDsl, ok: false };
+
+  const next = [...pageDsl];
+  const [picked] = next.splice(sourceIndex, 1);
+  const insertIndex = next.findIndex((block) => block.id === targetId);
+  if (!picked || insertIndex < 0) return { next: pageDsl, ok: false };
+  next.splice(insertIndex, 0, picked);
+  return { next, ok: true };
 }
 
 const sectionKeywords: Array<{ key: SectionKey; words: string[] }> = [
@@ -1335,6 +1418,8 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
           draft?: unknown;
           history?: Array<{ id: string; round: number; engine: "openrouter" | "algorithm"; createdAt: string }>;
           stages?: Array<{ id: string; ms: number; source: string }>;
+          candidates?: Array<{ id: string; engine: "openrouter" | "algorithm"; score: number; label: string }>;
+          selectedCandidateId?: string;
         };
         if (body.sessionId) setGenerationSessionId(body.sessionId);
         if (body.engine === "openrouter") engine = "openrouter";
@@ -1343,6 +1428,10 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
         if (Array.isArray(body.stages) && body.stages.length > 0) {
           const stageLine = body.stages.map((stage) => `${stage.id}:${stage.ms}ms`).join(" · ");
           addMessage("assistant", `Pipeline: ${stageLine}`, "soft");
+        }
+        if (Array.isArray(body.candidates) && body.candidates.length > 0) {
+          const candidateLine = body.candidates.map((c) => `${c.id}(${c.engine}, ${c.score})`).join(" · ");
+          addMessage("assistant", `Кандидаты: ${candidateLine}. Выбран: ${body.selectedCandidateId || body.candidates[0].id}`, "soft");
         }
       }
     } catch {
@@ -1442,6 +1531,34 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
       }
       if (dsl.kind === "revert") {
         void restoreRound(dsl.round);
+        return;
+      }
+      if (dsl.kind === "rewriteBlock") {
+        if (!draft) {
+          addMessage("assistant", "Сначала сгенерируй сайт.", "soft");
+          return;
+        }
+        const updated = rewriteDslBlock(draft.pageDsl, dsl.blockId, dsl.instruction);
+        if (!updated.ok) {
+          addMessage("assistant", "Блок не найден. Используй id из строки Blocks: #n:id.", "soft");
+          return;
+        }
+        setDraft((prev) => (prev ? { ...prev, pageDsl: updated.next } : prev));
+        addMessage("assistant", "Блок обновлен по DSL-команде.", "soft");
+        return;
+      }
+      if (dsl.kind === "moveBlock") {
+        if (!draft) {
+          addMessage("assistant", "Сначала сгенерируй сайт.", "soft");
+          return;
+        }
+        const moved = moveDslBlock(draft.pageDsl, dsl.blockId, dsl.beforeId);
+        if (!moved.ok) {
+          addMessage("assistant", "Не удалось переставить блоки. Проверь id в строке Blocks: #n:id.", "soft");
+          return;
+        }
+        setDraft((prev) => (prev ? { ...prev, pageDsl: moved.next } : prev));
+        addMessage("assistant", "Порядок блоков обновлен.", "soft");
         return;
       }
       if (dsl.kind === "addSection") {
@@ -1666,6 +1783,11 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
                   </span>
                 </div>
                 <div className="mt-8 space-y-6">
+                  {(draft?.pageDsl?.length || draft?.layoutSpec?.length) ? (
+                    <div className="rounded-xl border border-slate-200 bg-white/75 px-3 py-2 text-xs text-slate-500">
+                      Blocks: {((draft?.pageDsl && draft.pageDsl.length ? draft.pageDsl : draft?.layoutSpec) || []).map((block: any, index: number) => `#${index + 1}:${block.id}`).join(" · ")}
+                    </div>
+                  ) : null}
                   {((draft?.pageDsl && draft.pageDsl.length ? draft.pageDsl : draft?.layoutSpec) || []).map((block: any) => {
                     if (block.type === "hero") {
                       return (
@@ -2061,7 +2183,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
               ))}
             </div>
             <p className="mt-2 text-xs text-slate-400">
-              DSL: <code>/regenerate premium dark</code> · <code>/style-like base44 light workspace</code> · <code>/add-section team</code> · <code>/remove-section faq</code> · <code>/rewrite-hero Новый оффер</code> · <code>/undo</code> · <code>/revert 2</code>
+              DSL: <code>/regenerate premium dark</code> · <code>/style-like base44 light workspace</code> · <code>/rewrite-block #2 title: Новый заголовок</code> · <code>/move-block #4 before #2</code> · <code>/add-section team</code> · <code>/remove-section faq</code> · <code>/rewrite-hero Новый оффер</code> · <code>/undo</code> · <code>/revert 2</code>
             </p>
           </div>
         </main>

@@ -440,6 +440,24 @@ async function tryOpenRouterGeneration(profile: AgentProfile, guidance: string, 
   }
 }
 
+function scoreCandidate(draft: DraftLike, guidance: string, profile: AgentProfile): number {
+  let score = 50;
+  const lower = guidance.toLowerCase();
+  const style = `${profile.style} ${profile.styleReference} ${guidance}`.toLowerCase();
+
+  if (lower.includes("преми") && draft.accentColor.toLowerCase() === "#c77a7a") score += 12;
+  if ((lower.includes("минимал") || lower.includes("minimal")) && draft.density === "airy") score += 10;
+  if ((lower.includes("темн") || lower.includes("dark")) && draft.contrast === "high") score += 8;
+  if ((lower.includes("workspace") || lower.includes("base44")) && draft.radius === "rounded") score += 8;
+  if (style.includes("playfair") && draft.fontHeading.toLowerCase().includes("playfair")) score += 6;
+  if (profile.mustHave.some((item) => item.toLowerCase().includes("отзыв")) && draft.sectionsEnabled.reviews) score += 4;
+  if (profile.mustHave.some((item) => item.toLowerCase().includes("галер")) && draft.sectionsEnabled.gallery) score += 4;
+  if (draft.pageDsl.length >= 5) score += 6;
+  if (draft.pageDsl.some((block) => String(block.type) === "cta")) score += 4;
+  if (draft.pageDsl.some((block) => String(block.type) === "stats")) score += 2;
+  return Math.max(0, Math.min(100, score));
+}
+
 export default async function handler(req: any, res: any) {
   if (req.method === "GET") {
     const sessionId = String(req.query?.sessionId || "").trim();
@@ -474,17 +492,33 @@ export default async function handler(req: any, res: any) {
 
     const startedAt = Date.now();
     const algorithmDraft = buildAlgorithmicDraft(profile, guidance, round);
+    const algorithmDraftAltA = buildAlgorithmicDraft(profile, `${guidance} alt-a`, round + 101);
+    const algorithmDraftAltB = buildAlgorithmicDraft(profile, `${guidance} alt-b`, round + 202);
     const t1 = Date.now();
     const aiDraft = await tryOpenRouterGeneration(profile, guidance, round);
     const t2 = Date.now();
-    const draft = aiDraft || algorithmDraft;
-    const engine: "openrouter" | "algorithm" = aiDraft ? "openrouter" : "algorithm";
+    const candidatesPool: Array<{ id: string; engine: "openrouter" | "algorithm"; label: string; draft: DraftLike }> = [
+      { id: "alg-A", engine: "algorithm", label: "Algorithm A", draft: algorithmDraft },
+      { id: "alg-B", engine: "algorithm", label: "Algorithm B", draft: algorithmDraftAltA },
+      { id: "alg-C", engine: "algorithm", label: "Algorithm C", draft: algorithmDraftAltB }
+    ];
+    if (aiDraft) candidatesPool.unshift({ id: "ai-main", engine: "openrouter", label: "AI Main", draft: aiDraft });
+
+    const scored = candidatesPool.map((candidate) => ({
+      ...candidate,
+      score: scoreCandidate(candidate.draft, guidance, profile)
+    }));
+    scored.sort((a, b) => b.score - a.score);
+    const selected = scored[0] || { id: "alg-A", engine: "algorithm" as const, label: "Algorithm A", draft: algorithmDraft, score: 50 };
+    const draft = selected.draft;
+    const engine: "openrouter" | "algorithm" = selected.engine;
 
     const stages = [
       { id: "brief", ms: 12, source: "profile-parser" },
       { id: "structure", ms: 18, source: "layout-planner" },
       { id: "visual", ms: aiDraft ? t2 - t1 : 16, source: engine },
       { id: "copy", ms: aiDraft ? Math.max(25, Math.round((t2 - t1) * 0.35)) : 20, source: engine },
+      { id: "selector", ms: 11, source: "candidate-ranker" },
       { id: "assembly", ms: 14, source: "spec-assembler" }
     ];
 
@@ -507,6 +541,8 @@ export default async function handler(req: any, res: any) {
       draft,
       profile,
       stages,
+      candidates: scored.slice(0, 4).map((item) => ({ id: item.id, engine: item.engine, score: item.score, label: item.label })),
+      selectedCandidateId: selected.id,
       totalMs: Date.now() - startedAt,
       history: history.map((item) => ({ id: item.id, round: item.round, engine: item.engine, createdAt: item.createdAt })).slice(-8)
     });
