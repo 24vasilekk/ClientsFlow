@@ -44,6 +44,7 @@ type DraftLike = {
   contrast: "soft" | "medium" | "high";
   layoutSpec: Array<Record<string, unknown>>;
   pageDsl: Array<Record<string, unknown>>;
+  pageCode: string;
 };
 
 type DesignPreset = {
@@ -86,6 +87,143 @@ function pick<T>(items: T[], rnd: () => number) {
 
 function uid() {
   return Math.random().toString(36).slice(2, 10);
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function buildPageCode(draft: Pick<DraftLike, "businessName" | "accentColor" | "pageBg" | "surfaceBg" | "fontHeading" | "fontBody" | "density" | "radius" | "contrast" | "pageDsl">) {
+  const radius = draft.radius === "rounded" ? 24 : draft.radius === "sharp" ? 10 : 16;
+  const sectionPad = draft.density === "compact" ? "14px" : draft.density === "airy" ? "28px" : "20px";
+  const borderColor = draft.contrast === "high" ? "rgba(15,23,42,.28)" : "rgba(148,163,184,.28)";
+
+  const blocks = draft.pageDsl
+    .map((block) => {
+      const type = String(block.type || "");
+      if (type === "hero") {
+        return `<section class="card ${block.variant === "split" ? "hero-split" : "hero"}">
+  <div>
+    <p class="eyebrow">${escapeHtml(draft.businessName)}</p>
+    <h1>${escapeHtml(String(block.title || "Сайт вашего бизнеса"))}</h1>
+    <p class="sub">${escapeHtml(String(block.subtitle || ""))}</p>
+    <div class="cta-row">
+      <button class="cta-primary">${escapeHtml(String(block.primaryCta || "Записаться"))}</button>
+      <button class="cta-secondary">${escapeHtml(String(block.secondaryCta || "Подробнее"))}</button>
+    </div>
+  </div>
+  ${block.variant === "split" ? `<div class="hero-aside">Индивидуальный layout сгенерирован AI</div>` : ""}
+</section>`;
+      }
+      if (type === "services") {
+        const items = Array.isArray(block.items) ? block.items : [];
+        return `<section class="card"><h2>Услуги</h2><div class="grid">${items
+          .map(
+            (item) =>
+              `<div class="tile"><p class="t">${escapeHtml(String((item as any).title || ""))}</p><p class="m">${escapeHtml(String((item as any).duration || ""))}</p><p class="p">${escapeHtml(String((item as any).price || ""))}</p></div>`
+          )
+          .join("")}</div></section>`;
+      }
+      if (type === "reviews") {
+        const items = Array.isArray(block.items) ? block.items : [];
+        return `<section class="card"><h2>Отзывы</h2><div class="grid">${items
+          .map(
+            (item) =>
+              `<div class="tile"><p class="q">“${escapeHtml(String((item as any).text || ""))}”</p><p class="m">${escapeHtml(String((item as any).author || "Клиент"))}</p></div>`
+          )
+          .join("")}</div></section>`;
+      }
+      if (type === "faq") {
+        const items = Array.isArray(block.items) ? block.items : [];
+        return `<section class="card"><h2>FAQ</h2>${items
+          .map(
+            (item) =>
+              `<details class="faq"><summary>${escapeHtml(String((item as any).q || ""))}</summary><p>${escapeHtml(String((item as any).a || ""))}</p></details>`
+          )
+          .join("")}</section>`;
+      }
+      if (type === "stats") {
+        const items = Array.isArray(block.items) ? block.items : [];
+        return `<section class="grid">${items
+          .map(
+            (item) =>
+              `<div class="tile stat"><p class="m">${escapeHtml(String((item as any).label || ""))}</p><p class="p">${escapeHtml(String((item as any).value || ""))}</p></div>`
+          )
+          .join("")}</section>`;
+      }
+      if (type === "cta") {
+        return `<section class="card center"><h2>${escapeHtml(String(block.title || "Готовы начать?"))}</h2><p class="sub">${escapeHtml(String(block.subtitle || ""))}</p><div class="cta-row"><button class="cta-primary">${escapeHtml(String(block.primaryCta || "Записаться"))}</button><button class="cta-secondary">${escapeHtml(String(block.secondaryCta || "Подробнее"))}</button></div></section>`;
+      }
+      if (type === "contacts") {
+        return `<section class="card"><h2>Контакты</h2><p>${escapeHtml(String(block.line || ""))}</p></section>`;
+      }
+      return `<section class="card"><h2>${escapeHtml(String(block.title || "Блок"))}</h2><p>${escapeHtml(String(block.body || ""))}</p></section>`;
+    })
+    .join("\n");
+
+  return `<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${escapeHtml(draft.businessName)}</title>
+  <style>
+    :root { --accent:${draft.accentColor}; --bg:${draft.pageBg}; --surface:${draft.surfaceBg}; --border:${borderColor}; --radius:${radius}px; --pad:${sectionPad}; --fontH:${draft.fontHeading}; --fontB:${draft.fontBody}; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: var(--fontB), sans-serif; background: var(--bg); color:#0f172a; }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 24px; display: grid; gap: 14px; }
+    .card { border:1px solid var(--border); background: var(--surface); border-radius: var(--radius); padding: var(--pad); }
+    .hero { text-align: center; }
+    .hero-split { display:grid; gap:16px; grid-template-columns: 1.2fr .8fr; align-items: stretch; }
+    .hero-aside { border:1px dashed var(--border); border-radius: calc(var(--radius) - 4px); padding:16px; color:#475569; display:flex; align-items:center; justify-content:center; }
+    .eyebrow { margin:0; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); font-size:11px; font-weight:700; }
+    h1,h2 { font-family: var(--fontH), serif; margin: 0 0 10px; line-height: 1.15; }
+    h1 { font-size: 44px; }
+    h2 { font-size: 28px; }
+    .sub { color:#475569; margin:0; line-height:1.55; }
+    .grid { display:grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap:10px; }
+    .tile { border:1px solid var(--border); border-radius: calc(var(--radius) - 6px); padding:12px; background:#fff; }
+    .t { margin:0; font-weight:700; }
+    .m { margin:6px 0 0; color:#64748b; font-size:13px; }
+    .p { margin:8px 0 0; color:var(--accent); font-weight:700; font-size:20px; }
+    .q { margin:0; line-height:1.5; }
+    .faq { border-top:1px solid var(--border); padding:10px 0; }
+    .faq summary { cursor:pointer; font-weight:700; }
+    .faq p { color:#475569; margin:8px 0 0; }
+    .cta-row { display:flex; gap:8px; flex-wrap: wrap; margin-top:14px; }
+    button { border:0; font:inherit; cursor:pointer; }
+    .cta-primary { background: var(--accent); color:#fff; border-radius:999px; padding:10px 16px; font-weight:700; }
+    .cta-secondary { background:#fff; color:#0f172a; border-radius:999px; padding:10px 16px; border:1px solid var(--border); font-weight:700; }
+    .center { text-align: center; }
+    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } .hero-split { grid-template-columns: 1fr; } h1{font-size:34px;} }
+  </style>
+</head>
+<body>
+  <main class="wrap">${blocks}</main>
+</body>
+</html>`;
+}
+
+function extractServicesFromGuidance(guidance: string) {
+  const serviceMatch = guidance.match(/(?:услуг[аиы]|services?)\s*[:\-]\s*(.+)$/i);
+  if (!serviceMatch?.[1]) return [];
+  const line = serviceMatch[1];
+  return line
+    .split(/[,;|]/)
+    .map((chunk) => chunk.trim())
+    .filter(Boolean)
+    .slice(0, 8)
+    .map((title, index) => ({
+      emoji: ["✂️", "🧔", "💈", "🔥", "✨", "🫧", "🪒", "📌"][index % 8] || "•",
+      title,
+      duration: "по записи",
+      price: "по запросу"
+    }));
 }
 
 function toBoolRecord(raw: unknown, fallback: Record<SectionKey, boolean>) {
@@ -191,7 +329,8 @@ function sanitizeDraft(raw: any, fallback: DraftLike): DraftLike {
     radius: raw.radius === "soft" || raw.radius === "rounded" || raw.radius === "sharp" ? raw.radius : fallback.radius,
     contrast: raw.contrast === "soft" || raw.contrast === "medium" || raw.contrast === "high" ? raw.contrast : fallback.contrast,
     layoutSpec: Array.isArray(raw.layoutSpec) ? raw.layoutSpec.slice(0, 32).filter((item: unknown) => item && typeof item === "object").map((item) => item as Record<string, unknown>) : fallback.layoutSpec,
-    pageDsl: Array.isArray(raw.pageDsl) ? raw.pageDsl.slice(0, 32).filter((item: unknown) => item && typeof item === "object").map((item) => item as Record<string, unknown>) : fallback.pageDsl
+    pageDsl: Array.isArray(raw.pageDsl) ? raw.pageDsl.slice(0, 32).filter((item: unknown) => item && typeof item === "object").map((item) => item as Record<string, unknown>) : fallback.pageDsl,
+    pageCode: typeof raw.pageCode === "string" && raw.pageCode.trim() ? raw.pageCode : fallback.pageCode
   };
 
   safe.sectionOrder = safe.sectionOrder.filter((key) => safe.sectionsEnabled[key]);
@@ -227,7 +366,10 @@ function buildAlgorithmicDraft(profile: AgentProfile, guidance: string, round: n
     ? ["О нас", "Услуги", "Команда", "Отзывы", "Запись"]
     : ["О нас", "Услуги", "Отзывы", "FAQ", "Контакты"];
 
-  const services = isBarber
+  const servicesFromGuidance = extractServicesFromGuidance(guidance);
+  const services = servicesFromGuidance.length
+    ? servicesFromGuidance
+    : isBarber
     ? [
         { emoji: "✂️", title: "Стрижка мужская", duration: "60 мин", price: "1 800 ₽" },
         { emoji: "🧔", title: "Стрижка + борода", duration: "90 мин", price: "2 500 ₽" },
@@ -296,7 +438,7 @@ function buildAlgorithmicDraft(profile: AgentProfile, guidance: string, round: n
     }
   ].slice(0, 32);
 
-  return {
+  const draft: DraftLike = {
     businessName,
     city: profile.city || "Москва",
     niche: normalizedNiche,
@@ -342,8 +484,11 @@ function buildAlgorithmicDraft(profile: AgentProfile, guidance: string, round: n
     contrast: styleContext.includes("dark") ? "high" : "medium"
     ,
     layoutSpec,
-    pageDsl
+    pageDsl,
+    pageCode: ""
   };
+  draft.pageCode = buildPageCode(draft);
+  return draft;
 }
 
 async function tryOpenRouterGeneration(profile: AgentProfile, guidance: string, round: number): Promise<DraftLike | null> {
@@ -395,7 +540,8 @@ async function tryOpenRouterGeneration(profile: AgentProfile, guidance: string, 
     '  "radius": "soft|rounded|sharp",',
     '  "contrast": "soft|medium|high",',
     '  "layoutSpec": [{"type":"hero","variant":"centered|split","title":"...","subtitle":"...","primaryCta":"...","secondaryCta":"..."},{"type":"services","variant":"cards|rows","items":[{"emoji":"...","title":"...","duration":"...","price":"..."}]}],',
-    '  "pageDsl": [{"type":"hero","variant":"centered|split","title":"...","subtitle":"..."},{"type":"stats","items":[{"label":"...","value":"..."}]},{"type":"cta","title":"...","subtitle":"...","primaryCta":"...","secondaryCta":"..."}]',
+    '  "pageDsl": [{"type":"hero","variant":"centered|split","title":"...","subtitle":"..."},{"type":"stats","items":[{"label":"...","value":"..."}]},{"type":"cta","title":"...","subtitle":"...","primaryCta":"...","secondaryCta":"..."}],',
+    '  "pageCode": "<!doctype html>...полный валидный HTML с CSS..."',
     "}"
   ].join("\n");
 
@@ -417,7 +563,7 @@ async function tryOpenRouterGeneration(profile: AgentProfile, guidance: string, 
           {
             role: "system",
             content:
-              "Ты senior web designer + copywriter. Генерируй только JSON без markdown и пояснений. Сайт должен быть уникальным, не шаблонным. Если есть референс стиля, перенеси визуальные принципы (ритм, контраст, плотность, типографику), но не копируй бренд и тексты 1-в-1."
+              "Ты senior web designer + copywriter + frontend developer. Генерируй только JSON без markdown и пояснений. Сайт должен быть уникальным, не шаблонным. Если есть референс стиля, перенеси визуальные принципы (ритм, контраст, плотность, типографику), но не копируй бренд и тексты 1-в-1. Поле pageCode обязательно: полный рабочий HTML документ с CSS, без внешних библиотек."
           },
           { role: "user", content: prompt }
         ]
