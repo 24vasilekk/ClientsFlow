@@ -34,6 +34,10 @@ type DraftState = {
   city: string;
   niche: string;
   accentColor: string;
+  pageBg: string;
+  surfaceBg: string;
+  headlineStyle: "serif" | "sans";
+  styleLabel: string;
   heroTitle: string;
   heroSubtitle: string;
   aboutTitle: string;
@@ -44,6 +48,7 @@ type DraftState = {
   navItems: string[];
   services: ServiceItem[];
   faq: FaqItem[];
+  summaryPoints: string[];
   socialLinks: { telegram?: string; whatsapp?: string; instagram?: string };
 };
 
@@ -54,6 +59,15 @@ type AgentProfile = {
   goal: string;
   style: string;
   mustHave: string[];
+};
+
+type DesignPreset = {
+  id: string;
+  label: string;
+  accent: string;
+  pageBg: string;
+  surfaceBg: string;
+  headlineStyle: "serif" | "sans";
 };
 
 type PublishPayload = {
@@ -112,6 +126,41 @@ const channelPills = [
   { id: "tg", label: "Telegram", tone: "text-sky-600" }
 ];
 
+const designPresets: DesignPreset[] = [
+  {
+    id: "editorial-rose",
+    label: "Editorial Rose",
+    accent: "#c77a7a",
+    pageBg: "#f6f2f3",
+    surfaceBg: "#fffafb",
+    headlineStyle: "serif"
+  },
+  {
+    id: "noir-modern",
+    label: "Noir Modern",
+    accent: "#334155",
+    pageBg: "#f3f5f8",
+    surfaceBg: "#f8fafc",
+    headlineStyle: "sans"
+  },
+  {
+    id: "deep-indigo",
+    label: "Deep Indigo",
+    accent: "#4f46e5",
+    pageBg: "#f4f4ff",
+    surfaceBg: "#f8f8ff",
+    headlineStyle: "sans"
+  },
+  {
+    id: "forest-premium",
+    label: "Forest Premium",
+    accent: "#0f766e",
+    pageBg: "#f2f7f6",
+    surfaceBg: "#f8fdfc",
+    headlineStyle: "serif"
+  }
+];
+
 function uid() {
   return Math.random().toString(36).slice(2, 10);
 }
@@ -133,6 +182,38 @@ function statusClass(status: BuilderStatus) {
   if (status === "loading") return "border-amber-200 bg-amber-50 text-amber-700";
   if (status === "error") return "border-rose-200 bg-rose-50 text-rose-700";
   return "border-slate-200 bg-slate-100 text-slate-600";
+}
+
+function hashString(input: string) {
+  let hash = 2166136261;
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= input.charCodeAt(i);
+    hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+  }
+  return Math.abs(hash >>> 0);
+}
+
+function seeded(seed: number) {
+  let value = seed || 1;
+  return () => {
+    value = (value * 1664525 + 1013904223) % 4294967296;
+    return value / 4294967296;
+  };
+}
+
+function pick<T>(items: T[], rnd: () => number) {
+  return items[Math.floor(rnd() * items.length)];
+}
+
+function detectRegenerateIntent(text: string) {
+  const lower = text.toLowerCase();
+  return (
+    lower.includes("перегенер") ||
+    lower.includes("новый вариант") ||
+    lower.includes("с нуля") ||
+    lower.includes("другой дизайн") ||
+    lower.includes("переделай полностью")
+  );
 }
 
 function normalizeBusinessName(raw: string) {
@@ -262,13 +343,16 @@ function shouldForceGenerate(text: string) {
   );
 }
 
-function createDraftFromProfile(profile: AgentProfile): DraftState {
+function createDraftFromProfile(profile: AgentProfile, guidance = "", round = 1): DraftState {
   const normalizedNiche = profile.niche || "Service";
   const isBarber = normalizedNiche.toLowerCase().includes("barber") || normalizedNiche.toLowerCase().includes("барбер");
   const isNails = normalizedNiche.toLowerCase().includes("nail") || normalizedNiche.toLowerCase().includes("салон");
   const isClinic = normalizedNiche.toLowerCase().includes("clinic") || normalizedNiche.toLowerCase().includes("клиник");
 
-  const accentColor = isBarber ? "#355c7d" : isNails ? "#c77a7a" : isClinic ? "#5f7aa6" : "#6d7ef6";
+  const seed = hashString(`${profile.businessName}|${profile.niche}|${profile.city}|${profile.goal}|${profile.style}|${guidance}|${round}`);
+  const rnd = seeded(seed);
+  const preset = pick(designPresets, rnd);
+
   const businessName = profile.businessName || (isBarber ? "Noe Barbershop" : isNails ? "Nails Beauty" : "Studio Name");
   const nav = isBarber
     ? ["О нас", "Услуги", "Барберы", "Отзывы", "Запись"]
@@ -276,51 +360,98 @@ function createDraftFromProfile(profile: AgentProfile): DraftState {
     ? ["О нас", "Услуги", "Команда", "Отзывы", "Запись"]
     : ["О нас", "Услуги", "Отзывы", "FAQ", "Контакты"];
 
-  const baseServices = isBarber
+  const barberServices = [
+    { emoji: "✂️", title: "Стрижка мужская", duration: "60 мин", price: "1 800 ₽" },
+    { emoji: "🧔", title: "Стрижка + борода", duration: "90 мин", price: "2 500 ₽" },
+    { emoji: "💈", title: "Оформление бороды", duration: "45 мин", price: "1 200 ₽" },
+    { emoji: "🔥", title: "Премиум-комплекс", duration: "120 мин", price: "3 500 ₽" }
+  ];
+  const nailsServices = [
+    { emoji: "💅", title: "Маникюр классический", duration: "60 мин", price: "1 200 ₽" },
+    { emoji: "✨", title: "Маникюр с покрытием", duration: "90 мин", price: "1 800 ₽" },
+    { emoji: "🦶", title: "Педикюр", duration: "80 мин", price: "2 100 ₽" },
+    { emoji: "💎", title: "Комплекс VIP", duration: "120 мин", price: "3 500 ₽" }
+  ];
+  const clinicServices = [
+    { emoji: "🩺", title: "Первичная консультация", duration: "40 мин", price: "2 000 ₽" },
+    { emoji: "🧪", title: "Диагностика", duration: "50 мин", price: "3 500 ₽" },
+    { emoji: "📋", title: "План лечения", duration: "30 мин", price: "1 500 ₽" },
+    { emoji: "✅", title: "Контрольный прием", duration: "25 мин", price: "1 200 ₽" }
+  ];
+  const base = isBarber ? barberServices : isNails ? nailsServices : isClinic ? clinicServices : nailsServices;
+  const services = base.map((item) => ({
+    id: uid(),
+    emoji: item.emoji,
+    title: item.title,
+    duration: item.duration,
+    price: item.price
+  }));
+
+  const heroVariants = isBarber
     ? [
-        { id: uid(), emoji: "✂️", title: "Стрижка мужская", duration: "60 мин", price: "1 800 ₽" },
-        { id: uid(), emoji: "🧔", title: "Стрижка + борода", duration: "90 мин", price: "2 500 ₽" },
-        { id: uid(), emoji: "💈", title: "Оформление бороды", duration: "45 мин", price: "1 200 ₽" },
-        { id: uid(), emoji: "🔥", title: "Премиум-комплекс", duration: "120 мин", price: "3 500 ₽" }
+        "Место, где стиль и сервис работают на тебя",
+        "Барбершоп, куда возвращаются за уровнем и атмосферой",
+        "Точная стрижка, сильный образ, сервис без компромиссов"
+      ]
+    : isNails
+    ? [
+        "Место, где сервис - это искусство",
+        "Салон, где каждый визит выглядит как забота о себе",
+        "Тонкая эстетика и высокий сервис в каждом касании"
       ]
     : [
-        { id: uid(), emoji: "💅", title: "Маникюр классический", duration: "60 мин", price: "1 200 ₽" },
-        { id: uid(), emoji: "✨", title: "Маникюр с покрытием", duration: "90 мин", price: "1 800 ₽" },
-        { id: uid(), emoji: "🦶", title: "Педикюр", duration: "80 мин", price: "2 100 ₽" },
-        { id: uid(), emoji: "💎", title: "Комплекс VIP", duration: "120 мин", price: "3 500 ₽" }
+        "Сервис, где качество чувствуется в каждой детали",
+        "Точный процесс, понятный результат, сильная подача",
+        "Современный сайт, который превращает интерес в запись"
       ];
 
-  const styleLabel = profile.style ? ` Стиль: ${profile.style}.` : "";
-  const goalLabel = profile.goal ? ` Цель: ${profile.goal}.` : "";
-  const mustHaveLabel = profile.mustHave.length ? ` Обязательные блоки: ${profile.mustHave.join(", ")}.` : "";
+  const heroSubtitle = [
+    `Собрали индивидуальный сайт для ${businessName} в ${profile.city || "вашем городе"}.`,
+    profile.goal ? `Фокус: ${profile.goal.toLowerCase()}.` : "Фокус на конверсии из первого экрана.",
+    profile.style ? `Визуальный стиль: ${profile.style.toLowerCase()}.` : `Дизайн-концепт: ${preset.label}.`
+  ].join(" ");
+
+  const mustHave = profile.mustHave.length ? profile.mustHave : ["Прайс", "Отзывы", "Онлайн-запись"];
+  const summaryPoints = [
+    "Индивидуальный первый экран с оффером и CTA",
+    `Навигация под нишу: ${nav.join(", ")}`,
+    `Секции под задачу: ${mustHave.join(", ")}`,
+    `Дизайн-вариант: ${preset.label}`,
+    "Готов к публикации и дальнейшей перегенерации"
+  ];
 
   return {
     businessName,
     city: profile.city || "Москва",
     niche: normalizedNiche,
-    accentColor,
-    heroTitle: isBarber ? "Место, где стиль и сервис работают на тебя" : "Место, где сервис - это искусство",
-    heroSubtitle: `Собрали сайт под ${normalizedNiche.toLowerCase()} в ${profile.city || "вашем городе"}.${goalLabel}${styleLabel}${mustHaveLabel}`.trim(),
+    accentColor: preset.accent,
+    pageBg: preset.pageBg,
+    surfaceBg: preset.surfaceBg,
+    headlineStyle: preset.headlineStyle,
+    styleLabel: preset.label,
+    heroTitle: pick(heroVariants, rnd),
+    heroSubtitle,
     aboutTitle: "О нас",
     aboutBody:
-      "Мы работаем с акцентом на качество, стерильность и удобный клиентский опыт. Каждый визит проходит по понятному сценарию: запрос, выбор услуги, запись, результат.",
-    primaryCta: "Записаться",
+      "Мы собрали структуру под ваш бизнес: понятный оффер, логичный путь к записи и контент, который работает на доверие и конверсию.",
+    primaryCta: profile.goal.includes("звон") ? "Позвонить сейчас" : "Записаться",
     secondaryCta: "Открыть прайс",
     contactLine: `${businessName}, ${profile.city || "Москва"}`,
     navItems: nav,
-    services: baseServices,
+    services,
     faq: [
       {
         id: uid(),
         q: "Как быстро можно записаться?",
-        a: "Обычно на ближайшие слоты можно записаться в день обращения или на следующий день."
+        a: "Обычно на ближайшие слоты можно попасть в день обращения или на следующий день."
       },
       {
         id: uid(),
-        q: "Стерильны ли инструменты?",
-        a: "Да, все инструменты проходят полный цикл обработки и стерилизации."
+        q: "Можно поменять структуру и стиль?",
+        a: "Да, можно перегенерировать дизайн и переписать контент под новый запрос в этом же чате."
       }
     ],
+    summaryPoints,
     socialLinks: {}
   };
 }
@@ -398,6 +529,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
   const [publishingOverlay, setPublishingOverlay] = useState(false);
   const [overlayMessage, setOverlayMessage] = useState("Публикуем сайт...");
   const [previewExpanded, setPreviewExpanded] = useState(true);
+  const [generationRound, setGenerationRound] = useState(1);
   const [profile, setProfile] = useState<AgentProfile>({
     businessName: "",
     niche: "",
@@ -454,7 +586,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
     });
   };
 
-  const generateFromProfile = (nextProfile: AgentProfile) => {
+  const generateFromProfile = (nextProfile: AgentProfile, guidance: string, nextRound: number) => {
     setError(null);
     setGenerationStatus("loading");
     setPaymentStatus("idle");
@@ -469,10 +601,15 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
     }, 260);
 
     window.setTimeout(() => {
-      const nextDraft = createDraftFromProfile(nextProfile);
+      const nextDraft = createDraftFromProfile(nextProfile, guidance, nextRound);
       setDraft(nextDraft);
+      setGenerationRound(nextRound);
       setProfile(nextProfile);
-      addMessage("assistant", `Готово. Собрал первый вариант для «${nextDraft.businessName}». Можем дальше править в чате.`);
+      const summary = nextDraft.summaryPoints.map((point) => `• ${point}`).join("\n");
+      addMessage(
+        "assistant",
+        `Готово. Собрал индивидуальный вариант #${nextRound} для «${nextDraft.businessName}».\n\nЧто уже есть:\n${summary}\n\nЕсли нужно, напиши «перегенерируй» — сделаю новый дизайн с нуля под тот же бриф.`
+      );
       setGenerationStatus("success");
       setIsWorking(false);
     }, 1100);
@@ -498,7 +635,12 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
         addMessage("assistant", question || "Уточни, пожалуйста, пару деталей и сразу соберу сайт.", "soft");
         return;
       }
-      generateFromProfile(mergedProfile);
+      generateFromProfile(mergedProfile, text, 1);
+      return;
+    }
+
+    if (detectRegenerateIntent(text)) {
+      generateFromProfile(mergedProfile, text, generationRound + 1);
       return;
     }
 
@@ -633,9 +775,11 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
               <span>↗</span>
             </div>
 
-            <div className="bg-[#f6f2f3]">
+            <div style={{ backgroundColor: draft?.pageBg || "#f6f2f3" }}>
               <div className="flex items-center justify-between border-b border-[#e8d8da] bg-white/80 px-6 py-4">
-                <p className="text-3xl font-semibold text-[#c77a7a]">✿ {draft?.businessName || "Studio"}</p>
+                <p className="text-3xl font-semibold" style={{ color: draft?.accentColor || "#c77a7a" }}>
+                  ✿ {draft?.businessName || "Studio"}
+                </p>
                 <div className="hidden items-center gap-6 text-base text-slate-700 2xl:flex">
                   {(draft?.navItems || ["О нас", "Услуги", "Отзывы", "Запись"]).map((item) => (
                     <span key={item}>{item}</span>
@@ -644,8 +788,15 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
               </div>
 
               <div className="mx-auto max-w-[980px] px-6 py-8">
-                <p className="text-center text-xs uppercase tracking-[0.35em] text-[#c77a7a]">{draft?.aboutTitle || "О нас"}</p>
-                <h3 className="mt-3 text-center text-4xl font-semibold leading-tight text-slate-800 md:text-5xl">
+                <div className="mb-2 flex justify-center">
+                  <span className="rounded-full border border-slate-200 bg-white/80 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+                    {draft?.styleLabel || "Generated"}
+                  </span>
+                </div>
+                <p className="text-center text-xs uppercase tracking-[0.35em]" style={{ color: draft?.accentColor || "#c77a7a" }}>
+                  {draft?.aboutTitle || "О нас"}
+                </p>
+                <h3 className={`mt-3 text-center text-4xl leading-tight text-slate-800 md:text-5xl ${draft?.headlineStyle === "serif" ? "font-serif" : "font-semibold"}`}>
                   {draft?.heroTitle || "Место, где сервис - это искусство"}
                 </h3>
                 <p className="mx-auto mt-4 max-w-[820px] text-center text-lg leading-[1.55] text-slate-600">
@@ -654,14 +805,16 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
 
                 <div className="mt-8 grid gap-3 lg:grid-cols-2">
                   {(draft?.services || []).slice(0, 4).map((service) => (
-                    <div key={service.id} className="rounded-2xl border border-[#efe4e6] bg-white px-4 py-3">
+                    <div key={service.id} className="rounded-2xl border border-[#efe4e6] bg-white/90 px-4 py-3" style={{ backgroundColor: draft?.surfaceBg || "#fffafb" }}>
                       <div className="flex items-start justify-between gap-2">
                         <div>
                           <p className="text-2xl">{service.emoji}</p>
                           <p className="mt-1 text-xl font-semibold leading-snug text-slate-800">{service.title}</p>
                           <p className="mt-1 text-sm text-slate-500">{service.duration}</p>
                         </div>
-                        <p className="pt-2 text-2xl font-semibold text-[#c77a7a]">{service.price}</p>
+                        <p className="pt-2 text-2xl font-semibold" style={{ color: draft?.accentColor || "#c77a7a" }}>
+                          {service.price}
+                        </p>
                       </div>
                     </div>
                   ))}
