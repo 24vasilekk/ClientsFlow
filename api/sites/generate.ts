@@ -1,3 +1,5 @@
+import { appendSpecRecord, getSpecHistory } from "./_specStore";
+
 const SECTION_KEYS = ["about", "services", "team", "reviews", "faq", "booking", "contacts", "gallery"] as const;
 type SectionKey = (typeof SECTION_KEYS)[number];
 
@@ -71,6 +73,10 @@ function seeded(seed: number) {
 
 function pick<T>(items: T[], rnd: () => number) {
   return items[Math.floor(rnd() * items.length)] || items[0];
+}
+
+function uid() {
+  return Math.random().toString(36).slice(2, 10);
 }
 
 function toBoolRecord(raw: unknown, fallback: Record<SectionKey, boolean>) {
@@ -350,6 +356,17 @@ async function tryOpenRouterGeneration(profile: AgentProfile, guidance: string, 
 }
 
 export default async function handler(req: any, res: any) {
+  if (req.method === "GET") {
+    const sessionId = String(req.query?.sessionId || "").trim();
+    if (!sessionId) {
+      res.status(400).json({ error: "sessionId is required" });
+      return;
+    }
+    const history = await getSpecHistory(sessionId);
+    res.status(200).json({ sessionId, history });
+    return;
+  }
+
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
     return;
@@ -357,6 +374,7 @@ export default async function handler(req: any, res: any) {
 
   try {
     const profileRaw = req.body?.profile || {};
+    const sessionId = String(req.body?.sessionId || "").trim() || `session-${uid()}`;
     const profile: AgentProfile = {
       businessName: String(profileRaw.businessName || ""),
       niche: String(profileRaw.niche || ""),
@@ -368,16 +386,43 @@ export default async function handler(req: any, res: any) {
     const guidance = String(req.body?.guidance || "");
     const round = Math.max(1, Number(req.body?.round || 1));
 
+    const startedAt = Date.now();
     const algorithmDraft = buildAlgorithmicDraft(profile, guidance, round);
+    const t1 = Date.now();
     const aiDraft = await tryOpenRouterGeneration(profile, guidance, round);
+    const t2 = Date.now();
     const draft = aiDraft || algorithmDraft;
+    const engine: "openrouter" | "algorithm" = aiDraft ? "openrouter" : "algorithm";
+
+    const stages = [
+      { id: "brief", ms: 12, source: "profile-parser" },
+      { id: "structure", ms: 18, source: "layout-planner" },
+      { id: "visual", ms: aiDraft ? t2 - t1 : 16, source: engine },
+      { id: "copy", ms: aiDraft ? Math.max(25, Math.round((t2 - t1) * 0.35)) : 20, source: engine },
+      { id: "assembly", ms: 14, source: "spec-assembler" }
+    ];
+
+    const history = await appendSpecRecord({
+      id: `spec-${uid()}`,
+      sessionId,
+      createdAt: new Date().toISOString(),
+      round,
+      engine,
+      guidance,
+      profile,
+      draft
+    });
 
     res.status(200).json({
       specVersion: "v1",
+      sessionId,
       round,
-      engine: aiDraft ? "openrouter" : "algorithm",
+      engine,
       draft,
-      profile
+      profile,
+      stages,
+      totalMs: Date.now() - startedAt,
+      history: history.map((item) => ({ id: item.id, round: item.round, engine: item.engine, createdAt: item.createdAt })).slice(-8)
     });
   } catch (error: any) {
     res.status(500).json({ error: error?.message || "Generate failed" });

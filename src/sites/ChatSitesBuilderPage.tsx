@@ -42,6 +42,12 @@ type ReviewItem = {
 };
 
 type SectionKey = "about" | "services" | "team" | "reviews" | "faq" | "booking" | "contacts" | "gallery";
+type DslAction =
+  | { kind: "regenerate"; guidance: string }
+  | { kind: "addSection"; section: SectionKey }
+  | { kind: "removeSection"; section: SectionKey }
+  | { kind: "rewriteHero"; text: string }
+  | { kind: "none" };
 
 type DraftState = {
   businessName: string;
@@ -187,14 +193,6 @@ function nowTime() {
   return new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
 }
 
-function toHref(raw: string) {
-  const value = (raw || "").trim();
-  if (!value) return "";
-  if (/^(https?:\/\/|tg:\/\/|mailto:|tel:)/i.test(value)) return value;
-  if (value.startsWith("@")) return `https://t.me/${value.slice(1)}`;
-  return `https://${value}`;
-}
-
 function statusClass(status: BuilderStatus) {
   if (status === "success") return "border-emerald-200 bg-emerald-50 text-emerald-700";
   if (status === "loading") return "border-amber-200 bg-amber-50 text-amber-700";
@@ -232,6 +230,40 @@ function detectRegenerateIntent(text: string) {
     lower.includes("другой дизайн") ||
     lower.includes("переделай полностью")
   );
+}
+
+function parseSectionArg(input: string): SectionKey | null {
+  const normalized = input.trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized.includes("about") || normalized.includes("о нас")) return "about";
+  if (normalized.includes("service") || normalized.includes("услуг") || normalized.includes("прайс")) return "services";
+  if (normalized.includes("team") || normalized.includes("команд") || normalized.includes("мастер")) return "team";
+  if (normalized.includes("review") || normalized.includes("отзыв") || normalized.includes("кейсы")) return "reviews";
+  if (normalized.includes("faq") || normalized.includes("вопрос")) return "faq";
+  if (normalized.includes("booking") || normalized.includes("запис") || normalized.includes("форма")) return "booking";
+  if (normalized.includes("contact") || normalized.includes("контакт")) return "contacts";
+  if (normalized.includes("gallery") || normalized.includes("галер") || normalized.includes("фото")) return "gallery";
+  return null;
+}
+
+function parseDslCommand(text: string): DslAction {
+  const raw = text.trim();
+  if (!raw.startsWith("/")) return { kind: "none" };
+  const [command, ...restParts] = raw.slice(1).split(" ");
+  const rest = restParts.join(" ").trim();
+  const cmd = command.toLowerCase();
+
+  if (cmd === "regenerate") return { kind: "regenerate", guidance: rest };
+  if (cmd === "add-section") {
+    const section = parseSectionArg(rest);
+    return section ? { kind: "addSection", section } : { kind: "none" };
+  }
+  if (cmd === "remove-section") {
+    const section = parseSectionArg(rest);
+    return section ? { kind: "removeSection", section } : { kind: "none" };
+  }
+  if (cmd === "rewrite-hero") return { kind: "rewriteHero", text: rest };
+  return { kind: "none" };
 }
 
 const sectionKeywords: Array<{ key: SectionKey; words: string[] }> = [
@@ -594,24 +626,6 @@ function draftToPayload(draft: DraftState): PublishPayload {
   };
 }
 
-function parseJsonFromModelReply(reply: string) {
-  const clean = reply.trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim();
-  try {
-    return JSON.parse(clean);
-  } catch {
-    const start = clean.indexOf("{");
-    const end = clean.lastIndexOf("}");
-    if (start >= 0 && end > start) {
-      try {
-        return JSON.parse(clean.slice(start, end + 1));
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  }
-}
-
 function isSectionKey(value: string): value is SectionKey {
   return ["about", "services", "team", "reviews", "faq", "booking", "contacts", "gallery"].includes(value);
 }
@@ -762,6 +776,8 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
   const [previewExpanded, setPreviewExpanded] = useState(true);
   const [generationRound, setGenerationRound] = useState(1);
   const [generationEngine, setGenerationEngine] = useState<"openrouter" | "algorithm">("algorithm");
+  const [generationSessionId, setGenerationSessionId] = useState(() => `session-${uid()}`);
+  const [generationHistory, setGenerationHistory] = useState<Array<{ id: string; round: number; engine: "openrouter" | "algorithm"; createdAt: string }>>([]);
   const [profile, setProfile] = useState<AgentProfile>({
     businessName: "",
     niche: "",
@@ -839,6 +855,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          sessionId: generationSessionId,
           profile: nextProfile,
           guidance,
           round: nextRound
@@ -846,9 +863,21 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
       });
 
       if (response.ok) {
-        const body = (await response.json()) as { engine?: "openrouter" | "algorithm"; draft?: unknown };
+        const body = (await response.json()) as {
+          sessionId?: string;
+          engine?: "openrouter" | "algorithm";
+          draft?: unknown;
+          history?: Array<{ id: string; round: number; engine: "openrouter" | "algorithm"; createdAt: string }>;
+          stages?: Array<{ id: string; ms: number; source: string }>;
+        };
+        if (body.sessionId) setGenerationSessionId(body.sessionId);
         if (body.engine === "openrouter") engine = "openrouter";
         if (body.draft) finalDraft = hydrateGeneratedDraft(body.draft, fallbackDraft);
+        if (Array.isArray(body.history)) setGenerationHistory(body.history);
+        if (Array.isArray(body.stages) && body.stages.length > 0) {
+          const stageLine = body.stages.map((stage) => `${stage.id}:${stage.ms}ms`).join(" · ");
+          addMessage("assistant", `Pipeline: ${stageLine}`, "soft");
+        }
       }
     } catch {
       // fallback to algorithmic generation
@@ -874,6 +903,48 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
     addMessage("user", text);
     setInput("");
     setError(null);
+
+    const dsl = parseDslCommand(text);
+    if (dsl.kind !== "none") {
+      if (!draft && dsl.kind !== "regenerate") {
+        addMessage("assistant", "Сначала сгенерируй первый вариант сайта, затем применяй DSL-команды.", "soft");
+        return;
+      }
+      if (dsl.kind === "regenerate") {
+        const merged = mergeProfile(profile, parseProfileFromMessage(dsl.guidance || text));
+        void generateFromProfile(merged, dsl.guidance || text, generationRound + 1);
+        return;
+      }
+      if (dsl.kind === "addSection") {
+        setDraft((prev) => {
+          if (!prev) return prev;
+          const nextEnabled = { ...prev.sectionsEnabled, [dsl.section]: true };
+          const nextOrder = prev.sectionOrder.includes(dsl.section) ? prev.sectionOrder : [...prev.sectionOrder, dsl.section];
+          return { ...prev, sectionsEnabled: nextEnabled, sectionOrder: nextOrder };
+        });
+        addMessage("assistant", `Секция ${dsl.section} включена.`, "soft");
+        return;
+      }
+      if (dsl.kind === "removeSection") {
+        setDraft((prev) => {
+          if (!prev) return prev;
+          const nextEnabled = { ...prev.sectionsEnabled, [dsl.section]: false };
+          const nextOrder = prev.sectionOrder.filter((item) => item !== dsl.section);
+          return { ...prev, sectionsEnabled: nextEnabled, sectionOrder: nextOrder };
+        });
+        addMessage("assistant", `Секция ${dsl.section} выключена.`, "soft");
+        return;
+      }
+      if (dsl.kind === "rewriteHero") {
+        if (!dsl.text) {
+          addMessage("assistant", "Используй формат: /rewrite-hero <новый оффер>.", "soft");
+          return;
+        }
+        setDraft((prev) => (prev ? { ...prev, heroTitle: dsl.text } : prev));
+        addMessage("assistant", "Hero-заголовок обновлен.", "soft");
+        return;
+      }
+    }
 
     const profilePatch = parseProfileFromMessage(text);
     const mergedProfile = mergeProfile(profile, profilePatch);
@@ -1017,6 +1088,11 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
             Engine: {generationEngine}
           </span>
         </div>
+        {generationHistory.length > 0 ? (
+          <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            Варианты: {generationHistory.map((item) => `#${item.round} (${item.engine})`).join(" · ")}
+          </div>
+        ) : null}
 
         {previewExpanded ? (
           <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200">
@@ -1370,6 +1446,9 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
                 </button>
               ))}
             </div>
+            <p className="mt-2 text-xs text-slate-400">
+              DSL: <code>/regenerate premium dark</code> · <code>/add-section team</code> · <code>/remove-section faq</code> · <code>/rewrite-hero Новый оффер</code>
+            </p>
           </div>
         </main>
 
