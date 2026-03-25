@@ -1837,7 +1837,9 @@ function hydrateGeneratedDraft(raw: any, fallback: DraftState): DraftState {
   const finalized = finalizeDraft(merged);
   if (typeof raw?.componentCode === "string" && raw.componentCode.trim()) finalized.componentCode = raw.componentCode;
   if (typeof raw?.pageCode === "string" && raw.pageCode.trim()) finalized.pageCode = raw.pageCode;
-  if ((!finalized.pageCode || !finalized.pageCode.trim()) && finalized.componentCode?.trim()) {
+  // Strict code-first: when AI returns a component, preview must always render this component,
+  // never the local HTML template produced by finalizeDraft/buildPageCode.
+  if (finalized.componentCode?.trim()) {
     finalized.pageCode = wrapReactComponentForPreview(finalized.componentCode);
   }
   return finalized;
