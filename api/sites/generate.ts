@@ -9,11 +9,13 @@ import {
   parseJsonFromText,
   sanitizeBrief
 } from "../../lib/sites/websiteBuilderHelpers";
+import { isValidCodePayloadShape, isValidWebsiteBriefShape } from "../../lib/sites/websiteBuilderValidation";
 import {
   briefExtractionPrompt,
-  codeGenerationPrompt,
+  codeGenerationPromptWithOptions,
   fixCodePrompt,
-  improveCodePrompt
+  improveCodePrompt,
+  getWebsitePromptPack
 } from "../../lib/sites/websiteBuilderPrompts";
 import { WebsiteBrief, WebsiteBuilderMode, WebsiteBuilderRequest } from "../../lib/sites/websiteBuilderTypes";
 
@@ -44,7 +46,7 @@ function normalizeProfile(raw: any): AgentProfile {
 function parseComponentCodeFromModel(raw: string) {
   const parsed = parseJsonFromText(raw);
   const candidate =
-    parsed && typeof parsed === "object" && typeof (parsed as any).componentCode === "string"
+    isValidCodePayloadShape(parsed) && typeof (parsed as any).componentCode === "string"
       ? String((parsed as any).componentCode).trim()
       : extractCodeBlock(raw);
   if (!looksLikeReactComponent(candidate)) return "";
@@ -54,6 +56,7 @@ function parseComponentCodeFromModel(raw: string) {
 async function openRouterCompletion(input: {
   apiKey: string;
   model: string;
+  systemPrompt?: string;
   userPrompt: string;
   timeoutMs: number;
   temperature?: number;
@@ -74,8 +77,7 @@ async function openRouterCompletion(input: {
         messages: [
           {
             role: "system",
-            content:
-              "You are a senior frontend engineer. Return only requested JSON payloads. Never return markdown fences or extra commentary."
+            content: input.systemPrompt || "You are a senior React + Tailwind website generator. Return only requested output format."
           },
           { role: "user", content: input.userPrompt }
         ]
@@ -153,6 +155,8 @@ export default async function handler(req: any, res: any) {
     const sessionId = String(body.sessionId || "").trim() || `session-${Math.random().toString(36).slice(2, 10)}`;
     const round = Math.max(1, Number(body.round || 1));
     const mode: WebsiteBuilderMode = body.mode === "fix" || body.mode === "improve" ? body.mode : "generate";
+    const promptPackVersion = String((req.body || {}).promptPack || "A").toUpperCase() === "B" ? "B" : "A";
+    const promptPack = getWebsitePromptPack(promptPackVersion);
     const guidance = String(body.guidance || "").trim();
     const currentComponentCode = String(body.currentComponentCode || "").trim();
     const errorText = String(body.errorText || "").trim();
@@ -161,7 +165,10 @@ export default async function handler(req: any, res: any) {
     const apiKey = String(process.env.OPENROUTER_API_KEY || "")
       .replace(/[\r\n\s\u200B-\u200D\uFEFF]+/g, "")
       .trim();
-    const model = String(process.env.OPENROUTER_MODEL_SITES || process.env.OPENROUTER_MODEL || "openai/gpt-4.1").trim();
+    const modelBrief = String(process.env.OPENROUTER_MODEL_SITES_BRIEF || process.env.OPENROUTER_MODEL_SITES || process.env.OPENROUTER_MODEL || "openai/gpt-4.1").trim();
+    const modelCode = String(process.env.OPENROUTER_MODEL_SITES_CODE || process.env.OPENROUTER_MODEL_SITES || process.env.OPENROUTER_MODEL || "openai/gpt-4.1").trim();
+    const modelPolish = String(process.env.OPENROUTER_MODEL_SITES_POLISH || process.env.OPENROUTER_MODEL_SITES || process.env.OPENROUTER_MODEL || "openai/gpt-4.1").trim();
+    const modelFix = String(process.env.OPENROUTER_MODEL_SITES_FIX || process.env.OPENROUTER_MODEL_SITES || process.env.OPENROUTER_MODEL || "openai/gpt-4.1").trim();
     if (!apiKey) {
       res.status(502).json({
         specVersion: "v2-website-builder",
@@ -189,7 +196,8 @@ export default async function handler(req: any, res: any) {
       stage = "fix_request";
       const text = await openRouterCompletion({
         apiKey,
-        model,
+        model: modelFix,
+        systemPrompt: promptPack.systemGeneration,
         userPrompt: fixCodePrompt({ currentCode: currentComponentCode, errorText }),
         timeoutMs: 22000,
         temperature: 0.3
@@ -204,8 +212,9 @@ export default async function handler(req: any, res: any) {
       stage = "improve_request";
       const text = await openRouterCompletion({
         apiKey,
-        model,
-        userPrompt: improveCodePrompt({ currentCode: currentComponentCode, brief: fallbackBrief }),
+        model: modelPolish,
+        systemPrompt: promptPack.systemPolish,
+        userPrompt: improveCodePrompt({ currentCode: currentComponentCode, brief: fallbackBrief }, { promptPack: promptPackVersion }),
         timeoutMs: 26000,
         temperature: 0.8
       });
@@ -216,42 +225,90 @@ export default async function handler(req: any, res: any) {
     }
 
     stage = "brief_request";
-    const briefText = await openRouterCompletion({
-      apiKey,
-      model,
-      userPrompt: briefExtractionPrompt({
-        guidance,
-        businessName: profile.businessName,
-        niche: profile.niche,
-        city: profile.city,
-        goal: profile.goal,
-        style: profile.style,
-        styleReference: profile.styleReference,
-        mustHave: profile.mustHave
-      }),
-      timeoutMs: 18000,
-      temperature: 0.2
-    });
-    const briefRaw = parseJsonFromText(briefText);
+    const requestBrief = async () =>
+      openRouterCompletion({
+        apiKey,
+        model: modelBrief,
+        systemPrompt: promptPack.systemBrief,
+        userPrompt: briefExtractionPrompt({
+          guidance,
+          businessName: profile.businessName,
+          niche: profile.niche,
+          city: profile.city,
+          goal: profile.goal,
+          style: profile.style,
+          styleReference: profile.styleReference,
+          mustHave: profile.mustHave
+        }, { promptPack: promptPackVersion }),
+        timeoutMs: 18000,
+        temperature: 0.2
+      });
+    const briefText = await requestBrief();
+    let briefRaw = parseJsonFromText(briefText);
+    if (!isValidWebsiteBriefShape(briefRaw)) {
+      const strictBriefText = await openRouterCompletion({
+        apiKey,
+        model: modelBrief,
+        systemPrompt: promptPack.systemBrief,
+        userPrompt:
+          "Верни строго валидный JSON по схеме без пропусков полей и без markdown. " +
+          briefExtractionPrompt({
+            guidance,
+            businessName: profile.businessName,
+            niche: profile.niche,
+            city: profile.city,
+            goal: profile.goal,
+            style: profile.style,
+            styleReference: profile.styleReference,
+            mustHave: profile.mustHave
+          }, { promptPack: promptPackVersion }),
+        timeoutMs: 18000,
+        temperature: 0.1
+      });
+      briefRaw = parseJsonFromText(strictBriefText);
+    }
+    if (!isValidWebsiteBriefShape(briefRaw)) {
+      throw new Error("BRIEF_SCHEMA_VALIDATION_FAILED");
+    }
     const brief = sanitizeBrief(briefRaw, fallbackBrief);
 
     stage = "code_request";
-    const codeText = await openRouterCompletion({
-      apiKey,
-      model,
-      userPrompt: codeGenerationPrompt(brief),
-      timeoutMs: 26000,
-      temperature: 0.85
-    });
-    let componentCode = parseComponentCodeFromModel(codeText);
+    const requestCode = async (prompt: string, temperature = 0.85) =>
+      openRouterCompletion({
+        apiKey,
+        model: modelCode,
+        systemPrompt: promptPack.systemGeneration,
+        userPrompt: prompt,
+        timeoutMs: 26000,
+        temperature
+      });
+    const codeText = await requestCode(codeGenerationPromptWithOptions(brief, { promptPack: promptPackVersion }), 0.85);
+    let parsedCodeRaw = parseJsonFromText(codeText);
+    if (!isValidCodePayloadShape(parsedCodeRaw)) {
+      const strictCodeText = await requestCode(
+        'Верни строго JSON формата {"componentCode":"..."} без markdown и без лишних полей. ' +
+          codeGenerationPromptWithOptions(brief, { promptPack: promptPackVersion }),
+        0.8
+      );
+      parsedCodeRaw = parseJsonFromText(strictCodeText);
+      if (!isValidCodePayloadShape(parsedCodeRaw)) {
+        throw new Error("CODE_SCHEMA_VALIDATION_FAILED");
+      }
+    }
+    let componentCode = parseComponentCodeFromModel(
+      JSON.stringify({
+        componentCode: String((parsedCodeRaw as any).componentCode || "")
+      })
+    );
     if (!componentCode) throw new Error("COMPONENT_CODE_MISSING");
 
     if (looksLowQualityComponent(componentCode)) {
       stage = "quality_improve_request";
       const improveText = await openRouterCompletion({
         apiKey,
-        model,
-        userPrompt: improveCodePrompt({ currentCode: componentCode, brief }),
+        model: modelPolish,
+        systemPrompt: promptPack.systemPolish,
+        userPrompt: improveCodePrompt({ currentCode: componentCode, brief }, { promptPack: promptPackVersion }),
         timeoutMs: 22000,
         temperature: 0.85
       });

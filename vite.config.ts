@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { createPublishedSite, getPublishedSite, type PublishedSitePayload } from "./lib/sites/store";
+import chatApiHandler from "./api/openrouter/chat";
 
 function openRouterMiddleware() {
   const systemPrompt =
@@ -187,6 +188,11 @@ function openRouterMiddleware() {
         res.end(JSON.stringify({ error: error?.message || "Sites API error" }));
         return;
       }
+    }
+
+    if (isChatRoute) {
+      await chatApiHandler(req, res);
+      return;
     }
 
     if (isTelegramGetUpdatesRoute || isTelegramSendRoute) {

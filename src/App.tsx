@@ -20,6 +20,29 @@ type ApiChatMessage = {
   content: string | Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }>;
 };
 
+type WebsiteBriefPreview = {
+  businessType?: string;
+  city?: string;
+  brandName?: string;
+  primaryGoal?: string;
+  primaryCTA?: string;
+};
+
+type WebsiteGenerationMeta = {
+  totalMs?: number;
+  canRepair?: boolean;
+  promptPack?: "A" | "B";
+  action?: string;
+};
+
+type WebsiteFixLogItem = {
+  at: string;
+  attempt: number;
+  error: string;
+  status: "started" | "failed" | "succeeded";
+  note?: string;
+};
+
 const AUTH_KEY = "clientsflow_demo_auth_v1";
 const WORKBENCH_AUTH_KEY = "clientsflow_workbench_auth_v1";
 
@@ -390,6 +413,67 @@ function buildDemoReply(userText: string, kind: ChatMessage["kind"]) {
   return null;
 }
 
+function buildWebsitePreviewDoc(appCode: string) {
+  const source = String(appCode || "").trim();
+  if (!source) return "";
+  const escaped = source
+    .replace(/\\/g, "\\\\")
+    .replace(/`/g, "\\`")
+    .replace(/\$\{/g, "\\${");
+  return `<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src https: data: blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline' https://cdn.tailwindcss.com https://unpkg.com; connect-src 'none'; font-src https: data:;" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-slate-100">
+  <div id="root"></div>
+  <script type="text/babel" data-presets="typescript,react">
+    const source = \`${escaped}\`;
+    let cleaned = source.replace(/^\\s*import\\s+.*$/gm, "");
+    window.__CF_WEBSITE_COMPONENT__ = null;
+
+    if (/export\\s+default\\s+/m.test(cleaned)) {
+      cleaned = cleaned.replace(/export\\s+default\\s+/m, "const __CF_WEBSITE_COMPONENT__ = ");
+      cleaned += "\\nwindow.__CF_WEBSITE_COMPONENT__ = __CF_WEBSITE_COMPONENT__;";
+    } else {
+      const fnMatch = cleaned.match(/function\\s+([A-Z][A-Za-z0-9_]*)\\s*\\(/);
+      const constMatch = cleaned.match(/const\\s+([A-Z][A-Za-z0-9_]*)\\s*=\\s*/);
+      const inferred = (fnMatch && fnMatch[1]) || (constMatch && constMatch[1]) || "";
+      if (inferred) cleaned += "\\nwindow.__CF_WEBSITE_COMPONENT__ = " + inferred + ";";
+    }
+
+    try {
+      const transformed = Babel.transform(cleaned, {
+        filename: "App.jsx",
+        presets: ["typescript", "react"]
+      }).code;
+      eval(transformed);
+    } catch (e) {
+      try { window.parent.postMessage({ type: "cflow_website_preview_error", error: String(e) }, "*"); } catch {}
+      document.body.innerHTML = "<pre style='padding:16px;color:#b91c1c;white-space:pre-wrap'>Build/runtime error\\n\\n" + String(e) + "</pre>";
+    }
+
+    const App = window.__CF_WEBSITE_COMPONENT__;
+    if (typeof App === "function") {
+      const root = ReactDOM.createRoot(document.getElementById("root"));
+      root.render(React.createElement(App));
+      try { window.parent.postMessage({ type: "cflow_website_preview_ok" }, "*"); } catch {}
+    } else if (!document.body.innerHTML.includes("Build/runtime error")) {
+      const message = "Компонент не найден. Ожидается export default function App() { ... }";
+      try { window.parent.postMessage({ type: "cflow_website_preview_error", error: message }, "*"); } catch {}
+      document.body.innerHTML = "<pre style='padding:16px;color:#b91c1c;white-space:pre-wrap'>" + message + "</pre>";
+    }
+  </script>
+</body>
+</html>`;
+}
+
 function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -405,7 +489,19 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
   const [showCabinetCta, setShowCabinetCta] = useState(false);
   const [chatMode, setChatMode] = useState<"openrouter" | "mock">("openrouter");
   const [howStepIndex, setHowStepIndex] = useState(0);
+  const [websiteCode, setWebsiteCode] = useState("");
+  const [websiteTitle, setWebsiteTitle] = useState("AI Website Preview");
+  const [websiteBrief, setWebsiteBrief] = useState<WebsiteBriefPreview | null>(null);
+  const [websiteGenerationMeta, setWebsiteGenerationMeta] = useState<WebsiteGenerationMeta | null>(null);
+  const [websitePreviewError, setWebsitePreviewError] = useState<string | null>(null);
+  const [websiteAutoFixAttempts, setWebsiteAutoFixAttempts] = useState(0);
+  const [websiteAutoFixInProgress, setWebsiteAutoFixInProgress] = useState(false);
+  const [websiteAutoFixFailed, setWebsiteAutoFixFailed] = useState(false);
+  const [websiteFixLog, setWebsiteFixLog] = useState<WebsiteFixLogItem[]>([]);
+  const [websitePromptPack, setWebsitePromptPack] = useState<"A" | "B">("A");
+  const [websiteActionLoading, setWebsiteActionLoading] = useState<null | "regenerate" | "premium" | "light" | "simplify">(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const websiteFixKeyRef = useRef("");
 
   const interactionCount = useMemo(
     () => messages.filter((m) => m.role === "user").length,
@@ -441,6 +537,21 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
       ]);
     }
   }, [isQualifiedForCta, showCabinetCta]);
+
+  useEffect(() => {
+    const onPreviewEvent = (event: MessageEvent) => {
+      const payload = event.data as { type?: string; error?: string } | null;
+      if (!payload || typeof payload.type !== "string") return;
+      if (payload.type === "cflow_website_preview_error") {
+        setWebsitePreviewError(String(payload.error || "Unknown preview error"));
+      }
+      if (payload.type === "cflow_website_preview_ok") {
+        setWebsitePreviewError(null);
+      }
+    };
+    window.addEventListener("message", onPreviewEvent);
+    return () => window.removeEventListener("message", onPreviewEvent);
+  }, []);
 
   const buildReply = (userText: string) => {
     const text = userText.toLowerCase();
@@ -501,7 +612,8 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             messages: toApiMessages(nextMessages),
-            interactionCount: nextMessages.filter((item) => item.role === "user").length
+            interactionCount: nextMessages.filter((item) => item.role === "user").length,
+            promptPack: websitePromptPack
           }),
           signal: controller.signal
         });
@@ -511,8 +623,36 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
       if (!response.ok) {
         throw new Error(`API status ${response.status}`);
       }
-      const data = (await response.json()) as { reply?: string; mode?: "openrouter" | "mock" };
-      setChatMode(data.mode === "openrouter" ? "openrouter" : "mock");
+      const data = (await response.json()) as {
+        reply?: string;
+        mode?: "openrouter" | "mock" | "website";
+        brief?: WebsiteBriefPreview;
+        code?: string;
+        title?: string;
+        generationMeta?: WebsiteGenerationMeta;
+      };
+      setChatMode(data.mode === "openrouter" || data.mode === "website" ? "openrouter" : "mock");
+
+      if (data.mode === "website" && typeof data.code === "string" && data.code.trim()) {
+        setWebsiteCode(data.code);
+        setWebsiteTitle(String(data.title || "AI Website Preview"));
+        setWebsiteBrief(data.brief || null);
+        setWebsiteGenerationMeta(data.generationMeta || null);
+        setWebsitePreviewError(null);
+        setWebsiteAutoFixAttempts(0);
+        setWebsiteAutoFixInProgress(false);
+        setWebsiteAutoFixFailed(false);
+        setWebsiteFixLog([]);
+        websiteFixKeyRef.current = "";
+        const assistantWebsiteMessage: ChatMessage = {
+          id: uid(),
+          role: "assistant",
+          kind: "text",
+          text: "Сайт сгенерирован. Справа открыт live preview и обновляется при новых генерациях."
+        };
+        setMessages((prev) => [...prev, assistantWebsiteMessage]);
+        return;
+      }
       const deterministicReply = buildDemoReply(text, kind);
       const localFallback =
         kind === "image"
@@ -548,6 +688,64 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
     }
   };
 
+  const runWebsiteAction = async (action: "regenerate" | "premium" | "light" | "simplify") => {
+    if (!websiteCode.trim()) return;
+    setWebsiteActionLoading(action);
+    setIsTyping(true);
+    try {
+      const response = await fetch("/api/openrouter/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: toApiMessages(messages),
+          websiteAction: action,
+          currentCode: websiteCode,
+          currentBrief: websiteBrief || {},
+          promptPack: websitePromptPack
+        })
+      });
+      if (!response.ok) throw new Error(`API status ${response.status}`);
+      const data = (await response.json()) as {
+        mode?: "website" | "openrouter" | "mock";
+        brief?: WebsiteBriefPreview;
+        code?: string;
+        title?: string;
+        generationMeta?: WebsiteGenerationMeta;
+      };
+      if (data.mode === "website" && typeof data.code === "string" && data.code.trim()) {
+        setWebsiteCode(data.code);
+        setWebsiteTitle(String(data.title || websiteTitle));
+        setWebsiteBrief(data.brief || websiteBrief);
+        setWebsiteGenerationMeta(data.generationMeta || null);
+        setWebsitePreviewError(null);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: uid(),
+            role: "assistant",
+            kind: "text",
+            text:
+              action === "regenerate"
+                ? "Собрал альтернативный вариант сайта."
+                : action === "premium"
+                  ? "Усилил дизайн до более премиальной версии."
+                  : action === "light"
+                    ? "Сделал светлую версию дизайна."
+                    : "Упростил композицию и структуру сайта."
+          }
+        ]);
+      }
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        { id: uid(), role: "assistant", kind: "text", text: "Не удалось выполнить действие для сайта. Попробуйте еще раз." }
+      ]);
+    } finally {
+      setWebsiteActionLoading(null);
+      setIsTyping(false);
+    }
+  };
+
   const onImagePick = (file?: File) => {
     if (!file) return;
     const reader = new FileReader();
@@ -557,6 +755,81 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
     };
     reader.readAsDataURL(file);
   };
+
+  const websitePreviewDoc = useMemo(() => buildWebsitePreviewDoc(websiteCode), [websiteCode]);
+
+  const runWebsiteFixAttempt = async (errorText: string, manual = false) => {
+    if (!websiteCode.trim()) return;
+    if (!manual && websiteAutoFixInProgress) return;
+
+    const maxAttempts = 3;
+    if (!manual && websiteAutoFixAttempts >= maxAttempts) {
+      setWebsiteAutoFixFailed(true);
+      return;
+    }
+
+    const attempt = manual ? websiteAutoFixAttempts + 1 : websiteAutoFixAttempts + 1;
+    setWebsiteAutoFixInProgress(true);
+    setWebsiteAutoFixFailed(false);
+    setWebsiteFixLog((prev) => [
+      ...prev,
+      { at: new Date().toISOString(), attempt, error: errorText, status: "started", note: manual ? "manual" : "auto" }
+    ]);
+
+    try {
+      const response = await fetch("/api/sites/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "fix",
+          guidance: "Repair website preview runtime/build issue",
+          currentComponentCode: websiteCode,
+          errorText,
+          promptPack: websitePromptPack,
+          round: attempt,
+          profile: {
+            businessName: websiteBrief?.brandName || "",
+            niche: websiteBrief?.businessType || "",
+            city: websiteBrief?.city || "",
+            goal: websiteBrief?.primaryGoal || ""
+          }
+        })
+      });
+      const body = (await response.json()) as {
+        error?: string;
+        draft?: { componentCode?: string };
+      };
+      if (!response.ok) throw new Error(body.error || `fix_failed_status_${response.status}`);
+      const fixedCode = String(body?.draft?.componentCode || "").trim();
+      if (!fixedCode) throw new Error("fix_missing_component_code");
+      if (fixedCode === websiteCode.trim()) throw new Error("fix_returned_same_code");
+
+      setWebsiteCode(fixedCode);
+      setWebsitePreviewError(null);
+      setWebsiteAutoFixAttempts(attempt);
+      setWebsiteAutoFixFailed(false);
+      setWebsiteFixLog((prev) => [...prev, { at: new Date().toISOString(), attempt, error: errorText, status: "succeeded" }]);
+    } catch (error: any) {
+      const reason = String(error?.message || "unknown_fix_error");
+      console.error("Website auto-fix failed:", reason);
+      setWebsiteAutoFixAttempts(attempt);
+      setWebsiteFixLog((prev) => [...prev, { at: new Date().toISOString(), attempt, error: errorText, status: "failed", note: reason }]);
+      if (attempt >= maxAttempts) setWebsiteAutoFixFailed(true);
+    } finally {
+      setWebsiteAutoFixInProgress(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!websitePreviewError || !websiteCode.trim()) return;
+    if (websiteAutoFixInProgress || websiteAutoFixFailed) return;
+    if (!websiteGenerationMeta?.canRepair) return;
+
+    const key = `${websiteCode.slice(0, 120)}::${websitePreviewError}`;
+    if (websiteFixKeyRef.current === key) return;
+    websiteFixKeyRef.current = key;
+    void runWebsiteFixAttempt(websitePreviewError, false);
+  }, [websitePreviewError, websiteCode, websiteAutoFixInProgress, websiteAutoFixFailed, websiteGenerationMeta?.canRepair]);
 
   return (
     <div className="bg-[#f7f8f6] text-slate-900">
@@ -615,49 +888,195 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
               <p className="mt-4 text-sm text-slate-500">Включает AI Inbox, аналитику, воронку лидов, recovery-сценарии и AI-рекомендации.</p>
             </motion.div>
 
-            <motion.div id="demo" initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.55, delay: 0.05 }} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-              <div className="mb-3 flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-bold text-slate-900">Интерактивный демо-диалог</p>
-                  <p className="text-xs text-slate-500">{chatMode === "openrouter" ? "Онлайн-режим" : "Резервный демо-режим"}</p>
-                </div>
-                <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-[11px] font-semibold text-cyan-700">Сообщения • Голосовые • Фото</span>
-              </div>
-              <div className="h-[360px] space-y-2 overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50 p-3 sm:h-[410px]">
-                {messages.map((message) => (
-                  <div key={message.id} className={`max-w-[92%] rounded-2xl border px-3 py-2 text-sm ${message.role === "assistant" ? "border-slate-200 bg-white text-slate-800" : "ml-auto border-cyan-200 bg-cyan-50 text-cyan-950"}`}>
-                    {message.imageUrl ? <img src={message.imageUrl} alt="upload" className="mb-2 h-28 w-full rounded-xl object-cover" /> : null}
-                    <p>{message.text}</p>
-                    {message.kind === "cta" && showCabinetCta ? (
-                      <button onClick={() => onNavigate("/login")} className="mt-2 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white">
-                        Перейти в личный кабинет
-                      </button>
-                    ) : null}
+            <motion.div
+              id="demo"
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.55, delay: 0.05 }}
+              className="grid gap-4 lg:grid-cols-2"
+            >
+              <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-bold text-slate-900">Интерактивный демо-диалог</p>
+                    <p className="text-xs text-slate-500">{chatMode === "openrouter" ? "Онлайн-режим" : "Резервный демо-режим"}</p>
                   </div>
-                ))}
-                {isTyping ? (
-                  <div className="inline-flex items-center gap-1 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500">
-                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-slate-400" />
-                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-slate-400 [animation-delay:120ms]" />
-                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-slate-400 [animation-delay:240ms]" />
+                  <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-[11px] font-semibold text-cyan-700">Чат • Website Builder</span>
+                </div>
+                <div className="h-[340px] space-y-2 overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50 p-3 sm:h-[380px]">
+                  {messages.map((message) => (
+                    <div key={message.id} className={`max-w-[92%] rounded-2xl border px-3 py-2 text-sm ${message.role === "assistant" ? "border-slate-200 bg-white text-slate-800" : "ml-auto border-cyan-200 bg-cyan-50 text-cyan-950"}`}>
+                      {message.imageUrl ? <img src={message.imageUrl} alt="upload" className="mb-2 h-28 w-full rounded-xl object-cover" /> : null}
+                      <p>{message.text}</p>
+                      {message.kind === "cta" && showCabinetCta ? (
+                        <button onClick={() => onNavigate("/login")} className="mt-2 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white">
+                          Перейти в личный кабинет
+                        </button>
+                      ) : null}
+                    </div>
+                  ))}
+                  {isTyping ? (
+                    <div className="inline-flex items-center gap-1 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500">
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-slate-400" />
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-slate-400 [animation-delay:120ms]" />
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-slate-400 [animation-delay:240ms]" />
+                    </div>
+                  ) : null}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {promptChips.slice(0, 4).map((chip) => (
+                    <button key={chip} onClick={() => sendUserMessage(chip)} className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:border-slate-500">
+                      {chip}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-3 flex items-end gap-2">
+                  <button onClick={() => fileRef.current?.click()} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700">Фото</button>
+                  <button onClick={() => sendUserMessage("Голосовое сообщение", "voice")} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700">Голос</button>
+                  <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => onImagePick(e.target.files?.[0])} />
+                  <div className="flex-1">
+                    <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Введите сообщение..." className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm" />
+                  </div>
+                  <button onClick={() => sendUserMessage(input)} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white">Отправить</button>
+                </div>
+              </div>
+
+              <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-bold text-slate-900">Live Preview Panel</p>
+                    <p className="text-xs text-slate-500">{websiteCode ? "React+Tailwind render" : "Ждёт генерацию сайта"}</p>
+                  </div>
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-600">Sandbox iframe</span>
+                </div>
+
+                <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 p-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-semibold text-slate-600">Prompt Pack</span>
+                      <div className="inline-flex rounded-lg border border-slate-300 bg-white p-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setWebsitePromptPack("A")}
+                          className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${
+                            websitePromptPack === "A" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
+                          }`}
+                        >
+                          A
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setWebsitePromptPack("B")}
+                          className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${
+                            websitePromptPack === "B" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
+                          }`}
+                        >
+                          B
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-slate-500">Смените pack и нажмите Перегенерировать</p>
+                  </div>
+                </div>
+
+                {websiteBrief ? (
+                  <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px]">
+                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-slate-700">{websiteBrief.brandName || websiteTitle}</span>
+                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-slate-600">{websiteBrief.city || "Локальный бизнес"}</span>
+                    <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2 py-1 text-cyan-700">{websiteBrief.primaryGoal || "Конверсия"}</span>
+                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-slate-600">Pack {websitePromptPack}</span>
+                    {websiteGenerationMeta?.totalMs ? <span className="text-slate-500">~{websiteGenerationMeta.totalMs}ms</span> : null}
                   </div>
                 ) : null}
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {promptChips.slice(0, 4).map((chip) => (
-                  <button key={chip} onClick={() => sendUserMessage(chip)} className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:border-slate-500">
-                    {chip}
-                  </button>
-                ))}
-              </div>
-              <div className="mt-3 flex items-end gap-2">
-                <button onClick={() => fileRef.current?.click()} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700">Фото</button>
-                <button onClick={() => sendUserMessage("Голосовое сообщение", "voice")} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700">Голос</button>
-                <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => onImagePick(e.target.files?.[0])} />
-                <div className="flex-1">
-                  <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Введите сообщение..." className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm" />
-                </div>
-                <button onClick={() => sendUserMessage(input)} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white">Отправить</button>
+
+                {websiteCode ? (
+                  <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    <button
+                      type="button"
+                      disabled={Boolean(websiteActionLoading)}
+                      onClick={() => void runWebsiteAction("regenerate")}
+                      className="rounded-lg border border-slate-300 bg-white px-2 py-2 text-xs font-semibold text-slate-700 hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {websiteActionLoading === "regenerate" ? "..." : "Перегенерировать"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={Boolean(websiteActionLoading)}
+                      onClick={() => void runWebsiteAction("premium")}
+                      className="rounded-lg border border-slate-300 bg-white px-2 py-2 text-xs font-semibold text-slate-700 hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {websiteActionLoading === "premium" ? "..." : "Сделать премиальнее"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={Boolean(websiteActionLoading)}
+                      onClick={() => void runWebsiteAction("light")}
+                      className="rounded-lg border border-slate-300 bg-white px-2 py-2 text-xs font-semibold text-slate-700 hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {websiteActionLoading === "light" ? "..." : "Сделать светлую версию"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={Boolean(websiteActionLoading)}
+                      onClick={() => void runWebsiteAction("simplify")}
+                      className="rounded-lg border border-slate-300 bg-white px-2 py-2 text-xs font-semibold text-slate-700 hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {websiteActionLoading === "simplify" ? "..." : "Упростить"}
+                    </button>
+                  </div>
+                ) : null}
+
+                {websitePreviewError ? (
+                  <div className="mb-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
+                    Build/runtime error: {websitePreviewError}
+                  </div>
+                ) : null}
+                {websiteAutoFixInProgress ? (
+                  <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
+                    Автоисправление preview... попытка {Math.min(websiteAutoFixAttempts + 1, 3)} из 3
+                  </div>
+                ) : null}
+                {websiteAutoFixFailed ? (
+                  <div className="mb-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                    <p className="font-semibold">Автоисправление не удалось после 3 попыток.</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const errorText = websitePreviewError || "Unknown preview error";
+                        setWebsiteAutoFixFailed(false);
+                        void runWebsiteFixAttempt(errorText, true);
+                      }}
+                      className="mt-2 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700"
+                    >
+                      Исправить
+                    </button>
+                  </div>
+                ) : null}
+                {websiteFixLog.length > 0 ? (
+                  <details className="mb-3 rounded-xl border border-slate-200 bg-slate-50 p-2 text-xs text-slate-600">
+                    <summary className="cursor-pointer font-semibold">Логи исправления ({websiteFixLog.length})</summary>
+                    <div className="mt-2 space-y-1">
+                      {websiteFixLog.slice(-8).map((item, index) => (
+                        <p key={`${item.at}-${index}`}>
+                          #{item.attempt} {item.status} {item.note ? `(${item.note})` : ""}
+                        </p>
+                      ))}
+                    </div>
+                  </details>
+                ) : null}
+
+                {websiteCode ? (
+                  <iframe
+                    title="AI Website Builder Preview"
+                    sandbox="allow-scripts"
+                    srcDoc={websitePreviewDoc}
+                    className="h-[420px] w-full rounded-2xl border border-slate-200 bg-white"
+                  />
+                ) : (
+                  <div className="flex h-[420px] items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 text-center text-sm text-slate-500">
+                    Отправьте в чат запрос на генерацию сайта, и здесь откроется live preview.
+                  </div>
+                )}
               </div>
             </motion.div>
           </div>
