@@ -144,6 +144,28 @@ function extractHtmlDocument(raw: string): string | null {
   return null;
 }
 
+function extractCodeBlock(raw: string): string | null {
+  const text = String(raw || "").trim();
+  if (!text) return null;
+  const fenced = text.match(/```(?:tsx|jsx|typescript|javascript|js|ts)?\s*([\s\S]*?)```/i);
+  if (fenced?.[1]) return fenced[1].trim();
+  return text;
+}
+
+function looksLikeReactComponent(code: string) {
+  const text = String(code || "").trim();
+  if (!text) return false;
+  const lower = text.toLowerCase();
+  if (lower.includes("<!doctype html") || lower.includes("<html")) return false;
+  const hasJsxLike = /<\s*[A-Za-z][^>]*>/.test(text) || text.includes("className=");
+  const hasComponentShape =
+    /(?:export\s+default\s+)?function\s+[A-Z][A-Za-z0-9_]*/.test(text) ||
+    /const\s+[A-Z][A-Za-z0-9_]*\s*=\s*\(/.test(text) ||
+    /const\s+[A-Z][A-Za-z0-9_]*\s*=\s*\{/.test(text) ||
+    /return\s*\(/.test(text);
+  return hasJsxLike && hasComponentShape;
+}
+
 function isComputerClubLike(profile: AgentProfile, guidance: string) {
   const joined = `${profile.niche} ${profile.goal} ${profile.style} ${profile.styleReference} ${guidance}`.toLowerCase();
   return (
@@ -516,8 +538,10 @@ export default async function handler(req: any, res: any) {
       parsed = {};
     }
     if (typeof (parsed as any).componentCode !== "string" || !(parsed as any).componentCode.trim()) {
-      const rawComponent = text.trim();
-      if (rawComponent) (parsed as any).componentCode = rawComponent;
+      const rawComponent = extractCodeBlock(text);
+      if (rawComponent && looksLikeReactComponent(rawComponent)) (parsed as any).componentCode = rawComponent;
+    } else if (!looksLikeReactComponent((parsed as any).componentCode)) {
+      (parsed as any).componentCode = "";
     }
     if (typeof (parsed as any).componentCode !== "string" || !(parsed as any).componentCode.trim()) {
       finishWithFallback("COMPONENT_CODE_MISSING", compact(text));

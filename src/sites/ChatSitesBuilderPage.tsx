@@ -2002,15 +2002,12 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
         debugStage = "invalid_ai_draft";
         throw new Error("AI engine did not return a valid draft");
       }
-      const hasRawPageCode =
-        typeof (body.draft as { pageCode?: unknown }).pageCode === "string" &&
-        String((body.draft as { pageCode?: unknown }).pageCode || "").trim().length > 0;
       const hasRawComponentCode =
         typeof (body.draft as { componentCode?: unknown }).componentCode === "string" &&
         String((body.draft as { componentCode?: unknown }).componentCode || "").trim().length > 0;
-      if (!hasRawComponentCode && !hasRawPageCode) {
+      if (!hasRawComponentCode) {
         debugStage = "missing_component_code";
-        throw new Error("AI returned draft without componentCode/pageCode");
+        throw new Error("AI returned draft without componentCode");
       }
       debugStage = "hydrate_draft";
       const fallbackDraft = createDraftFromProfile(nextProfile, guidance, nextRound);
@@ -2028,10 +2025,10 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
       setDraft(finalDraft);
       setGenerationRound(nextRound);
       setProfile(nextProfile);
-      const summary = finalDraft.summaryPoints.map((point) => `• ${point}`).join("\n");
+      const summary = ["• Сгенерирован React+Tailwind код", "• Preview рендерится из этого же кода в iframe", "• Raw code доступен под превью"].join("\n");
       addMessage(
         "assistant",
-        `Готово. Собрал индивидуальный вариант #${nextRound} для «${finalDraft.businessName}».\n\nЧто уже есть:\n${summary}\n\nЕсли нужно, напиши «перегенерируй» — сделаю новый дизайн с нуля под тот же бриф.`
+        `Готово. Собрал индивидуальный вариант #${nextRound}.\n\nЧто уже есть:\n${summary}\n\nЕсли нужно, напиши «перегенерируй» — сделаю новый дизайн с нуля под тот же бриф.`
       );
       setGenerationStatus("success");
     } catch (error: any) {
