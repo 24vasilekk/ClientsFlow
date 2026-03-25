@@ -114,8 +114,6 @@ type DraftState = {
   componentCode: string;
   pageCode: string;
 };
-type GenerationTarget = "html" | "react-tailwind";
-
 type AgentProfile = {
   businessName: string;
   niche: string;
@@ -491,41 +489,7 @@ function parseSectionArg(input: string): SectionKey | null {
 function parseDslCommand(text: string): DslAction {
   const raw = text.trim();
   if (!raw.startsWith("/")) return { kind: "none" };
-  const [command, ...restParts] = raw.slice(1).split(" ");
-  const rest = restParts.join(" ").trim();
-  const cmd = command.toLowerCase();
-
-  if (cmd === "regenerate") return { kind: "regenerate", guidance: rest };
-  if (cmd === "style-like") return rest ? { kind: "styleLike", reference: rest } : { kind: "none" };
-  if (cmd === "undo") return { kind: "undo" };
-  if (cmd === "revert") {
-    const round = Number(rest);
-    return Number.isFinite(round) && round > 0 ? { kind: "revert", round: Math.floor(round) } : { kind: "none" };
-  }
-  if (cmd === "add-section") {
-    const section = parseSectionArg(rest);
-    return section ? { kind: "addSection", section } : { kind: "none" };
-  }
-  if (cmd === "remove-section") {
-    const section = parseSectionArg(rest);
-    return section ? { kind: "removeSection", section } : { kind: "none" };
-  }
-  if (cmd === "rewrite-hero") return { kind: "rewriteHero", text: rest };
-  if (cmd === "rewrite-block") {
-    const [blockId, ...instructionParts] = rest.split(" ");
-    const instruction = instructionParts.join(" ").trim();
-    return blockId && instruction ? { kind: "rewriteBlock", blockId: blockId.trim(), instruction } : { kind: "none" };
-  }
-  if (cmd === "move-block") {
-    const parts = rest.split(" ").filter(Boolean);
-    const beforeIndex = parts.findIndex((part) => part.toLowerCase() === "before");
-    if (beforeIndex > 0 && beforeIndex < parts.length - 1) {
-      const blockId = parts.slice(0, beforeIndex).join(" ").trim();
-      const beforeId = parts.slice(beforeIndex + 1).join(" ").trim();
-      if (blockId && beforeId) return { kind: "moveBlock", blockId, beforeId };
-    }
-    return { kind: "none" };
-  }
+  // DSL path is intentionally disabled to keep the flow deterministic.
   return { kind: "none" };
 }
 
@@ -1904,7 +1868,6 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
   const [previewExpanded, setPreviewExpanded] = useState(true);
   const [generationRound, setGenerationRound] = useState(1);
   const [generationEngine, setGenerationEngine] = useState<"openrouter" | "algorithm">("openrouter");
-  const [generationTarget, setGenerationTarget] = useState<GenerationTarget>("html");
   const [generationSessionId, setGenerationSessionId] = useState(() => {
     if (typeof window === "undefined") return `session-${uid()}`;
     return sanitizeSessionId(localStorage.getItem(SITE_SESSION_STORAGE_KEY) || `session-${uid()}`);
@@ -1981,7 +1944,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
               profile: nextProfile,
               guidance,
               round: nextRound,
-              target: generationTarget,
+              target: "react-tailwind",
               currentPageCode: currentDraft?.pageCode || "",
               currentComponentCode: currentDraft?.componentCode || "",
               currentBusinessName: currentDraft?.businessName || ""
@@ -2045,11 +2008,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
       const hasRawComponentCode =
         typeof (body.draft as { componentCode?: unknown }).componentCode === "string" &&
         String((body.draft as { componentCode?: unknown }).componentCode || "").trim().length > 0;
-      if (generationTarget === "html" && !hasRawPageCode && currentDraft?.pageCode) {
-        debugStage = "missing_page_code";
-        throw new Error("AI returned draft without pageCode");
-      }
-      if (generationTarget === "react-tailwind" && !hasRawComponentCode && !hasRawPageCode && (currentDraft?.componentCode || currentDraft?.pageCode)) {
+      if (!hasRawComponentCode && !hasRawPageCode) {
         debugStage = "missing_component_code";
         throw new Error("AI returned draft without componentCode/pageCode");
       }
@@ -2077,62 +2036,6 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
       setGenerationStatus("success");
     } catch (error: any) {
       const message = String(error?.message || "AI generation failed");
-      const lower = message.toLowerCase();
-      if (lower.includes("function_invocation_timeout") || lower.includes("status=504")) {
-        try {
-          const recoveryPrompt = [
-            generationTarget === "react-tailwind"
-              ? "Верни только код React+Tailwind сайта: JSON {\"componentCode\":\"...\"} или чистый TSX/JSX."
-              : "Верни только код сайта: либо JSON {\"pageCode\":\"<html...>\"}, либо чистый HTML документ.",
-            `Бизнес: ${nextProfile.businessName || "Studio Name"}`,
-            `Ниша: ${nextProfile.niche || "service"}`,
-            `Город: ${nextProfile.city || "Москва"}`,
-            `Цель: ${nextProfile.goal || "заявки"}`,
-            `Стиль: ${nextProfile.style || "современный"}`,
-            `Референс: ${nextProfile.styleReference || "-"}`,
-            `Запрос: ${guidance || "-"}`
-          ].join("\n");
-          const recoveryRes = await fetch("/api/openrouter/sites-copy", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              messages: [{ role: "user", content: recoveryPrompt }]
-            })
-          });
-          const recoveryBody = (await recoveryRes.json()) as { reply?: string; error?: string };
-          if (recoveryRes.ok && typeof recoveryBody.reply === "string") {
-            const fallbackDraft = createDraftFromProfile(nextProfile, guidance, nextRound);
-            const aiJson = parseMaybeJsonObject(recoveryBody.reply) || {};
-            if (generationTarget === "react-tailwind") {
-              if (typeof (aiJson as any).componentCode !== "string" || !(aiJson as any).componentCode.trim()) {
-                const component = extractCodeBlock(recoveryBody.reply);
-                if (component) (aiJson as any).componentCode = component;
-              }
-              if (typeof (aiJson as any).componentCode !== "string" || !(aiJson as any).componentCode.trim()) {
-                throw new Error("Recovery payload missing componentCode");
-              }
-            } else {
-              if (typeof (aiJson as any).pageCode !== "string" || !(aiJson as any).pageCode.trim()) {
-                const htmlDoc = extractHtmlDocument(recoveryBody.reply);
-                if (htmlDoc) (aiJson as any).pageCode = htmlDoc;
-              }
-              if (typeof (aiJson as any).pageCode !== "string" || !(aiJson as any).pageCode.trim()) {
-                throw new Error("Recovery payload missing pageCode");
-              }
-            }
-            const recoveredDraft = hydrateGeneratedDraft(aiJson, fallbackDraft);
-            setGenerationEngine("openrouter");
-            setDraft(recoveredDraft);
-            setGenerationRound(nextRound);
-            setProfile(nextProfile);
-            setGenerationStatus("success");
-            addMessage("assistant", "Собрал сайт через резервный AI-канал. Можно продолжать правки в чате.", "soft");
-            return;
-          }
-        } catch {
-          // continue to error block
-        }
-      }
       const userMessage = humanizeGenerationError(message);
       const debugTrace = `stage=${debugStage}; endpoint=${debugEndpoint || "n/a"}; session=${debugSession}; raw=${message}`;
       setGenerationStatus("error");
@@ -2307,7 +2210,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
     if (detectCapabilityQuestion(text)) {
       addMessage(
         "assistant",
-        "Я могу: сгенерировать новый дизайн с нуля, менять стиль по референсу, перестраивать блоки DSL-командами и публиковать сайт. Напиши конкретно: «измени стиль на минимализм», «добавь блок отзывов», «/rewrite-block #2 title: ...».",
+        "Я могу: перегенерировать сайт под новый стиль, поправить блоки и тексты, и сразу показать результат в preview. Напиши, например: «сделай более минималистично» или «добавь блок тарифов».",
         "soft"
       );
       return;
@@ -2398,17 +2301,11 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
     }
   };
 
-  const previewRadiusValue = radiusPx(draft?.radius || "soft");
-  const previewSectionPaddingValue = sectionPadding(draft?.density || "balanced");
-  const previewCardBorder = draft?.contrast === "high" ? "rgba(15,23,42,0.22)" : "rgba(148,163,184,0.3)";
-  const previewHeadingFont = draft?.fontHeading || '"Inter", "Segoe UI", sans-serif';
-  const previewBodyFont = draft?.fontBody || '"Inter", "Segoe UI", sans-serif';
-
   const previewPanel = (
     <div className="flex h-full flex-col">
       <div className="rounded-[22px] border border-slate-200/90 bg-white p-4 shadow-[0_25px_70px_-45px_rgba(15,23,42,0.45)]">
         <div className="flex items-center justify-between">
-          <p className="text-lg font-semibold text-slate-900">Published Home</p>
+          <p className="text-lg font-semibold text-slate-900">Live Preview</p>
           <button
             type="button"
             onClick={() => setPreviewExpanded((prev) => !prev)}
@@ -2418,44 +2315,10 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
           </button>
         </div>
 
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              if (publishPath) onNavigate(publishPath);
-            }}
-            className="rounded-xl bg-sky-500 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-sky-600"
-          >
-            ↗ Open App
-          </button>
-          <button type="button" className="rounded-xl border border-slate-200 bg-slate-100 px-3 py-1.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-200/70">
-            ✎ Edit
-          </button>
-          <button type="button" className="rounded-xl border border-slate-200 bg-slate-100 px-3 py-1.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-200/70">
-            ⟳ Refresh
-          </button>
-          <span className={`ml-auto rounded-full border px-2 py-1 text-xs ${statusClass(generationStatus)}`}>Build</span>
-          <span className={`rounded-full border px-2 py-1 text-xs ${statusClass(paymentStatus)}`}>Pay</span>
-          <span className={`rounded-full border px-2 py-1 text-xs ${statusClass(publishStatus)}`}>Publish</span>
+        <div className="mt-3">
           <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-600">
-            Engine: {generationEngine} · {generationTarget}
+            Engine: {generationEngine} · React+Tailwind
           </span>
-          <div className="flex items-center gap-1 rounded-full border border-slate-200 bg-white p-1">
-            <button
-              type="button"
-              onClick={() => setGenerationTarget("html")}
-              className={`rounded-full px-2 py-1 text-xs font-semibold ${generationTarget === "html" ? "bg-sky-500 text-white" : "text-slate-600 hover:bg-slate-100"}`}
-            >
-              HTML
-            </button>
-            <button
-              type="button"
-              onClick={() => setGenerationTarget("react-tailwind")}
-              className={`rounded-full px-2 py-1 text-xs font-semibold ${generationTarget === "react-tailwind" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}
-            >
-              React+Tailwind
-            </button>
-          </div>
         </div>
         {generationHistory.length > 0 ? (
           <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
@@ -2484,44 +2347,16 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
               />
               <details className="mt-2 rounded-xl border border-slate-200 bg-slate-50 p-2">
                 <summary className="cursor-pointer text-xs font-semibold text-slate-600">
-                  {generationTarget === "react-tailwind" ? "Generated React+Tailwind Code" : "Generated HTML/CSS Code"}
+                  Generated React+Tailwind Code
                 </summary>
                 <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap rounded-lg bg-white p-2 text-[11px] leading-5 text-slate-700">
-{generationTarget === "react-tailwind" ? (draft?.componentCode || draft?.pageCode || "") : (draft?.pageCode || "")}
+{draft?.componentCode || draft?.pageCode || ""}
                 </pre>
               </details>
             </div>
           </div>
         ) : null}
       </div>
-
-      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <button
-          type="button"
-          onClick={handleMockPayment}
-          disabled={paymentStatus === "loading" || paymentStatus === "success" || !draft}
-          className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50"
-        >
-          {paymentStatus === "loading" ? "Оплата..." : paymentStatus === "success" ? "Оплачено" : "Оплатить 3 500 ₽"}
-        </button>
-        <button
-          type="button"
-          onClick={() => void handlePublish()}
-          disabled={!canPublish}
-          className="rounded-xl border border-emerald-300 bg-emerald-100 px-4 py-2 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-200/70 disabled:opacity-50"
-        >
-          {publishStatus === "loading" ? "Публикуем..." : "Опубликовать"}
-        </button>
-      </div>
-      {publishPath ? (
-        <button
-          type="button"
-          onClick={() => onNavigate(publishPath)}
-          className="mt-2 rounded-xl border border-cyan-300 bg-cyan-50 px-4 py-2 text-sm font-semibold text-cyan-700 transition hover:bg-cyan-100"
-        >
-          Открыть опубликованный сайт
-        </button>
-      ) : null}
     </div>
   );
 
