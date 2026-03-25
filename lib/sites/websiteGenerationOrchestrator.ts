@@ -29,7 +29,6 @@ type OrchestrationDeps = {
     systemGeneration: string;
     systemPolish: string;
   };
-  makeFallbackCode: (brief: WebsiteBrief) => string;
 };
 
 function parseComponentCodeFromModel(raw: string) {
@@ -124,7 +123,6 @@ export async function runWebsiteGenerationFlow(
   });
   let parsedCodeRaw = parseJsonFromText(codeText);
   let componentCode = parseComponentCodeFromModel(codeText);
-  let usedFallbackCode = false;
   if (!componentCode && !isValidCodePayloadShape(parsedCodeRaw)) {
     const strictCodeText = await deps.complete({
       model: deps.models.code,
@@ -147,8 +145,7 @@ export async function runWebsiteGenerationFlow(
     );
   }
   if (!componentCode) {
-    componentCode = deps.makeFallbackCode(brief);
-    usedFallbackCode = true;
+    throw new Error("CODE_SCHEMA_VALIDATION_FAILED");
   }
 
   let usedPolish = false;
@@ -173,7 +170,7 @@ export async function runWebsiteGenerationFlow(
     componentCode,
     meta: {
       usedFallbackBrief,
-      usedFallbackCode,
+      usedFallbackCode: false,
       usedPolish,
       normalizedGuidance
     }

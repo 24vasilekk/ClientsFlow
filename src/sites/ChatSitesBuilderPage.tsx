@@ -211,11 +211,6 @@ const navItems = [
   { key: "create-site", label: "Создать сайт", icon: "✨" }
 ];
 
-const quickPrompts = [
-  "Создать сайт под мой бизнес"
-];
-
-const suggestions = ["Создать сайт"];
 
 const clientSiteBusinessOptions: Array<{
   value: ClientSiteBusinessType;
@@ -274,75 +269,6 @@ const clientSiteBusinessOptions: Array<{
     cta: "Записаться на диагностику"
   }
 ];
-
-const quickWebsiteScenarios = [
-  {
-    key: "barbershop",
-    label: "Барбершоп",
-    hiddenPrompt:
-      "Сделай современный премиальный сайт барбершопа: тёмная выразительная подача, сильный hero, крупный CTA записи, блок услуг, блок мастеров, цены, отзывы, FAQ и контакты. Коммерческие тексты, без шаблонности.",
-    profilePatch: {
-      niche: "barbershop",
-      style: "dark premium masculine",
-      goal: "онлайн-записи и звонки"
-    }
-  },
-  {
-    key: "beauty",
-    label: "Салон красоты",
-    hiddenPrompt:
-      "Сделай стильный сайт салона красоты: clean/elegant визуал, сильный первый экран с оффером и CTA, услуги, мастера, прайс, отзывы, форма записи и контакты. Тексты реалистичные, коммерческие, аккуратная типографика.",
-    profilePatch: {
-      niche: "beauty salon",
-      style: "elegant clean contemporary",
-      goal: "онлайн-записи"
-    }
-  },
-  {
-    key: "electronics",
-    label: "Магазин техники",
-    hiddenPrompt:
-      "Сделай конверсионный landing page магазина электроники: tech premium стиль, hero с оффером, категории товаров, хиты продаж, преимущества, гарантия и доставка, отзывы, форма заявки и контакты. Сильный коммерческий тон.",
-    profilePatch: {
-      niche: "electronics store",
-      style: "tech premium trust-centered",
-      goal: "заказы и обращения"
-    }
-  },
-  {
-    key: "clothing",
-    label: "Бренд одежды",
-    hiddenPrompt:
-      "Сделай современный сайт бренда одежды: fashion/editorial визуал, hero коллекции, highlights каталога, lookbook-секция, преимущества бренда, отзывы, контакты и CTA на коллекцию. Без учебного шаблонного вида.",
-    profilePatch: {
-      niche: "clothing brand",
-      style: "fashion editorial clean premium",
-      goal: "переходы в каталог и заявки"
-    }
-  },
-  {
-    key: "dentistry",
-    label: "Стоматология",
-    hiddenPrompt:
-      "Сделай современный сайт стоматологии: чистый медицинский дизайн, доверительный hero, направления услуг, блок врачей, цены, отзывы, FAQ, запись на консультацию и контакты. Конверсионная структура и понятные CTA.",
-    profilePatch: {
-      niche: "dentistry clinic",
-      style: "clean medical trust",
-      goal: "записи на консультацию"
-    }
-  },
-  {
-    key: "autoservice",
-    label: "Автосервис",
-    hiddenPrompt:
-      "Сделай коммерческий сайт автосервиса: уверенный технический стиль, hero с быстрым CTA, услуги и прайс, преимущества сервиса, отзывы, блок записи/заявки и контакты. Тексты реалистичные и ориентированы на конверсию.",
-    profilePatch: {
-      niche: "auto service",
-      style: "industrial modern contrast",
-      goal: "заявки и звонки"
-    }
-  }
-] as const;
 
 const postGenerationQuickActions = [
   { key: "premium", label: "Сделать дизайн дороже" },
@@ -2493,17 +2419,12 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
       setGenerationStage("preview_check");
       const parsed = await parseJsonResponseSafe(response);
       if (!parsed.ok) {
-        const fallbackDraft = createDraftFromProfile(nextProfile, normalizedGuidance, nextRound);
-        setDraft(fallbackDraft);
-        setGenerationRound(nextRound);
-        setProfile(nextProfile);
-        setGenerationEngine("algorithm");
-        setGenerationStatus("success");
-        const fallbackReason = isTimeoutLikeFailure(parsed)
-          ? "Upstream таймаут, показал быстрый fallback-вариант."
-          : "Сервер вернул не-JSON ответ, показал fallback-вариант.";
-        addMessage("assistant", `Сделал fallback-версию сайта. ${fallbackReason} Можем сразу перегенерировать для более сильного дизайна.`, "soft");
-        setSiteReady(true);
+        const userMessage = isTimeoutLikeFailure(parsed)
+          ? "Сервис генерации временно отвечает слишком долго."
+          : "Не удалось сгенерировать сайт с первого раза. Попробуйте ещё раз.";
+        setGenerationStatus("error");
+        setError(userMessage);
+        addMessage("assistant", userMessage, "soft");
         return;
       }
       const body = parsed.body as {
@@ -2523,14 +2444,16 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
           body.debug && typeof body.debug === "object" ? JSON.stringify(body.debug) : body.debug ? String(body.debug) : "";
         debugStage = "response_not_ok";
         const message = debugText ? `${body.error || "AI generation request failed"} | debug: ${debugText}` : body.error || "AI generation request failed";
-        const fallbackDraft = createDraftFromProfile(nextProfile, normalizedGuidance, nextRound);
-        setDraft(fallbackDraft);
-        setGenerationRound(nextRound);
-        setProfile(nextProfile);
-        setGenerationEngine("algorithm");
-        setGenerationStatus("success");
-        addMessage("assistant", `Сервер AI временно вернул ошибку, поэтому открыл fallback-вариант. Деталь: ${humanizeGenerationError(message)}`, "soft");
-        setSiteReady(true);
+        const userMessage = humanizeGenerationError(message);
+        setGenerationStatus("error");
+        setError(userMessage);
+        addMessage("assistant", userMessage, "soft");
+        console.error("[sites-builder] generation response_not_ok", {
+          stage: debugStage,
+          endpoint: debugEndpoint || "n/a",
+          session: debugSession,
+          raw: message
+        });
         return;
       }
 
@@ -2565,16 +2488,10 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
       const message = String(error?.message || "AI generation failed");
       const userMessage = humanizeGenerationError(message);
       const debugTrace = `stage=${debugStage}; endpoint=${debugEndpoint || "n/a"}; session=${debugSession}; raw=${message}`;
-      const fallbackDraft = createDraftFromProfile(nextProfile, normalizedGuidance, nextRound);
-      setGenerationStatus("success");
+      setGenerationStatus("error");
       setError(userMessage);
-      setDraft(fallbackDraft);
-      setGenerationRound(nextRound);
-      setProfile(nextProfile);
-      setGenerationEngine("algorithm");
       console.error("[sites-builder] generateFromProfile fallback", debugTrace);
-      addMessage("assistant", `Открыл fallback-сайт из локальных шаблонов, чтобы не блокировать поток. Причина: ${userMessage}`, "soft");
-      setSiteReady(true);
+      addMessage("assistant", userMessage, "soft");
     } finally {
       setIsWorking(false);
       setGenerationStage("idle");
@@ -2768,17 +2685,6 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
     }
 
     addMessage("assistant", "Могу сразу улучшить текущий сайт. Напиши конкретно, что изменить: стиль, секции, тексты или CTA.", "soft");
-  };
-
-  const runQuickWebsiteScenario = (scenario: (typeof quickWebsiteScenarios)[number]) => {
-    const visibleText = `Быстрый сценарий: ${scenario.label}`;
-    addMessage("user", visibleText);
-    setInput("");
-    setError(null);
-
-    const mergedProfile = mergeProfile(profile, scenario.profilePatch as Partial<AgentProfile>);
-    const nextRound = draft ? generationRound + 1 : 1;
-    void generateFromProfile(mergedProfile, scenario.hiddenPrompt, nextRound, draft);
   };
 
   const runClientSiteGeneration = () => {
@@ -3245,19 +3151,6 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
               </div>
             ) : null}
 
-            <div className="mt-6 flex flex-wrap gap-2">
-              {quickPrompts.map((prompt) => (
-                <button
-                  key={prompt}
-                  type="button"
-                  onClick={() => onSend(prompt)}
-                  className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
-                >
-                  {prompt}
-                </button>
-              ))}
-            </div>
-
             {draft && !isWorking ? (
               <div className="mt-3 rounded-2xl border border-slate-200 bg-white/90 p-3">
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Быстрые действия</p>
@@ -3303,27 +3196,6 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
               >
                 Сделать сайт для клиента
               </button>
-              <span className="font-semibold">Быстро создать сайт</span>
-              {quickWebsiteScenarios.map((item) => (
-                <button
-                  key={item.key}
-                  type="button"
-                  onClick={() => runQuickWebsiteScenario(item)}
-                  className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
-                >
-                  {item.label}
-                </button>
-              ))}
-              {suggestions.map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  onClick={() => onSend(item)}
-                  className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs transition hover:border-slate-300 hover:bg-slate-50"
-                >
-                  {item}
-                </button>
-              ))}
             </div>
 
             {showClientSiteForm ? (
