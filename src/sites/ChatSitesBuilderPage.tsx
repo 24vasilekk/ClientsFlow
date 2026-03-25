@@ -875,6 +875,7 @@ function wrapReactComponentForPreview(componentCode: string) {
       }).code;
       eval(transformed);
     } catch (e) {
+      try { window.parent.postMessage({ type: "cflow_preview_error", error: String(e) }, "*"); } catch {}
       document.body.innerHTML = "<pre style='padding:16px;color:#b91c1c;white-space:pre-wrap'>Ошибка рендера React-кода\\n\\n" + String(e) + "</pre>";
     }
 
@@ -883,6 +884,7 @@ function wrapReactComponentForPreview(componentCode: string) {
       const root = ReactDOM.createRoot(document.getElementById("root"));
       root.render(React.createElement(Component));
     } else if (!document.body.innerHTML.includes("Ошибка рендера")) {
+      try { window.parent.postMessage({ type: "cflow_preview_error", error: "Component not found: expected export default function Site()" }, "*"); } catch {}
       document.body.innerHTML = "<pre style='padding:16px;color:#b91c1c;white-space:pre-wrap'>Ошибка рендера React-кода\\n\\nКомпонент не найден. Ожидается export default function Site() { ... }</pre>";
     }
   </script>
@@ -1890,6 +1892,8 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
     return sanitizeSessionId(localStorage.getItem(SITE_SESSION_STORAGE_KEY) || `session-${uid()}`);
   });
   const [generationHistory, setGenerationHistory] = useState<GenerationHistoryItem[]>([]);
+  const [isAutoFixingPreview, setIsAutoFixingPreview] = useState(false);
+  const [lastPreviewError, setLastPreviewError] = useState("");
   const [profile, setProfile] = useState<AgentProfile>({
     businessName: "",
     niche: "",
@@ -1927,6 +1931,59 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
       cancelled = true;
     };
   }, [generationSessionId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onPreviewError = (event: MessageEvent) => {
+      const payload = event.data as { type?: string; error?: string } | null;
+      if (!payload || payload.type !== "cflow_preview_error") return;
+      const errorText = String(payload.error || "").trim();
+      if (!errorText) return;
+      if (!draft?.componentCode?.trim()) return;
+      if (isAutoFixingPreview) return;
+      if (errorText === lastPreviewError) return;
+
+      setIsAutoFixingPreview(true);
+      setLastPreviewError(errorText);
+      addMessage("assistant", "Поймал ошибку preview. Исправляю код автоматически...", "soft");
+
+      const run = async () => {
+        try {
+          const endpoint = sitesGenerateEndpoint();
+          const response = await fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              mode: "fix",
+              sessionId: sanitizeSessionId(generationSessionId),
+              round: generationRound + 1,
+              profile,
+              guidance: "Автоисправление preview",
+              currentComponentCode: draft.componentCode,
+              errorText
+            })
+          });
+          const body = (await response.json()) as { draft?: unknown; error?: string; engine?: "openrouter" | "algorithm" };
+          if (!response.ok || body.engine !== "openrouter" || !body.draft) {
+            throw new Error(body.error || "auto_fix_failed");
+          }
+          const fallbackDraft = createDraftFromProfile(profile, "auto-fix-preview", generationRound + 1);
+          const nextDraft = hydrateGeneratedDraft(body.draft, fallbackDraft);
+          setDraft(nextDraft);
+          setGenerationRound((prev) => prev + 1);
+          addMessage("assistant", "Готово, исправил код после ошибки preview.", "soft");
+        } catch (error: any) {
+          addMessage("assistant", `Не удалось автоисправить preview: ${String(error?.message || "unknown")}`, "soft");
+        } finally {
+          setIsAutoFixingPreview(false);
+        }
+      };
+      void run();
+    };
+
+    window.addEventListener("message", onPreviewError);
+    return () => window.removeEventListener("message", onPreviewError);
+  }, [draft, generationRound, generationSessionId, isAutoFixingPreview, lastPreviewError, profile]);
 
   const addMessage = (role: ChatRole, text: string, tone: "default" | "soft" = "default") => {
     setMessages((prev) => [...prev, { id: uid(), role, text, time: nowTime(), tone }]);
