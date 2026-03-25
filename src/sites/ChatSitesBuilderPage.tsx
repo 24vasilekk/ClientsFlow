@@ -851,25 +851,36 @@ function wrapReactComponentForPreview(componentCode: string) {
 </head>
 <body class="bg-slate-100">
   <div id="root"></div>
-  <script type="text/babel" data-presets="react">
+  <script type="text/babel" data-presets="typescript,react">
     const source = \`${escaped}\`;
-    let cleaned = source
-      .replace(/^\\s*export\\s+default\\s+/m, "")
-      .replace(/^\\s*import\\s+.*$/gm, "");
-    let Component = null;
-    try {
-      eval("Component = (" + cleaned + ")");
-    } catch (e) {
-      try {
-        eval(cleaned);
-        if (typeof ObninskBarbershopSite === "function") Component = ObninskBarbershopSite;
-      } catch (e2) {
-        document.body.innerHTML = "<pre style='padding:16px;color:#b91c1c;white-space:pre-wrap'>Ошибка рендера React-кода\\n\\n" + String(e2) + "</pre>";
-      }
+    let cleaned = source.replace(/^\\s*import\\s+.*$/gm, "");
+    window.__CF_COMPONENT__ = null;
+
+    // Prefer explicit default export from model output.
+    if (/export\\s+default\\s+/m.test(cleaned)) {
+      cleaned = cleaned.replace(/export\\s+default\\s+/m, "const __CF_COMPONENT__ = ");
+      cleaned += "\\nwindow.__CF_COMPONENT__ = __CF_COMPONENT__;";
+    } else {
+      // Fallback: infer component symbol name from function/const declaration.
+      const fnMatch = cleaned.match(/function\\s+([A-Z][A-Za-z0-9_]*)\\s*\\(/);
+      const constMatch = cleaned.match(/const\\s+([A-Z][A-Za-z0-9_]*)\\s*=\\s*/);
+      const inferred = (fnMatch && fnMatch[1]) || (constMatch && constMatch[1]) || "";
+      if (inferred) cleaned += "\\nwindow.__CF_COMPONENT__ = " + inferred + ";";
     }
-    if (Component) {
+
+    try {
+      const transformed = Babel.transform(cleaned, { presets: ["typescript", "react"] }).code;
+      eval(transformed);
+    } catch (e) {
+      document.body.innerHTML = "<pre style='padding:16px;color:#b91c1c;white-space:pre-wrap'>Ошибка рендера React-кода\\n\\n" + String(e) + "</pre>";
+    }
+
+    const Component = window.__CF_COMPONENT__;
+    if (typeof Component === "function") {
       const root = ReactDOM.createRoot(document.getElementById("root"));
       root.render(React.createElement(Component));
+    } else if (!document.body.innerHTML.includes("Ошибка рендера")) {
+      document.body.innerHTML = "<pre style='padding:16px;color:#b91c1c;white-space:pre-wrap'>Ошибка рендера React-кода\\n\\nКомпонент не найден. Ожидается export default function Site() { ... }</pre>";
     }
   </script>
 </body>
@@ -2015,14 +2026,6 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
       const fallbackDraft = createDraftFromProfile(nextProfile, guidance, nextRound);
       const finalDraft = hydrateGeneratedDraft(body.draft, fallbackDraft);
       if (Array.isArray(body.history)) setGenerationHistory(body.history);
-      if (Array.isArray(body.stages) && body.stages.length > 0) {
-        const stageLine = body.stages.map((stage) => `${stage.id}:${stage.ms}ms`).join(" · ");
-        addMessage("assistant", `Pipeline: ${stageLine}`, "soft");
-      }
-      if (Array.isArray(body.candidates) && body.candidates.length > 0) {
-        const candidateLine = body.candidates.map((c) => `${c.id}(${c.engine}, ${c.score})`).join(" · ");
-        addMessage("assistant", `Кандидаты: ${candidateLine}. Выбран: ${body.selectedCandidateId || body.candidates[0].id}`, "soft");
-      }
       setGenerationEngine("openrouter");
       setDraft(finalDraft);
       setGenerationRound(nextRound);

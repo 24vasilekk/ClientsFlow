@@ -461,6 +461,8 @@ export default async function handler(req: any, res: any) {
     const isEdit = isEditRequest(guidance);
     const prompt = [
       "Сгенерируй React+Tailwind код сайта на русском языке.",
+      "Верни только код компонента (JSX/TSX), без markdown-блоков ``` и без HTML-документа.",
+      "Формат по умолчанию: export default function Site() { return (...) }",
       `Бизнес: ${base.businessName}`,
       `Ниша: ${base.niche}`,
       `Город: ${base.city}`,
@@ -473,7 +475,7 @@ export default async function handler(req: any, res: any) {
         : isEdit && currentPageCode
           ? `ТЕКУЩИЙ HTML/CSS КОД (измени его по запросу и верни полную новую версию):\n${currentPageCode.slice(0, 24000)}`
           : "Собери новый код с нуля под запрос.",
-      'Формат ответа: JSON {"componentCode":"..."} (обязательно) и опционально pageCode. Либо чистый код React-компонента.'
+      'Формат ответа: JSON {"componentCode":"..."} (обязательно).'
     ].join("\n");
 
     const requestOpenRouter = async (timeoutMs: number, userPrompt: string = prompt) => {
@@ -493,7 +495,8 @@ export default async function handler(req: any, res: any) {
             messages: [
               {
                 role: "system",
-                content: "Ты senior frontend developer. Верни только код React-компонента с Tailwind-классами."
+                content:
+                  "Ты senior frontend developer. Верни только код React-компонента с Tailwind-классами. Нельзя возвращать HTML документ, markdown, пояснения."
               },
               { role: "user", content: userPrompt }
             ]
