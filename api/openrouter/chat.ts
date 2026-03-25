@@ -313,6 +313,7 @@ export default async function handler(req: any, res: any) {
         retries: 1
       });
       let codeParsed = parseJsonFromText(codeRaw.text);
+      let code = parseComponentCode(codeRaw.text);
       if (!isValidCodePayloadShape(codeParsed)) {
         const strictCode = await openRouterWithRetry({
           apiKey,
@@ -333,15 +334,18 @@ export default async function handler(req: any, res: any) {
           retries: 0
         });
         codeParsed = parseJsonFromText(strictCode.text);
+        if (!code) code = parseComponentCode(strictCode.text);
       }
-      if (!isValidCodePayloadShape(codeParsed)) {
+      if (!code && !isValidCodePayloadShape(codeParsed)) {
         throw new Error("CODE_SCHEMA_VALIDATION_FAILED");
       }
-      let code = parseComponentCode(
-        JSON.stringify({
-          componentCode: String((codeParsed as any).componentCode || "")
-        })
-      );
+      if (!code) {
+        code = parseComponentCode(
+          JSON.stringify({
+            componentCode: String((codeParsed as any).componentCode || "")
+          })
+        );
+      }
       if (!code) throw new Error("website_component_code_missing");
 
       const needsActionImprove = ["premium", "light", "simplify"].includes(websiteAction) && currentCode.length > 0;

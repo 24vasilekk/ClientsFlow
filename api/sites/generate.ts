@@ -304,22 +304,26 @@ export default async function handler(req: any, res: any) {
       });
     const codeText = await requestCode(codeGenerationPromptWithOptions(brief, { promptPack: promptPackVersion }), 0.85);
     let parsedCodeRaw = parseJsonFromText(codeText);
-    if (!isValidCodePayloadShape(parsedCodeRaw)) {
+    let componentCode = parseComponentCodeFromModel(codeText);
+    if (!componentCode && !isValidCodePayloadShape(parsedCodeRaw)) {
       const strictCodeText = await requestCode(
         'Верни строго JSON формата {"componentCode":"..."} без markdown и без лишних полей. ' +
           codeGenerationPromptWithOptions(brief, { promptPack: promptPackVersion }),
         0.8
       );
       parsedCodeRaw = parseJsonFromText(strictCodeText);
-      if (!isValidCodePayloadShape(parsedCodeRaw)) {
+      componentCode = parseComponentCodeFromModel(strictCodeText);
+      if (!componentCode && !isValidCodePayloadShape(parsedCodeRaw)) {
         throw new Error("CODE_SCHEMA_VALIDATION_FAILED");
       }
     }
-    let componentCode = parseComponentCodeFromModel(
-      JSON.stringify({
-        componentCode: String((parsedCodeRaw as any).componentCode || "")
-      })
-    );
+    if (!componentCode) {
+      componentCode = parseComponentCodeFromModel(
+        JSON.stringify({
+          componentCode: String((parsedCodeRaw as any).componentCode || "")
+        })
+      );
+    }
     if (!componentCode) throw new Error("COMPONENT_CODE_MISSING");
 
     if (looksLowQualityComponent(componentCode)) {
