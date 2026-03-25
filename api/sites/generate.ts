@@ -367,6 +367,42 @@ export default async function handler(req: any, res: any) {
       process.env.OPENROUTER_MODEL_SITES_FALLBACKS ||
         "openai/gpt-4o-mini,meta-llama/llama-3.1-70b-instruct,qwen/qwen-2.5-72b-instruct,deepseek/deepseek-chat-v3-0324:free"
     );
+
+    const completeWithModelFallback = async (input: {
+      model: string;
+      systemPrompt?: string;
+      userPrompt: string;
+      timeoutMs: number;
+      temperature?: number;
+      retries?: number;
+    }) => {
+      const candidates = [input.model, ...modelFallbackCandidates].filter(Boolean);
+      let lastError: unknown = null;
+      for (const candidate of candidates) {
+        try {
+          return await openRouterCompletionWithRetry({
+            apiKey,
+            model: candidate,
+            systemPrompt: input.systemPrompt,
+            userPrompt: input.userPrompt,
+            timeoutMs: input.timeoutMs,
+            temperature: input.temperature,
+            retries: input.retries
+          });
+        } catch (error: any) {
+          lastError = error;
+          console.error("[sites/generate] model_candidate_failed", {
+            id: debugId,
+            stage,
+            candidate,
+            code: error?.code || "unknown",
+            message: String(error?.message || "unknown")
+          });
+        }
+      }
+      throw lastError || new Error("all_model_candidates_failed");
+    };
+
     if (!apiKey) {
       res.status(502).json({
         specVersion: "v2-website-builder",
@@ -533,37 +569,3 @@ export default async function handler(req: any, res: any) {
     });
   }
 }
-    const completeWithModelFallback = async (input: {
-      model: string;
-      systemPrompt?: string;
-      userPrompt: string;
-      timeoutMs: number;
-      temperature?: number;
-      retries?: number;
-    }) => {
-      const candidates = [input.model, ...modelFallbackCandidates].filter(Boolean);
-      let lastError: unknown = null;
-      for (const candidate of candidates) {
-        try {
-          return await openRouterCompletionWithRetry({
-            apiKey,
-            model: candidate,
-            systemPrompt: input.systemPrompt,
-            userPrompt: input.userPrompt,
-            timeoutMs: input.timeoutMs,
-            temperature: input.temperature,
-            retries: input.retries
-          });
-        } catch (error: any) {
-          lastError = error;
-          console.error("[sites/generate] model_candidate_failed", {
-            id: debugId,
-            stage,
-            candidate,
-            code: error?.code || "unknown",
-            message: String(error?.message || "unknown")
-          });
-        }
-      }
-      throw lastError || new Error("all_model_candidates_failed");
-    };
