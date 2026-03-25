@@ -48,11 +48,13 @@ export function looksLikeReactComponent(code: string) {
   const lower = text.toLowerCase();
   if (!text) return false;
   if (lower.includes("<!doctype html") || lower.includes("<html")) return false;
-  const hasJsx = /<\s*[A-Za-z][^>]*>/.test(text) || text.includes("className=");
+  const hasJsx = /<\s*[A-Za-z][^>]*>/.test(text) || text.includes("className=") || /return\s*\(\s*</.test(text) || /=>\s*\(\s*</.test(text);
+  const hasDefaultExport = /export\s+default\s+/.test(text);
   const hasComponentShape =
     /export\s+default\s+function\s+[A-Z][A-Za-z0-9_]*/.test(text) ||
     /function\s+[A-Z][A-Za-z0-9_]*\s*\(/.test(text) ||
-    /const\s+[A-Z][A-Za-z0-9_]*\s*=/.test(text);
+    /const\s+[A-Z][A-Za-z0-9_]*\s*=/.test(text) ||
+    hasDefaultExport;
   return hasJsx && hasComponentShape;
 }
 
