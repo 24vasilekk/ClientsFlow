@@ -164,6 +164,101 @@ function successPayload(input: {
   };
 }
 
+function escapeJsString(value: string) {
+  return String(value || "").replace(/\\/g, "\\\\").replace(/`/g, "\\`").replace(/\$\{/g, "\\${");
+}
+
+function fallbackComponentFromBrief(brief: WebsiteBrief) {
+  const brand = escapeJsString(brief.brandName || "Local Business");
+  const city = escapeJsString(brief.city || "Россия");
+  const goal = escapeJsString(brief.primaryGoal || "заявки и продажи");
+  const cta = escapeJsString(brief.primaryCTA || "Оставить заявку");
+  const services = (brief.contentHints || []).slice(0, 6).map((x) => escapeJsString(x));
+  const sections = (brief.sections || []).slice(0, 6).map((x) => escapeJsString(x));
+  return `export default function App() {
+  const services = ${JSON.stringify(services.length ? services : ["Консультация", "Подбор решения", "Поддержка", "Быстрый запуск"])};
+  const sections = ${JSON.stringify(sections.length ? sections : ["Преимущества", "Услуги", "Отзывы", "Контакты"])};
+  const benefits = [
+    { title: "Быстрый старт", text: "Запускаем проект без лишней бюрократии и долгих согласований." },
+    { title: "Прозрачные условия", text: "Понятная стоимость, сроки и фиксированные этапы работ." },
+    { title: "Локальная экспертиза", text: "Решения под аудиторию и спрос в городе ${city}." }
+  ];
+  const reviews = [
+    { name: "Алексей", text: "Сайт выглядит сильно и дает стабильные заявки." },
+    { name: "Мария", text: "Понравилась структура и понятный путь до заявки." },
+    { name: "Иван", text: "Запустились быстро, конверсия стала лучше уже в первый месяц." }
+  ];
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100">
+      <header className="sticky top-0 z-10 border-b border-slate-800/80 bg-slate-950/85 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+          <div className="text-xl font-black tracking-[0.15em]">${brand.toUpperCase()}</div>
+          <button className="rounded-full bg-amber-400 px-5 py-2 text-sm font-bold text-slate-900">${cta}</button>
+        </div>
+      </header>
+      <main>
+        <section className="mx-auto grid max-w-6xl gap-10 px-6 py-14 lg:grid-cols-[1.2fr_1fr]">
+          <div>
+            <p className="inline-flex rounded-full border border-amber-400/40 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-amber-300">${city}</p>
+            <h1 className="mt-5 text-5xl font-black leading-tight md:text-6xl">${brand}</h1>
+            <p className="mt-5 max-w-2xl text-lg text-slate-300">Современный коммерческий сайт с фокусом на ${goal}.</p>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <button className="rounded-xl bg-amber-400 px-6 py-3 text-base font-bold text-slate-900">${cta}</button>
+              <button className="rounded-xl border border-slate-700 px-6 py-3 text-base font-semibold">Смотреть услуги</button>
+            </div>
+          </div>
+          <div className="rounded-3xl border border-slate-800 bg-slate-900/60 p-6">
+            <h2 className="text-lg font-bold">Почему выбирают нас</h2>
+            <div className="mt-4 space-y-4">
+              {benefits.map((item) => (
+                <div key={item.title} className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+                  <p className="font-semibold">{item.title}</p>
+                  <p className="mt-1 text-sm text-slate-400">{item.text}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="mx-auto max-w-6xl px-6 py-10">
+          <h2 className="text-3xl font-black">Услуги</h2>
+          <div className="mt-6 grid gap-4 md:grid-cols-2">
+            {services.map((item) => (
+              <article key={item} className="rounded-2xl border border-slate-800 bg-slate-900/50 p-5">
+                <h3 className="text-xl font-bold">{item}</h3>
+                <p className="mt-2 text-sm text-slate-400">Персонализированное решение под задачи клиентов в ${city}.</p>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="mx-auto max-w-6xl px-6 py-10">
+          <h2 className="text-3xl font-black">Отзывы</h2>
+          <div className="mt-6 grid gap-4 md:grid-cols-3">
+            {reviews.map((item) => (
+              <blockquote key={item.name} className="rounded-2xl border border-slate-800 bg-slate-900/50 p-5">
+                <p className="text-slate-300">“{item.text}”</p>
+                <footer className="mt-3 text-sm font-semibold text-slate-400">{item.name}</footer>
+              </blockquote>
+            ))}
+          </div>
+        </section>
+
+        <section className="mx-auto max-w-6xl px-6 py-10">
+          <h2 className="text-3xl font-black">Секции проекта</h2>
+          <div className="mt-6 flex flex-wrap gap-2">
+            {sections.map((item) => (
+              <span key={item} className="rounded-full border border-slate-700 bg-slate-900/60 px-3 py-1 text-sm">{item}</span>
+            ))}
+          </div>
+        </section>
+      </main>
+    </div>
+  );
+}`;
+}
+
 export default async function handler(req: any, res: any) {
   if (req.method === "GET") {
     const sessionId = String(req.query?.sessionId || "").trim();
@@ -323,9 +418,7 @@ export default async function handler(req: any, res: any) {
       );
       parsedCodeRaw = parseJsonFromText(strictCodeText);
       componentCode = parseComponentCodeFromModel(strictCodeText);
-      if (!componentCode && !isValidCodePayloadShape(parsedCodeRaw)) {
-        throw new Error("CODE_SCHEMA_VALIDATION_FAILED");
-      }
+      if (!componentCode && !isValidCodePayloadShape(parsedCodeRaw)) componentCode = fallbackComponentFromBrief(brief);
     }
     if (!componentCode) {
       componentCode = parseComponentCodeFromModel(
@@ -334,7 +427,7 @@ export default async function handler(req: any, res: any) {
         })
       );
     }
-    if (!componentCode) throw new Error("COMPONENT_CODE_MISSING");
+    if (!componentCode) componentCode = fallbackComponentFromBrief(brief);
 
     if (looksLowQualityComponent(componentCode)) {
       stage = "quality_improve_request";
