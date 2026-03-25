@@ -869,7 +869,10 @@ function wrapReactComponentForPreview(componentCode: string) {
     }
 
     try {
-      const transformed = Babel.transform(cleaned, { presets: ["typescript", "react"] }).code;
+      const transformed = Babel.transform(cleaned, {
+        filename: "Site.tsx",
+        presets: ["typescript", "react"]
+      }).code;
       eval(transformed);
     } catch (e) {
       document.body.innerHTML = "<pre style='padding:16px;color:#b91c1c;white-space:pre-wrap'>Ошибка рендера React-кода\\n\\n" + String(e) + "</pre>";
