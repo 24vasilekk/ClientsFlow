@@ -1,5 +1,5 @@
 import type { WebsiteBrief } from "./websiteBuilderTypes";
-import { resolveWebsiteNiche, websiteDefaultsByNiche } from "./websiteDefaultsByNiche";
+import { resolveWebsiteNiche, websiteDefaultsByNiche } from "./websiteDefaultsByNiche.js";
 
 export function compact(input: unknown) {
   return String(input || "")

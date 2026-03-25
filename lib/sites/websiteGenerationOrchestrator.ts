@@ -6,9 +6,9 @@ import {
   looksLowQualityComponent,
   parseJsonFromText,
   sanitizeBrief
-} from "./websiteBuilderHelpers";
-import { isValidCodePayloadShape, isValidWebsiteBriefShape } from "./websiteBuilderValidation";
-import { briefExtractionPrompt, codeGenerationPromptWithOptions, improveCodePrompt } from "./websiteBuilderPrompts";
+} from "./websiteBuilderHelpers.js";
+import { isValidCodePayloadShape, isValidWebsiteBriefShape } from "./websiteBuilderValidation.js";
+import { briefExtractionPrompt, codeGenerationPromptWithOptions, improveCodePrompt } from "./websiteBuilderPrompts.js";
 import type { WebsiteBrief, WebsiteGenerationFlowResult, WebsiteGenerationModels, WebsiteGenerationProfile } from "./websiteBuilderTypes";
 
 type CompletionInput = {
