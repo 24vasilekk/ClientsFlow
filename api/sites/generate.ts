@@ -8,15 +8,15 @@ import {
   looksLowQualityComponent,
   parseJsonFromText,
   sanitizeBrief
-} from "../../lib/sites/websiteBuilderHelpers";
-import { isValidCodePayloadShape, isValidWebsiteBriefShape } from "../../lib/sites/websiteBuilderValidation";
+} from "../../lib/sites/websiteBuilderHelpers.js";
+import { isValidCodePayloadShape, isValidWebsiteBriefShape } from "../../lib/sites/websiteBuilderValidation.js";
 import {
   briefExtractionPrompt,
   codeGenerationPromptWithOptions,
   fixCodePrompt,
   improveCodePrompt,
   getWebsitePromptPack
-} from "../../lib/sites/websiteBuilderPrompts";
+} from "../../lib/sites/websiteBuilderPrompts.js";
 import type { WebsiteBrief, WebsiteBuilderMode, WebsiteBuilderRequest } from "../../lib/sites/websiteBuilderTypes";
 
 type AgentProfile = {

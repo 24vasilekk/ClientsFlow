@@ -1,6 +1,6 @@
 declare const process: { env: Record<string, string | undefined> };
 
-import { INTENT_CLASSIFIER_PROMPT, SALES_SYSTEM_PROMPT } from "../../lib/openrouter/chatPrompts";
+import { INTENT_CLASSIFIER_PROMPT, SALES_SYSTEM_PROMPT } from "../../lib/openrouter/chatPrompts.js";
 import {
   compact,
   extractCodeBlock,
@@ -9,15 +9,15 @@ import {
   looksLowQualityComponent,
   parseJsonFromText,
   sanitizeBrief
-} from "../../lib/sites/websiteBuilderHelpers";
+} from "../../lib/sites/websiteBuilderHelpers.js";
 import {
   briefExtractionPrompt,
   codeGenerationPromptWithOptions,
   improveCodePrompt,
   getWebsitePromptPack
-} from "../../lib/sites/websiteBuilderPrompts";
+} from "../../lib/sites/websiteBuilderPrompts.js";
 import type { WebsiteBrief } from "../../lib/sites/websiteBuilderTypes";
-import { isValidCodePayloadShape, isValidWebsiteBriefShape } from "../../lib/sites/websiteBuilderValidation";
+import { isValidCodePayloadShape, isValidWebsiteBriefShape } from "../../lib/sites/websiteBuilderValidation.js";
 
 type ApiMessage = { role: "user" | "assistant" | "system"; content: unknown };
 
