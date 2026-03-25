@@ -365,16 +365,12 @@ async function parseJsonResponseSafe(response: Response) {
 }
 
 function isTimeoutLikeFailure(input: { status: number; contentType: string; rawText?: string; parseError?: string }) {
-  const contentType = String(input.contentType || "").toLowerCase();
   const raw = String(input.rawText || "").toLowerCase();
-  const parse = String(input.parseError || "").toLowerCase();
   return (
     input.status === 504 ||
     raw.includes("function_invocation_timeout") ||
     raw.includes("gateway timeout") ||
-    raw.includes("timed out") ||
-    parse.includes("unexpected token") ||
-    contentType.includes("text/plain")
+    raw.includes("timed out")
   );
 }
 
