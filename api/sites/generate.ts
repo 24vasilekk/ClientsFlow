@@ -279,6 +279,21 @@ function parseModelFallbacks(raw: string) {
     .filter(Boolean);
 }
 
+function emergencyCodePrompt(input: { businessName: string; city: string; niche: string; goal: string; cta: string; userPrompt: string }) {
+  return [
+    "Сгенерируй один файл App.jsx.",
+    "Только React + Tailwind, без внешних библиотек и API.",
+    "Верни только код App.jsx, без markdown/JSON/объяснений.",
+    "Нужен коммерческий landing page с сильным hero, CTA, секциями услуг/преимуществ/отзывов/контактов.",
+    "Код должен сразу рендериться в preview.",
+    `Бизнес: ${input.businessName || input.niche || "локальный бизнес"}.`,
+    `Город: ${input.city || "Россия"}.`,
+    `Цель: ${input.goal || "заявки и обращения"}.`,
+    `CTA: ${input.cta || "Оставить заявку"}.`,
+    `Запрос пользователя: ${input.userPrompt || "-"}.`
+  ].join("\n");
+}
+
 function successPayload(input: {
   sessionId: string;
   round: number;
@@ -348,7 +363,10 @@ export default async function handler(req: any, res: any) {
     const modelCode = String(process.env.OPENROUTER_MODEL_SITES_CODE || process.env.OPENROUTER_MODEL_SITES || process.env.OPENROUTER_MODEL || "openai/gpt-4.1").trim();
     const modelPolish = String(process.env.OPENROUTER_MODEL_SITES_POLISH || process.env.OPENROUTER_MODEL_SITES || process.env.OPENROUTER_MODEL || "openai/gpt-4.1").trim();
     const modelFix = String(process.env.OPENROUTER_MODEL_SITES_FIX || process.env.OPENROUTER_MODEL_SITES || process.env.OPENROUTER_MODEL || "openai/gpt-4.1").trim();
-    const modelFallbackCandidates = parseModelFallbacks(process.env.OPENROUTER_MODEL_SITES_FALLBACKS || "openai/gpt-4o,openai/gpt-4o-mini");
+    const modelFallbackCandidates = parseModelFallbacks(
+      process.env.OPENROUTER_MODEL_SITES_FALLBACKS ||
+        "openai/gpt-4o-mini,meta-llama/llama-3.1-70b-instruct,qwen/qwen-2.5-72b-instruct,deepseek/deepseek-chat-v3-0324:free"
+    );
     if (!apiKey) {
       res.status(502).json({
         specVersion: "v2-website-builder",
@@ -436,15 +454,19 @@ export default async function handler(req: any, res: any) {
       });
       stage = "code_only_retry";
       // Non-template emergency path: one more direct code generation attempt from enriched brief.
-      const emergencyText = await openRouterCompletionWithRetry({
-        apiKey,
+      const emergencyText = await completeWithModelFallback({
         model: modelCode,
         systemPrompt: promptPack.systemGeneration,
-        userPrompt:
-          "Аварийный режим: верни только содержимое App.jsx (React+Tailwind), без markdown/JSON/комментариев вокруг. " +
-          codeGenerationPromptWithOptions(fallbackBrief, { promptPack: promptPackVersion }),
-        timeoutMs: 28000,
-        temperature: 0.8,
+        userPrompt: emergencyCodePrompt({
+          businessName: fallbackBrief.brandName,
+          city: fallbackBrief.city,
+          niche: fallbackBrief.businessType,
+          goal: fallbackBrief.primaryGoal,
+          cta: fallbackBrief.primaryCTA,
+          userPrompt: guidance
+        }),
+        timeoutMs: 32000,
+        temperature: 0.75,
         retries: 1
       });
       const emergencyCode = parseComponentCodeFromModel(emergencyText);
