@@ -119,7 +119,7 @@ export async function runWebsiteGenerationFlow(
     userPrompt: codeGenerationPromptWithOptions(brief, { promptPack: deps.promptPackVersion }),
     temperature: 0.85,
     timeoutMs: 26000,
-    retries: 1
+    retries: 2
   });
   let parsedCodeRaw = parseJsonFromText(codeText);
   let componentCode = parseComponentCodeFromModel(codeText);
@@ -143,6 +143,20 @@ export async function runWebsiteGenerationFlow(
         componentCode: String((parsedCodeRaw as any)?.componentCode || "")
       })
     );
+  }
+  if (!componentCode) {
+    // Final non-template fallback: ask model to return plain App.jsx code (no JSON wrapper).
+    const plainCodeText = await deps.complete({
+      model: deps.models.code,
+      systemPrompt: deps.promptPack.systemGeneration,
+      userPrompt:
+        "Верни только содержимое App.jsx без JSON, markdown и комментариев вокруг. " +
+        codeGenerationPromptWithOptions(brief, { promptPack: deps.promptPackVersion }),
+      temperature: 0.75,
+      timeoutMs: 26000,
+      retries: 1
+    });
+    componentCode = parseComponentCodeFromModel(plainCodeText);
   }
   if (!componentCode) {
     throw new Error("CODE_SCHEMA_VALIDATION_FAILED");
