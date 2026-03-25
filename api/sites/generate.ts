@@ -181,6 +181,30 @@ function looksLikeReactComponent(code: string) {
   return hasJsxLike && hasComponentShape;
 }
 
+function looksLowQualityComponentCode(code: string) {
+  const text = String(code || "");
+  const lower = text.toLowerCase();
+  if (!text.trim()) return true;
+  if (
+    lower.includes("studio name") ||
+    lower.includes("company name") ||
+    lower.includes("business name") ||
+    lower.includes("lorem ipsum")
+  ) {
+    return true;
+  }
+  // Too short often correlates with generic boilerplate output.
+  if (text.length < 5200) return true;
+  // A richer component usually has data arrays + map rendering.
+  const hasMap = /\.map\(/.test(text);
+  const hasArrays = /const\s+\w+\s*=\s*\[/.test(text);
+  // Ensure there is a meaningful page structure.
+  const sectionCount = (text.match(/<section\b/g) || []).length;
+  if (!hasMap || !hasArrays) return true;
+  if (sectionCount < 5) return true;
+  return false;
+}
+
 function isComputerClubLike(profile: AgentProfile, guidance: string) {
   const joined = `${profile.niche} ${profile.goal} ${profile.style} ${profile.styleReference} ${guidance}`.toLowerCase();
   return (
@@ -449,7 +473,7 @@ export default async function handler(req: any, res: any) {
     const apiKey = String(process.env.OPENROUTER_API_KEY || "")
       .replace(/[\r\n\s\u200B-\u200D\uFEFF]+/g, "")
       .trim();
-    const model = String(process.env.OPENROUTER_MODEL || process.env.OPENROUTER_MODEL_FAST || "openai/gpt-4o").trim();
+    const model = String(process.env.OPENROUTER_MODEL_SITES || process.env.OPENROUTER_MODEL || "openai/gpt-4.1").trim();
     const resolvedProfile: AgentProfile = {
       ...profile,
       businessName: deriveBusinessName(profile, guidance)
@@ -512,7 +536,7 @@ export default async function handler(req: any, res: any) {
           },
           body: JSON.stringify({
             model,
-            temperature: 0.75,
+            temperature: 0.85,
             max_tokens: 5200,
             messages: [
               {
@@ -531,13 +555,13 @@ export default async function handler(req: any, res: any) {
     };
 
     stage = "openrouter_request";
-    if (Date.now() - startedAt > 20000) {
+    if (Date.now() - startedAt > 42000) {
       finishWithFallback("EARLY_TIMEOUT_GUARD", "Function time budget exceeded before OpenRouter call");
       return;
     }
     let response: Response | null = null;
     try {
-      response = await requestOpenRouter(18000);
+      response = await requestOpenRouter(26000);
     } catch (error: any) {
       finishWithFallback("OPENROUTER_TIMEOUT_FALLBACK", compact(error?.message || "openrouter_request_failed"));
       return;
@@ -571,6 +595,51 @@ export default async function handler(req: any, res: any) {
     if (typeof (parsed as any).componentCode !== "string" || !(parsed as any).componentCode.trim()) {
       finishWithFallback("COMPONENT_CODE_MISSING", compact(text));
       return;
+    }
+    if (looksLowQualityComponentCode((parsed as any).componentCode)) {
+      stage = "openrouter_quality_retry";
+      const upgradePrompt = [
+        "Улучшай только качество кода сайта. Верни строго JSON {\"componentCode\":\"...\"}.",
+        "Пересобери страницу как premium-level дизайн, без шаблонности и заглушек.",
+        "Сохрани бизнес-контекст (город/ниша), но выдай более сильную композицию, типографику и секции.",
+        "Требования: 250+ строк, массивы данных + map(), hero + benefits + services + team + reviews + FAQ + booking + contacts.",
+        `Контекст: бизнес=${base.businessName}; ниша=${base.niche}; город=${base.city}; запрос=${guidance || "-"}`,
+        "Исходный код для улучшения:",
+        (parsed as any).componentCode
+      ].join("\n");
+      let retryResponse: Response | null = null;
+      try {
+        retryResponse = await requestOpenRouter(22000, upgradePrompt);
+      } catch (error: any) {
+        finishWithFallback("OPENROUTER_QUALITY_RETRY_TIMEOUT", compact(error?.message || "quality_retry_failed"));
+        return;
+      }
+      const retryData = await retryResponse.json().catch(() => ({} as any));
+      if (!retryResponse.ok) {
+        finishWithFallback(
+          "OPENROUTER_QUALITY_RETRY_HTTP_ERROR",
+          `status=${retryResponse.status}; details=${compact(retryData?.error?.message || retryData?.error || "unknown_openrouter_error")}`
+        );
+        return;
+      }
+      const retryContent = retryData?.choices?.[0]?.message?.content;
+      const retryText =
+        typeof retryContent === "string"
+          ? retryContent
+          : Array.isArray(retryContent)
+            ? retryContent.map((item: any) => item?.text || "").join("\n")
+            : "";
+      let retryParsed = parseJson(retryText);
+      if (!retryParsed || typeof retryParsed !== "object") retryParsed = {};
+      if (typeof (retryParsed as any).componentCode !== "string" || !(retryParsed as any).componentCode.trim()) {
+        const retryRawComponent = extractCodeBlock(retryText);
+        if (retryRawComponent && looksLikeReactComponent(retryRawComponent)) (retryParsed as any).componentCode = retryRawComponent;
+      }
+      if (typeof (retryParsed as any).componentCode !== "string" || !(retryParsed as any).componentCode.trim()) {
+        finishWithFallback("QUALITY_RETRY_COMPONENT_CODE_MISSING", compact(retryText));
+        return;
+      }
+      parsed = retryParsed;
     }
 
     const draft = normalizeDraft(parsed, base);
