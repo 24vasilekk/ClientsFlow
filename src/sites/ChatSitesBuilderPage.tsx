@@ -130,7 +130,6 @@ type GenerationHistoryItem = {
   engine: "openrouter" | "algorithm";
   createdAt: string;
 };
-type QualityMode = "fast" | "pro";
 
 type DesignPreset = {
   id: string;
@@ -1831,7 +1830,6 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
   const [previewExpanded, setPreviewExpanded] = useState(true);
   const [generationRound, setGenerationRound] = useState(1);
   const [generationEngine, setGenerationEngine] = useState<"openrouter" | "algorithm">("openrouter");
-  const [qualityMode, setQualityMode] = useState<QualityMode>("fast");
   const [generationSessionId, setGenerationSessionId] = useState(() => {
     if (typeof window === "undefined") return `session-${uid()}`;
     return sanitizeSessionId(localStorage.getItem(SITE_SESSION_STORAGE_KEY) || `session-${uid()}`);
@@ -1908,7 +1906,6 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
               profile: nextProfile,
               guidance,
               round: nextRound,
-              qualityMode,
               currentPageCode: currentDraft?.pageCode || "",
               currentBusinessName: currentDraft?.businessName || ""
             })
@@ -2000,21 +1997,19 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
       if (lower.includes("function_invocation_timeout") || lower.includes("status=504")) {
         try {
           const recoveryPrompt = [
-            "Верни только JSON для структуры лендинга. Без markdown.",
+            "Верни только код сайта: либо JSON {\"pageCode\":\"<html...>\"}, либо чистый HTML документ.",
             `Бизнес: ${nextProfile.businessName || "Studio Name"}`,
             `Ниша: ${nextProfile.niche || "service"}`,
             `Город: ${nextProfile.city || "Москва"}`,
             `Цель: ${nextProfile.goal || "заявки"}`,
             `Стиль: ${nextProfile.style || "современный"}`,
             `Референс: ${nextProfile.styleReference || "-"}`,
-            `Запрос: ${guidance || "-"}`,
-            'Поля: heroTitle, heroSubtitle, aboutBody, services[], team[], reviews[], faq[], pageDsl[], pageCode.'
+            `Запрос: ${guidance || "-"}`
           ].join("\n");
           const recoveryRes = await fetch("/api/openrouter/sites-copy", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              model: qualityMode === "pro" ? "openai/gpt-4o" : "openai/gpt-4o-mini",
               messages: [{ role: "user", content: recoveryPrompt }]
             })
           });
@@ -2346,24 +2341,8 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
           <span className={`rounded-full border px-2 py-1 text-xs ${statusClass(paymentStatus)}`}>Pay</span>
           <span className={`rounded-full border px-2 py-1 text-xs ${statusClass(publishStatus)}`}>Publish</span>
           <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-600">
-            Engine: {generationEngine} · {qualityMode}
+            Engine: {generationEngine}
           </span>
-          <div className="flex items-center gap-1 rounded-full border border-slate-200 bg-white p-1">
-            <button
-              type="button"
-              onClick={() => setQualityMode("fast")}
-              className={`rounded-full px-2.5 py-1 text-xs font-semibold ${qualityMode === "fast" ? "bg-sky-500 text-white" : "text-slate-600 hover:bg-slate-100"}`}
-            >
-              Fast
-            </button>
-            <button
-              type="button"
-              onClick={() => setQualityMode("pro")}
-              className={`rounded-full px-2.5 py-1 text-xs font-semibold ${qualityMode === "pro" ? "bg-indigo-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}
-            >
-              Pro
-            </button>
-          </div>
         </div>
         {generationHistory.length > 0 ? (
           <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
@@ -2579,9 +2558,6 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
                 </button>
               ))}
             </div>
-            <p className="mt-2 text-xs text-slate-400">
-              DSL: <code>/regenerate premium dark</code> · <code>/style-like base44 light workspace</code> · <code>/rewrite-block #2 title: Новый заголовок</code> · <code>/move-block #4 before #2</code> · <code>/add-section team</code> · <code>/remove-section faq</code> · <code>/rewrite-hero Новый оффер</code> · <code>/undo</code> · <code>/revert 2</code>
-            </p>
           </div>
         </main>
 

@@ -393,7 +393,6 @@ export default async function handler(req: any, res: any) {
     const sessionId = String(req.body?.sessionId || "").trim() || `session-${Math.random().toString(36).slice(2, 10)}`;
     const round = Math.max(1, Number(req.body?.round || 1));
     const guidance = String(req.body?.guidance || "").trim();
-    const qualityMode = String(req.body?.qualityMode || "fast").toLowerCase() === "pro" ? "pro" : "fast";
     const currentPageCode = String(req.body?.currentPageCode || "").trim();
     const profile: AgentProfile = {
       businessName: String(profileRaw.businessName || ""),
@@ -409,9 +408,7 @@ export default async function handler(req: any, res: any) {
     const apiKey = String(process.env.OPENROUTER_API_KEY || "")
       .replace(/[\r\n\s\u200B-\u200D\uFEFF]+/g, "")
       .trim();
-    const fastModel = String(process.env.OPENROUTER_MODEL_FAST || process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini").trim();
-    const proModel = String(process.env.OPENROUTER_MODEL_PRO || "openai/gpt-4o").trim();
-    const model = qualityMode === "pro" ? proModel : fastModel;
+    const model = String(process.env.OPENROUTER_MODEL || process.env.OPENROUTER_MODEL_FAST || "openai/gpt-4o-mini").trim();
     const base = fallbackDraft(profile, guidance);
     const finishWithFallback = (code: string, message: string) => {
       res.status(502).json({
@@ -436,9 +433,8 @@ export default async function handler(req: any, res: any) {
     }
 
     const isEdit = isEditRequest(guidance);
-    const designDirection = buildDesignDirection(profile, guidance);
     const prompt = [
-      "Сгенерируй код современного сайта на русском языке.",
+      "Сгенерируй полный HTML+CSS код современного сайта на русском языке.",
       `Бизнес: ${base.businessName}`,
       `Ниша: ${base.niche}`,
       `Город: ${base.city}`,
@@ -446,17 +442,10 @@ export default async function handler(req: any, res: any) {
       `Стиль: ${profile.style || "современный"}`,
       `Референс: ${profile.styleReference || "-"}`,
       `Запрос: ${guidance || "-"}`,
-      `Design direction: ${designDirection}`,
       isEdit && currentPageCode
-        ? `ТЕКУЩИЙ HTML/CSS КОД (измени его по запросу и верни полную новую версию pageCode, не обнуляй структуру):\n${currentPageCode.slice(0, 22000)}`
+        ? `ТЕКУЩИЙ HTML/CSS КОД (измени его по запросу и верни полную новую версию):\n${currentPageCode.slice(0, 24000)}`
         : "Собери новый код с нуля под запрос.",
-      "Ограничения качества (обязательные):",
-      "1) pageCode = полный HTML документ с CSS внутри <style>, без JS библиотек.",
-      "2) Минимум 6 смысловых секций: hero, преимущества/о нас, услуги/пакеты, social proof, FAQ, финальный CTA/контакты.",
-      "3) Не использовать заглушки: Studio Name, Блок, Секция, Lorem Ipsum.",
-      "4) Добавь CSS variables (:root), хотя бы один градиент, responsive @media, hover-состояния кнопок/карточек.",
-      "5) Визуал должен быть выразительным и не шаблонным: продуманные отступы, контрастная типографика, аккуратная глубина/тени.",
-      'Формат ответа: либо JSON {"pageCode":"<html...>"} либо чистый HTML документ. Ничего кроме кода/JSON.'
+      'Формат ответа: либо JSON {"pageCode":"<html...>"} либо чистый HTML документ.'
     ].join("\n");
 
     const requestOpenRouter = async (timeoutMs: number, userPrompt: string = prompt) => {
@@ -471,13 +460,13 @@ export default async function handler(req: any, res: any) {
           },
           body: JSON.stringify({
             model,
-            temperature: qualityMode === "pro" ? 0.7 : 0.55,
-            max_tokens: qualityMode === "pro" ? 2600 : 1800,
+            temperature: 0.6,
+            max_tokens: 2600,
             messages: [
               {
                 role: "system",
                 content:
-                  "Ты арт-директор и senior frontend developer. Всегда выдаешь выразительный, современный, не-шаблонный лендинг."
+                  "Ты senior frontend developer и web designer. Верни только код сайта."
               },
               { role: "user", content: userPrompt }
             ]
@@ -532,44 +521,7 @@ export default async function handler(req: any, res: any) {
       return;
     }
 
-    let draft = normalizeDraft(parsed, base);
-    if (qualityMode === "pro" || looksLowQualityPageCode(draft.pageCode)) {
-      stage = "quality_refine_request";
-      const refinePrompt = [
-        "Улучши дизайн ниже до premium-уровня и верни только полный pageCode.",
-        "Сохрани бизнес-контекст и структуру, но сделай визуал гораздо сильнее.",
-        "Запрещены заглушки и плоский серый шаблон.",
-        `Бизнес: ${base.businessName}; Ниша: ${base.niche}; Город: ${base.city}`,
-        `Запрос пользователя: ${guidance || "-"}`,
-        "Текущий pageCode:",
-        draft.pageCode,
-        'Формат ответа: либо JSON {"pageCode":"<html...>"} либо чистый HTML документ.'
-      ].join("\n");
-      try {
-        const refineResponse = await requestOpenRouter(12000, refinePrompt);
-        stage = "quality_refine_read";
-        const refineData = await refineResponse.json().catch(() => ({} as any));
-        if (refineResponse.ok) {
-          const refineContent = refineData?.choices?.[0]?.message?.content;
-          const refineText =
-            typeof refineContent === "string"
-              ? refineContent
-              : Array.isArray(refineContent)
-                ? refineContent.map((item: any) => item?.text || "").join("\n")
-                : "";
-          const refineParsed = parseJson(refineText) || {};
-          if (typeof (refineParsed as any).pageCode !== "string" || !(refineParsed as any).pageCode.trim()) {
-            const refineHtml = extractHtmlDocument(refineText);
-            if (refineHtml) (refineParsed as any).pageCode = refineHtml;
-          }
-          if (typeof (refineParsed as any).pageCode === "string" && (refineParsed as any).pageCode.trim()) {
-            draft = normalizeDraft(refineParsed, draft);
-          }
-        }
-      } catch {
-        // keep first draft if refine pass fails
-      }
-    }
+    const draft = normalizeDraft(parsed, base);
     res.status(200).json({
       specVersion: "v1-lite",
       debug: { id: debugId, stage: "ok" },
@@ -578,8 +530,8 @@ export default async function handler(req: any, res: any) {
       engine: "openrouter",
       draft,
       profile,
-      stages: [{ id: "openrouter", ms: Date.now() - startedAt, source: `openrouter:${qualityMode}` }],
-      candidates: [{ id: "ai-main", engine: "openrouter", score: 100, label: `AI Main (${qualityMode})` }],
+      stages: [{ id: "openrouter", ms: Date.now() - startedAt, source: "openrouter" }],
+      candidates: [{ id: "ai-main", engine: "openrouter", score: 100, label: "AI Main" }],
       selectedCandidateId: "ai-main",
       totalMs: Date.now() - startedAt,
       history: []
