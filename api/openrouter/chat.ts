@@ -16,7 +16,7 @@ import {
   improveCodePrompt,
   getWebsitePromptPack
 } from "../../lib/sites/websiteBuilderPrompts";
-import { WebsiteBrief } from "../../lib/sites/websiteBuilderTypes";
+import type { WebsiteBrief } from "../../lib/sites/websiteBuilderTypes";
 import { isValidCodePayloadShape, isValidWebsiteBriefShape } from "../../lib/sites/websiteBuilderValidation";
 
 type ApiMessage = { role: "user" | "assistant" | "system"; content: unknown };

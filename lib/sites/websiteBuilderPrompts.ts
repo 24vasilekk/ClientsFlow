@@ -1,4 +1,4 @@
-import { WebsiteBrief } from "./websiteBuilderTypes";
+import type { WebsiteBrief } from "./websiteBuilderTypes";
 
 export type WebsitePromptPackVersion = "A" | "B";
 

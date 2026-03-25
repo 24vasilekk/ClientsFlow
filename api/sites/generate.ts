@@ -17,7 +17,7 @@ import {
   improveCodePrompt,
   getWebsitePromptPack
 } from "../../lib/sites/websiteBuilderPrompts";
-import { WebsiteBrief, WebsiteBuilderMode, WebsiteBuilderRequest } from "../../lib/sites/websiteBuilderTypes";
+import type { WebsiteBrief, WebsiteBuilderMode, WebsiteBuilderRequest } from "../../lib/sites/websiteBuilderTypes";
 
 type AgentProfile = {
   businessName: string;
@@ -51,6 +51,26 @@ function parseComponentCodeFromModel(raw: string) {
       : extractCodeBlock(raw);
   if (!looksLikeReactComponent(candidate)) return "";
   return candidate;
+}
+
+async function readRequestBody(req: any): Promise<Record<string, unknown>> {
+  if (req?.body && typeof req.body === "object") return req.body as Record<string, unknown>;
+  if (typeof req?.body === "string") {
+    try {
+      return JSON.parse(req.body) as Record<string, unknown>;
+    } catch {
+      return {};
+    }
+  }
+  try {
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(Buffer.from(chunk));
+    const raw = Buffer.concat(chunks).toString("utf8").trim();
+    if (!raw) return {};
+    return JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
 }
 
 async function openRouterCompletion(input: {
@@ -151,7 +171,7 @@ export default async function handler(req: any, res: any) {
   let stage = "init";
 
   try {
-    const body = (req.body || {}) as WebsiteBuilderRequest;
+    const body = (await readRequestBody(req)) as WebsiteBuilderRequest;
     const sessionId = String(body.sessionId || "").trim() || `session-${Math.random().toString(36).slice(2, 10)}`;
     const round = Math.max(1, Number(body.round || 1));
     const mode: WebsiteBuilderMode = body.mode === "fix" || body.mode === "improve" ? body.mode : "generate";

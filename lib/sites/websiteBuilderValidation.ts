@@ -1,4 +1,4 @@
-import { WebsiteBrief } from "./websiteBuilderTypes";
+import type { WebsiteBrief } from "./websiteBuilderTypes";
 
 function isNonEmptyString(value: unknown) {
   return typeof value === "string" && value.trim().length > 0;
