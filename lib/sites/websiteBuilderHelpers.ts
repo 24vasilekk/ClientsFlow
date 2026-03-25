@@ -1,4 +1,5 @@
 import type { WebsiteBrief } from "./websiteBuilderTypes";
+import { resolveWebsiteNiche, websiteDefaultsByNiche } from "./websiteDefaultsByNiche";
 
 export function compact(input: unknown) {
   return String(input || "")
@@ -115,6 +116,166 @@ export function inferFallbackBrief(input: {
     needsPricing: true,
     needsTestimonials: true,
     needsMap: businessType.includes("local") || businessType.includes("barber")
+  };
+}
+
+type WebsitePromptProfile = {
+  businessName?: string;
+  niche?: string;
+  city?: string;
+  goal?: string;
+  style?: string;
+  mustHave?: string[];
+};
+
+type WebsitePromptEnrichment = {
+  normalizedPrompt: string;
+  wasEnriched: boolean;
+  reason: "very_short" | "too_generic" | "already_detailed";
+  brief: WebsiteBrief;
+};
+
+function detectGeneralRequest(text: string) {
+  const normalized = String(text || "").toLowerCase().replace(/\s+/g, " ").trim();
+  if (!normalized) return true;
+  const wordCount = normalized.split(" ").filter(Boolean).length;
+  const hasBusinessCue = /(сайт|лендинг|landing|барбершоп|бренд|магазин|салон|клуб|clinic|shop|store)/i.test(normalized);
+  const hasDetailCue = /(стиль|hero|cta|цвет|аудитори|контент|секц|отзыв|форма|контакт|конверс|преми|минимал|react|tailwind)/i.test(normalized);
+  if (wordCount <= 8) return true;
+  if (wordCount <= 14 && !hasDetailCue) return true;
+  if (hasBusinessCue && !hasDetailCue && wordCount <= 18) return true;
+  return false;
+}
+
+function detectVeryShortRequest(text: string) {
+  const normalized = String(text || "").toLowerCase().replace(/\s+/g, " ").trim();
+  if (!normalized) return true;
+  const words = normalized.split(" ").filter(Boolean);
+  return words.length <= 5;
+}
+
+function hasCityInInput(text: string, briefCity: string) {
+  const source = String(text || "").toLowerCase();
+  const city = String(briefCity || "").toLowerCase();
+  if (!city || city === "россия") return false;
+  return source.includes(city);
+}
+
+function buildExpandedPromptFromBrief(rawUserPrompt: string, brief: WebsiteBrief) {
+  const cityInstruction = hasCityInInput(rawUserPrompt, brief.city)
+    ? `город из запроса использовать в hero, CTA и контактах: ${brief.city}`
+    : brief.city && brief.city !== "Россия"
+      ? `если уместно для локального бизнеса, использовать город ${brief.city} в hero, CTA и контактах`
+      : "если город не указан, использовать нейтральные формулировки без выдумывания адреса";
+
+  return [
+    rawUserPrompt || `Сделай сайт для ${brief.businessType}`,
+    "Internal auto-expansion enabled: convert short request into full conversion brief.",
+    `business_type=${brief.businessType}; brand_name=${brief.brandName}; city=${brief.city};`,
+    `target_audience=${brief.targetAudience};`,
+    `style_direction=${brief.styleKeywords.join(", ")}; visual_direction=${brief.visualDirection}; color_direction=${brief.colorDirection};`,
+    `primary_goal=${brief.primaryGoal}; primary_cta=${brief.primaryCTA}; tone=${brief.tone};`,
+    `mandatory_sections=${brief.sections.join(", ")};`,
+    `content_hints=${brief.contentHints.join(", ")};`,
+    `requires_contact_form=${brief.needsContactForm}; requires_pricing=${brief.needsPricing}; requires_testimonials=${brief.needsTestimonials}; requires_map=${brief.needsMap};`,
+    `locality_rule=${cityInstruction}.`,
+    "Requirements: React + Tailwind, one self-contained App.jsx, realistic commercial copy, conversion-first layout."
+  ].join(" ");
+}
+
+export function autoExpandWebsitePrompt(userInput: string, profile: WebsitePromptProfile = {}) {
+  const raw = String(userInput || "").replace(/\s+/g, " ").trim();
+  const brief = buildWebsiteBrief(raw, profile);
+  const shouldExpand = detectVeryShortRequest(raw) || detectGeneralRequest(raw);
+  if (!shouldExpand) {
+    return {
+      expandedPrompt: raw,
+      expanded: false,
+      reason: "already_detailed" as const,
+      brief
+    };
+  }
+  return {
+    expandedPrompt: buildExpandedPromptFromBrief(raw, brief),
+    expanded: true,
+    reason: detectVeryShortRequest(raw) ? ("very_short" as const) : ("too_generic" as const),
+    brief
+  };
+}
+
+export function buildWebsiteBrief(userInput: string, profile: WebsitePromptProfile = {}): WebsiteBrief {
+  const base = inferFallbackBrief({
+    guidance: userInput,
+    businessName: profile.businessName || "",
+    niche: profile.niche || "",
+    city: profile.city || "",
+    goal: profile.goal || "",
+    style: profile.style || "",
+    mustHave: profile.mustHave || []
+  });
+
+  const nicheKey = resolveWebsiteNiche(userInput, profile.niche || base.businessType);
+  const defaults = websiteDefaultsByNiche[nicheKey];
+  const businessType = profile.niche || defaults.businessType || base.businessType;
+  const city = profile.city || base.city || "Россия";
+  const goal = profile.goal || defaults.primaryGoal || base.primaryGoal;
+  const style = profile.style || defaults.styleDirection || "modern commercial contemporary";
+  const sections = defaults.sections || base.sections;
+  const primaryCTA = defaults.primaryCTA || base.primaryCTA;
+  const targetAudience = defaults.audienceTemplate ? defaults.audienceTemplate(city) : base.targetAudience;
+  const brandName = profile.businessName || base.brandName || `${businessType} в ${city}`;
+  const contentHints = profile.mustHave?.length
+    ? profile.mustHave
+    : defaults.contentBlocks || ["реалистичный коммерческий оффер", "сильный CTA", "выгоды", "отзывы", "форма заявки", "контакты"];
+
+  return sanitizeBrief(
+    {
+      ...base,
+      businessType,
+      city,
+      brandName,
+      targetAudience,
+      tone: defaults.tone || "уверенный, коммерческий, современный",
+      primaryGoal: goal,
+      primaryCTA,
+      sections,
+      styleKeywords: Array.from(new Set([style, ...(defaults.styleKeywords || []), "modern landing page", "react", "tailwind"])),
+      colorDirection: defaults.colorDirection || (style.includes("dark") ? "dark base + accent color" : "clean light base + strong contrast accents"),
+      visualDirection: defaults.visualDirection || (style.includes("premium")
+        ? "premium composition, bold hero, rich hierarchy, strong CTA blocks"
+        : "clean commercial composition, clear hierarchy, conversion-first layout"),
+      contentHints,
+      needsContactForm: true,
+      needsPricing: defaults.needsPricing,
+      needsTestimonials: true,
+      needsMap: defaults.needsMap && city !== "Россия"
+    },
+    base
+  );
+}
+
+export function normalizeWebsitePrompt(userInput: string, profile: WebsitePromptProfile = {}) {
+  const raw = String(userInput || "").replace(/\s+/g, " ").trim();
+  return enrichWebsitePrompt(raw, profile).normalizedPrompt;
+}
+
+export function enrichWebsitePrompt(userInput: string, profile: WebsitePromptProfile = {}): WebsitePromptEnrichment {
+  const raw = String(userInput || "").replace(/\s+/g, " ").trim();
+  const expanded = autoExpandWebsitePrompt(raw, profile);
+  if (!expanded.expanded) {
+    return {
+      normalizedPrompt: raw,
+      wasEnriched: false,
+      reason: "already_detailed",
+      brief: expanded.brief
+    };
+  }
+
+  return {
+    normalizedPrompt: expanded.expandedPrompt,
+    wasEnriched: true,
+    reason: expanded.reason,
+    brief: expanded.brief
   };
 }
 

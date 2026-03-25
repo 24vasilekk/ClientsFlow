@@ -4,7 +4,7 @@ import DashboardApp from "./DashboardApp";
 import SitesBuilderPage from "./sites/ChatSitesBuilderPage";
 import WorkbenchApp from "./WorkbenchApp";
 
-type RoutePath = "/" | "/login" | "/dashboard" | "/pricing" | "/workbench" | "/sites" | `/s/${string}`;
+type RoutePath = "/" | "/login" | "/dashboard" | "/pricing" | "/workbench" | "/sites" | `/s/${string}` | `/sites/preview/${string}`;
 
 type ChatRole = "assistant" | "user";
 type ChatMessage = {
@@ -45,6 +45,36 @@ type WebsiteFixLogItem = {
 
 const AUTH_KEY = "clientsflow_demo_auth_v1";
 const WORKBENCH_AUTH_KEY = "clientsflow_workbench_auth_v1";
+
+function humanizeWebsiteUiError(raw: string) {
+  const text = String(raw || "").toLowerCase();
+  if (
+    text.includes("function_invocation_timeout") ||
+    text.includes("gateway timeout") ||
+    text.includes("status 504") ||
+    text.includes("openrouter timeout")
+  ) {
+    return "Сервис генерации временно отвечает слишком долго.";
+  }
+  if (
+    text.includes("invalid_json_response") ||
+    text.includes("json parse") ||
+    text.includes("unexpected token") ||
+    text.includes("code_schema_validation_failed") ||
+    text.includes("brief_schema_validation_failed")
+  ) {
+    return "Не удалось сгенерировать сайт с первого раза. Попробуйте ещё раз.";
+  }
+  if (
+    text.includes("build/runtime error") ||
+    text.includes("component not found") ||
+    text.includes("babel") ||
+    text.includes("syntaxerror")
+  ) {
+    return "Не получилось собрать preview. Можно попробовать автоисправление.";
+  }
+  return "Не удалось сгенерировать сайт с первого раза. Попробуйте ещё раз.";
+}
 
 function BrandWordmark({
   cClass = "text-cyan-500",
@@ -197,6 +227,7 @@ const faqItems = [
 ];
 
 function normalizePath(pathname: string): RoutePath {
+  if (pathname.startsWith("/sites/preview/")) return pathname as `/sites/preview/${string}`;
   if (pathname.startsWith("/s/")) return pathname as `/s/${string}`;
   if (pathname === "/login") return "/login";
   if (pathname === "/dashboard") return "/dashboard";
@@ -204,6 +235,26 @@ function normalizePath(pathname: string): RoutePath {
   if (pathname === "/workbench") return "/workbench";
   if (pathname === "/sites") return "/sites";
   return "/";
+}
+
+type TemporaryPreviewData = {
+  id: string;
+  createdAt: string;
+  title?: string;
+  pageCode: string;
+};
+
+function loadTempPreview(id: string): TemporaryPreviewData | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(`clientsflow_temp_preview:${id}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as TemporaryPreviewData;
+    if (!parsed || typeof parsed !== "object" || typeof parsed.pageCode !== "string" || !parsed.pageCode.trim()) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
 }
 
 type PublishedSiteData = {
@@ -1028,7 +1079,7 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
 
                 {websitePreviewError ? (
                   <div className="mb-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
-                    Build/runtime error: {websitePreviewError}
+                    {humanizeWebsiteUiError(websitePreviewError)}
                   </div>
                 ) : null}
                 {websiteAutoFixInProgress ? (
@@ -1058,7 +1109,7 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
                     <div className="mt-2 space-y-1">
                       {websiteFixLog.slice(-8).map((item, index) => (
                         <p key={`${item.at}-${index}`}>
-                          #{item.attempt} {item.status} {item.note ? `(${item.note})` : ""}
+                          #{item.attempt} {item.status}
                         </p>
                       ))}
                     </div>
@@ -1721,6 +1772,44 @@ function PublishedSitePage({ path, onNavigate }: { path: `/s/${string}`; onNavig
   );
 }
 
+function FullPreviewPage({ path, onNavigate }: { path: `/sites/preview/${string}`; onNavigate: (path: RoutePath) => void }) {
+  const id = path.replace("/sites/preview/", "");
+  const [data, setData] = useState<TemporaryPreviewData | null>(null);
+
+  useEffect(() => {
+    setData(loadTempPreview(id));
+  }, [id]);
+
+  if (!data) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#f7f8f6] px-4">
+        <div className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">Preview не найден</h1>
+          <p className="mt-2 text-sm text-slate-600">Сгенерируй сайт снова и открой full preview ещё раз.</p>
+          <button onClick={() => onNavigate("/sites")} className="mt-4 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white">
+            Вернуться в Builder
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[#f8fafc]">
+      <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3">
+        <div>
+          <p className="text-sm font-semibold text-slate-800">{data.title || "Full Preview"}</p>
+          <p className="text-[11px] text-slate-500">Полноэкранный просмотр сгенерированного сайта</p>
+        </div>
+        <button onClick={() => onNavigate("/sites")} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700">
+          Back to Builder
+        </button>
+      </div>
+      <iframe title="Generated full preview" sandbox="allow-scripts allow-forms allow-popups allow-modals" srcDoc={data.pageCode} className="h-[calc(100vh-56px)] w-full border-0 bg-white" />
+    </div>
+  );
+}
+
 function DashboardRoute({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
   const isAuth = useMemo(() => {
     try {
@@ -1808,6 +1897,7 @@ function WorkbenchRoute({ onNavigate }: { onNavigate: (path: RoutePath) => void 
 
 export default function App() {
   const [path, navigate] = useRoute();
+  const isFullPreviewPath = path.startsWith("/sites/preview/");
   const isPublishedSitePath = path.startsWith("/s/");
 
   return (
@@ -1818,6 +1908,7 @@ export default function App() {
       {path === "/sites" ? <SitesPage onNavigate={navigate} /> : null}
       {path === "/dashboard" ? <DashboardRoute onNavigate={navigate} /> : null}
       {path === "/workbench" ? <WorkbenchRoute onNavigate={navigate} /> : null}
+      {isFullPreviewPath ? <FullPreviewPage path={path as `/sites/preview/${string}`} onNavigate={navigate} /> : null}
       {isPublishedSitePath ? <PublishedSitePage path={path as `/s/${string}`} onNavigate={navigate} /> : null}
     </>
   );

@@ -1,5 +1,15 @@
 export type WebsiteBuilderMode = "generate" | "fix" | "improve";
 
+export type WebsiteGenerationProfile = {
+  businessName: string;
+  niche: string;
+  city: string;
+  goal: string;
+  style: string;
+  styleReference: string;
+  mustHave: string[];
+};
+
 export type WebsiteBrief = {
   businessType: string;
   city: string;
@@ -34,5 +44,22 @@ export type WebsiteBuilderRequest = {
     style?: string;
     styleReference?: string;
     mustHave?: string[];
+  };
+};
+
+export type WebsiteGenerationModels = {
+  brief: string;
+  code: string;
+  polish: string;
+};
+
+export type WebsiteGenerationFlowResult = {
+  brief: WebsiteBrief;
+  componentCode: string;
+  meta: {
+    usedFallbackBrief: boolean;
+    usedFallbackCode: boolean;
+    usedPolish: boolean;
+    normalizedGuidance: string;
   };
 };

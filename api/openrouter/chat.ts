@@ -2,11 +2,12 @@ declare const process: { env: Record<string, string | undefined> };
 
 import { INTENT_CLASSIFIER_PROMPT, SALES_SYSTEM_PROMPT } from "../../lib/openrouter/chatPrompts.js";
 import {
+  buildWebsiteBrief,
   compact,
   extractCodeBlock,
-  inferFallbackBrief,
   looksLikeReactComponent,
   looksLowQualityComponent,
+  normalizeWebsitePrompt,
   parseJsonFromText,
   sanitizeBrief
 } from "../../lib/sites/websiteBuilderHelpers.js";
@@ -180,6 +181,30 @@ function deriveTitle(brief: WebsiteBrief) {
   return `${brief.brandName} — ${brief.primaryGoal}`;
 }
 
+function humanizeWebsiteError(raw: string) {
+  const text = String(raw || "").toLowerCase();
+  if (
+    text.includes("aborterror") ||
+    text.includes("timeout") ||
+    text.includes("function_invocation_timeout") ||
+    text.includes("gateway timeout")
+  ) {
+    return "Сервис генерации временно отвечает слишком долго.";
+  }
+  if (
+    text.includes("json parse") ||
+    text.includes("invalid_json_response") ||
+    text.includes("code_schema_validation_failed") ||
+    text.includes("brief_schema_validation_failed")
+  ) {
+    return "Не удалось сгенерировать сайт с первого раза. Попробуйте ещё раз.";
+  }
+  if (text.includes("component_code_missing") || text.includes("website_component_code_missing")) {
+    return "Не получилось собрать preview. Можно попробовать автоисправление.";
+  }
+  return "Не удалось сгенерировать сайт с первого раза. Попробуйте ещё раз.";
+}
+
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed", mode: "mock" });
@@ -228,14 +253,19 @@ export default async function handler(req: any, res: any) {
     const isWebsite = forceWebsiteAction || intentResult.intent === "website_generation" || quickWebsiteHeuristic(userText);
 
     if (isWebsite) {
-      const fallbackBrief = inferFallbackBrief({
-        guidance: userText,
-        businessName: "",
-        niche: "",
-        city: "",
-        goal: "",
-        style: "",
-        mustHave: []
+      const normalizedUserPrompt = normalizeWebsitePrompt(userText, {
+        businessName: String((currentBriefRaw as any)?.brandName || ""),
+        niche: String((currentBriefRaw as any)?.businessType || ""),
+        city: String((currentBriefRaw as any)?.city || ""),
+        goal: String((currentBriefRaw as any)?.primaryGoal || ""),
+        style: Array.isArray((currentBriefRaw as any)?.styleKeywords) ? String((currentBriefRaw as any)?.styleKeywords?.[0] || "") : ""
+      });
+      const fallbackBrief = buildWebsiteBrief(normalizedUserPrompt, {
+        businessName: String((currentBriefRaw as any)?.brandName || ""),
+        niche: String((currentBriefRaw as any)?.businessType || ""),
+        city: String((currentBriefRaw as any)?.city || ""),
+        goal: String((currentBriefRaw as any)?.primaryGoal || ""),
+        style: Array.isArray((currentBriefRaw as any)?.styleKeywords) ? String((currentBriefRaw as any)?.styleKeywords?.[0] || "") : ""
       });
 
       let briefRaw = await openRouterWithRetry({
@@ -247,7 +277,7 @@ export default async function handler(req: any, res: any) {
           {
             role: "user",
             content: briefExtractionPrompt({
-              guidance: userText,
+              guidance: normalizedUserPrompt,
               businessName: "",
               niche: "",
               city: "",
@@ -282,7 +312,7 @@ export default async function handler(req: any, res: any) {
               content:
                 "Верни строго валидный JSON по схеме, без пропусков полей и без markdown. " +
                 briefExtractionPrompt({
-                  guidance: userText,
+                  guidance: normalizedUserPrompt,
                   businessName: "",
                   niche: "",
                   city: "",
@@ -300,10 +330,7 @@ export default async function handler(req: any, res: any) {
         });
         briefParsed = parseJsonFromText(strictBrief.text);
       }
-      if (!isValidWebsiteBriefShape(briefParsed)) {
-        throw new Error("BRIEF_SCHEMA_VALIDATION_FAILED");
-      }
-      const brief = sanitizeBrief(briefParsed, fallbackBrief);
+      const brief = sanitizeBrief(isValidWebsiteBriefShape(briefParsed) ? briefParsed : fallbackBrief, fallbackBrief);
 
       const actionInstruction =
         websiteAction === "regenerate"
@@ -448,7 +475,12 @@ export default async function handler(req: any, res: any) {
       }
     });
   } catch (error: any) {
-    const isTimeout = error?.name === "AbortError";
-    res.status(500).json({ error: isTimeout ? "OpenRouter timeout" : error?.message || "OpenRouter handler error", mode: "mock" });
+    const rawError = `${String(error?.name || "")}:${String(error?.message || "OpenRouter handler error")}`;
+    console.error("[openrouter/chat] error", {
+      name: String(error?.name || ""),
+      message: String(error?.message || ""),
+      stack: String(error?.stack || "").slice(0, 1200)
+    });
+    res.status(500).json({ error: humanizeWebsiteError(rawError), mode: "mock" });
   }
 }

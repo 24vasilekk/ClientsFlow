@@ -5,6 +5,7 @@ type ChatSitesBuilderPageProps = {
 };
 
 type BuilderStatus = "idle" | "loading" | "success" | "error";
+type GenerationStage = "idle" | "analyze" | "structure" | "generate" | "preview_check";
 type ChatRole = "assistant" | "user";
 
 type ChatMessage = {
@@ -13,6 +14,21 @@ type ChatMessage = {
   text: string;
   time: string;
   tone?: "default" | "soft";
+};
+
+type ClientSiteBusinessType =
+  | "barbershop"
+  | "beauty_salon"
+  | "electronics_store"
+  | "clothing_brand"
+  | "dentistry"
+  | "auto_service";
+
+type ClientSiteFormState = {
+  businessName: string;
+  city: string;
+  phone: string;
+  businessType: ClientSiteBusinessType;
 };
 
 type ServiceItem = {
@@ -176,9 +192,20 @@ type PublishPayload = {
   pageCode?: string;
 };
 
+type PreviewFixLogItem = {
+  id: string;
+  at: string;
+  mode: "auto" | "manual";
+  status: "started" | "succeeded" | "failed";
+  errorText: string;
+  note?: string;
+};
+
 const LOCAL_PUBLISHED_SITE_PREFIX = "clientsflow_local_published_site:";
 const SITE_SESSION_STORAGE_KEY = "clientsflow_sites_generation_session";
-const PUBLISH_REDIRECT_DELAY_MS = 1200;
+const SITE_LAST_PUBLISHED_KEY = "clientsflow_sites_last_published_path";
+const SITE_TEMP_PREVIEW_PREFIX = "clientsflow_temp_preview:";
+const PREVIEW_AUTO_FIX_MAX_ATTEMPTS = 2;
 
 const navItems = [
   { key: "create-site", label: "Создать сайт", icon: "✨" }
@@ -189,6 +216,141 @@ const quickPrompts = [
 ];
 
 const suggestions = ["Создать сайт"];
+
+const clientSiteBusinessOptions: Array<{
+  value: ClientSiteBusinessType;
+  label: string;
+  niche: string;
+  style: string;
+  goal: string;
+  cta: string;
+}> = [
+  {
+    value: "barbershop",
+    label: "Барбершоп",
+    niche: "barbershop",
+    style: "dark premium masculine",
+    goal: "онлайн-записи и звонки",
+    cta: "Записаться"
+  },
+  {
+    value: "beauty_salon",
+    label: "Салон красоты",
+    niche: "beauty salon",
+    style: "elegant clean contemporary",
+    goal: "онлайн-записи",
+    cta: "Записаться онлайн"
+  },
+  {
+    value: "electronics_store",
+    label: "Магазин техники",
+    niche: "electronics store",
+    style: "tech premium trust-centered",
+    goal: "заказы и обращения",
+    cta: "Подобрать технику"
+  },
+  {
+    value: "clothing_brand",
+    label: "Бренд одежды",
+    niche: "clothing brand",
+    style: "fashion editorial clean premium",
+    goal: "переходы в каталог и заявки",
+    cta: "Смотреть коллекцию"
+  },
+  {
+    value: "dentistry",
+    label: "Стоматология",
+    niche: "dentistry clinic",
+    style: "clean medical trust",
+    goal: "записи на консультацию",
+    cta: "Записаться на консультацию"
+  },
+  {
+    value: "auto_service",
+    label: "Автосервис",
+    niche: "auto service",
+    style: "industrial modern contrast",
+    goal: "заявки и звонки",
+    cta: "Записаться на диагностику"
+  }
+];
+
+const quickWebsiteScenarios = [
+  {
+    key: "barbershop",
+    label: "Барбершоп",
+    hiddenPrompt:
+      "Сделай современный премиальный сайт барбершопа: тёмная выразительная подача, сильный hero, крупный CTA записи, блок услуг, блок мастеров, цены, отзывы, FAQ и контакты. Коммерческие тексты, без шаблонности.",
+    profilePatch: {
+      niche: "barbershop",
+      style: "dark premium masculine",
+      goal: "онлайн-записи и звонки"
+    }
+  },
+  {
+    key: "beauty",
+    label: "Салон красоты",
+    hiddenPrompt:
+      "Сделай стильный сайт салона красоты: clean/elegant визуал, сильный первый экран с оффером и CTA, услуги, мастера, прайс, отзывы, форма записи и контакты. Тексты реалистичные, коммерческие, аккуратная типографика.",
+    profilePatch: {
+      niche: "beauty salon",
+      style: "elegant clean contemporary",
+      goal: "онлайн-записи"
+    }
+  },
+  {
+    key: "electronics",
+    label: "Магазин техники",
+    hiddenPrompt:
+      "Сделай конверсионный landing page магазина электроники: tech premium стиль, hero с оффером, категории товаров, хиты продаж, преимущества, гарантия и доставка, отзывы, форма заявки и контакты. Сильный коммерческий тон.",
+    profilePatch: {
+      niche: "electronics store",
+      style: "tech premium trust-centered",
+      goal: "заказы и обращения"
+    }
+  },
+  {
+    key: "clothing",
+    label: "Бренд одежды",
+    hiddenPrompt:
+      "Сделай современный сайт бренда одежды: fashion/editorial визуал, hero коллекции, highlights каталога, lookbook-секция, преимущества бренда, отзывы, контакты и CTA на коллекцию. Без учебного шаблонного вида.",
+    profilePatch: {
+      niche: "clothing brand",
+      style: "fashion editorial clean premium",
+      goal: "переходы в каталог и заявки"
+    }
+  },
+  {
+    key: "dentistry",
+    label: "Стоматология",
+    hiddenPrompt:
+      "Сделай современный сайт стоматологии: чистый медицинский дизайн, доверительный hero, направления услуг, блок врачей, цены, отзывы, FAQ, запись на консультацию и контакты. Конверсионная структура и понятные CTA.",
+    profilePatch: {
+      niche: "dentistry clinic",
+      style: "clean medical trust",
+      goal: "записи на консультацию"
+    }
+  },
+  {
+    key: "autoservice",
+    label: "Автосервис",
+    hiddenPrompt:
+      "Сделай коммерческий сайт автосервиса: уверенный технический стиль, hero с быстрым CTA, услуги и прайс, преимущества сервиса, отзывы, блок записи/заявки и контакты. Тексты реалистичные и ориентированы на конверсию.",
+    profilePatch: {
+      niche: "auto service",
+      style: "industrial modern contrast",
+      goal: "заявки и звонки"
+    }
+  }
+] as const;
+
+const postGenerationQuickActions = [
+  { key: "premium", label: "Сделать дизайн дороже" },
+  { key: "light", label: "Сделать светлый вариант" },
+  { key: "more_blocks", label: "Добавить ещё блоки" },
+  { key: "regenerate", label: "Перегенерировать" },
+  { key: "simplify", label: "Упростить сайт" }
+] as const;
 
 const designPresets: DesignPreset[] = [
   {
@@ -276,6 +438,20 @@ async function parseJsonResponseSafe(response: Response) {
   }
 }
 
+function isTimeoutLikeFailure(input: { status: number; contentType: string; rawText?: string; parseError?: string }) {
+  const contentType = String(input.contentType || "").toLowerCase();
+  const raw = String(input.rawText || "").toLowerCase();
+  const parse = String(input.parseError || "").toLowerCase();
+  return (
+    input.status === 504 ||
+    raw.includes("function_invocation_timeout") ||
+    raw.includes("gateway timeout") ||
+    raw.includes("timed out") ||
+    parse.includes("unexpected token") ||
+    contentType.includes("text/plain")
+  );
+}
+
 function parseMaybeJsonObject(raw: string): Record<string, unknown> | null {
   if (!raw || typeof raw !== "string") return null;
   const text = raw.trim();
@@ -338,6 +514,17 @@ function statusClass(status: BuilderStatus) {
 
 function humanizeGenerationError(raw: string) {
   const text = String(raw || "").toLowerCase();
+  if (
+    text.includes("invalid_json_response") ||
+    text.includes("json parse error") ||
+    text.includes("json_parse_failed") ||
+    text.includes("upstream_non_json_error")
+  ) {
+    return "Не удалось сгенерировать сайт с первого раза. Попробуйте ещё раз.";
+  }
+  if (text.includes("function_invocation_timeout") || text.includes("gateway timeout") || text.includes("status=504")) {
+    return "Сервис генерации временно отвечает слишком долго.";
+  }
   if (text.includes("did not match the expected pattern")) {
     return "Сервер вернул ошибку формата переменных. Сделай redeploy и повтори запрос.";
   }
@@ -350,7 +537,10 @@ function humanizeGenerationError(raw: string) {
   if (text.includes("ai generation failed")) {
     return "OpenRouter не вернул валидный JSON сайта. Повтори запрос или уточни задачу.";
   }
-  return raw || "Ошибка генерации сайта.";
+  if (text.includes("preview") || text.includes("component") || text.includes("build/runtime")) {
+    return "Не получилось собрать preview. Можно попробовать автоисправление.";
+  }
+  return "Не удалось сгенерировать сайт с первого раза. Попробуйте ещё раз.";
 }
 
 function hashString(input: string) {
@@ -470,6 +660,42 @@ function rewriteCopyTone(draft: DraftState, tone: "premium" | "short" | "aggress
 function detectCapabilityQuestion(text: string) {
   const lower = text.toLowerCase();
   return lower.includes("что ты умеешь") || lower.includes("что ты еще можешь") || lower.includes("что ты можешь");
+}
+
+function detectWebsiteIntent(text: string) {
+  const lower = text.toLowerCase();
+  return (
+    lower.includes("сайт") ||
+    lower.includes("лендинг") ||
+    lower.includes("landing") ||
+    lower.includes("app.jsx") ||
+    lower.includes("react") ||
+    lower.includes("tailwind") ||
+    lower.includes("перегенер") ||
+    lower.includes("редизайн") ||
+    lower.includes("дизайн")
+  );
+}
+
+function normalizeGenerationGuidance(text: string, profile: AgentProfile) {
+  const base = String(text || "").replace(/\s+/g, " ").trim();
+  const isShort = base.length < 70;
+  const hasWebsiteHint = detectWebsiteIntent(base);
+  const safeBusiness = profile.businessName || "локального бизнеса";
+  const safeNiche = profile.niche || "сервисного бизнеса";
+  const safeCity = profile.city || "в вашем городе";
+  const goal = profile.goal || "заявки и записи";
+  const style = profile.style || "современный премиальный";
+  const must = profile.mustHave.length ? profile.mustHave.join(", ") : "услуги, преимущества, отзывы, FAQ, контакты, форма заявки";
+  if (!isShort && hasWebsiteHint) return base;
+  return [
+    base || "Сделай коммерческий сайт",
+    `Контекст: бизнес=${safeBusiness}; ниша=${safeNiche}; город=${safeCity}.`,
+    `Цель: ${goal}.`,
+    `Стиль: ${style}.`,
+    `Обязательные секции: ${must}.`,
+    "Верни полноценный App.jsx (React + Tailwind) для preview."
+  ].join(" ");
 }
 
 function parseSectionArg(input: string): SectionKey | null {
@@ -1878,9 +2104,11 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
   const [paymentStatus, setPaymentStatus] = useState<BuilderStatus>("idle");
   const [publishStatus, setPublishStatus] = useState<BuilderStatus>("idle");
   const [publishPath, setPublishPath] = useState("");
+  const [publishUrl, setPublishUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [showPreviewMobile, setShowPreviewMobile] = useState(false);
   const [isWorking, setIsWorking] = useState(false);
+  const [generationStage, setGenerationStage] = useState<GenerationStage>("idle");
   const [workingText, setWorkingText] = useState("Saving in my memory...");
   const [publishingOverlay, setPublishingOverlay] = useState(false);
   const [overlayMessage, setOverlayMessage] = useState("Публикуем сайт...");
@@ -1894,6 +2122,17 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
   const [generationHistory, setGenerationHistory] = useState<GenerationHistoryItem[]>([]);
   const [isAutoFixingPreview, setIsAutoFixingPreview] = useState(false);
   const [lastPreviewError, setLastPreviewError] = useState("");
+  const [previewAutoFixAttempts, setPreviewAutoFixAttempts] = useState(0);
+  const [previewFixFailed, setPreviewFixFailed] = useState(false);
+  const [previewFixLogs, setPreviewFixLogs] = useState<PreviewFixLogItem[]>([]);
+  const [siteReady, setSiteReady] = useState(false);
+  const [showClientSiteForm, setShowClientSiteForm] = useState(false);
+  const [clientSiteForm, setClientSiteForm] = useState<ClientSiteFormState>({
+    businessName: "",
+    city: "",
+    phone: "",
+    businessType: "barbershop"
+  });
   const [profile, setProfile] = useState<AgentProfile>({
     businessName: "",
     niche: "",
@@ -1904,11 +2143,24 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
     mustHave: []
   });
 
-  const canPublish = paymentStatus === "success" && publishStatus !== "loading" && !!draft;
+  const canPublish = publishStatus !== "loading" && !!draft;
 
   useEffect(() => {
     localStorage.setItem(SITE_SESSION_STORAGE_KEY, sanitizeSessionId(generationSessionId));
   }, [generationSessionId]);
+
+  useEffect(() => {
+    try {
+      const savedPath = String(localStorage.getItem(SITE_LAST_PUBLISHED_KEY) || "").trim();
+      if (!savedPath) return;
+      const base = typeof window !== "undefined" ? window.location.origin : "";
+      setPublishPath(savedPath);
+      setPublishUrl(base ? `${base}${savedPath}` : savedPath);
+      setPublishStatus("success");
+    } catch {
+      // ignore
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -1941,10 +2193,25 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
       if (!errorText) return;
       if (!draft?.componentCode?.trim()) return;
       if (isAutoFixingPreview) return;
-      if (errorText === lastPreviewError) return;
+      if (previewAutoFixAttempts >= PREVIEW_AUTO_FIX_MAX_ATTEMPTS) {
+        setLastPreviewError(errorText);
+        setPreviewFixFailed(true);
+        return;
+      }
 
       setIsAutoFixingPreview(true);
       setLastPreviewError(errorText);
+      setPreviewFixFailed(false);
+      setPreviewFixLogs((prev) => [
+        ...prev,
+        {
+          id: uid(),
+          at: new Date().toISOString(),
+          mode: "auto",
+          status: "started",
+          errorText
+        }
+      ]);
       addMessage("assistant", "Поймал ошибку preview. Исправляю код автоматически...", "soft");
 
       const run = async () => {
@@ -1963,7 +2230,11 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
               errorText
             })
           });
-          const body = (await response.json()) as { draft?: unknown; error?: string; engine?: "openrouter" | "algorithm" };
+          const parsed = await parseJsonResponseSafe(response);
+          if (!parsed.ok) {
+            throw new Error(`auto_fix_invalid_json_response:${parsed.status}`);
+          }
+          const body = parsed.body as { draft?: unknown; error?: string; engine?: "openrouter" | "algorithm" };
           if (!response.ok || body.engine !== "openrouter" || !body.draft) {
             throw new Error(body.error || "auto_fix_failed");
           }
@@ -1971,9 +2242,39 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
           const nextDraft = hydrateGeneratedDraft(body.draft, fallbackDraft);
           setDraft(nextDraft);
           setGenerationRound((prev) => prev + 1);
+          setPreviewAutoFixAttempts((prev) => prev + 1);
+          setPreviewFixLogs((prev) => [
+            ...prev,
+            {
+              id: uid(),
+              at: new Date().toISOString(),
+              mode: "auto",
+              status: "succeeded",
+              errorText
+            }
+          ]);
           addMessage("assistant", "Готово, исправил код после ошибки preview.", "soft");
         } catch (error: any) {
-          addMessage("assistant", `Не удалось автоисправить preview: ${String(error?.message || "unknown")}`, "soft");
+          const reason = String(error?.message || "unknown");
+          setPreviewAutoFixAttempts((prev) => prev + 1);
+          setPreviewFixLogs((prev) => [
+            ...prev,
+            {
+              id: uid(),
+              at: new Date().toISOString(),
+              mode: "auto",
+              status: "failed",
+              errorText,
+              note: reason
+            }
+          ]);
+          const nextAttempts = previewAutoFixAttempts + 1;
+          if (nextAttempts >= PREVIEW_AUTO_FIX_MAX_ATTEMPTS) {
+            setPreviewFixFailed(true);
+            addMessage("assistant", "Автоисправление не сработало. Нажми «Попробовать исправить», и попробуем вручную.", "soft");
+          } else {
+            addMessage("assistant", `Не удалось автоисправить preview (попытка ${nextAttempts}/${PREVIEW_AUTO_FIX_MAX_ATTEMPTS}).`, "soft");
+          }
         } finally {
           setIsAutoFixingPreview(false);
         }
@@ -1983,23 +2284,166 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
 
     window.addEventListener("message", onPreviewError);
     return () => window.removeEventListener("message", onPreviewError);
-  }, [draft, generationRound, generationSessionId, isAutoFixingPreview, lastPreviewError, profile]);
+  }, [draft, generationRound, generationSessionId, isAutoFixingPreview, previewAutoFixAttempts, profile]);
 
   const addMessage = (role: ChatRole, text: string, tone: "default" | "soft" = "default") => {
     setMessages((prev) => [...prev, { id: uid(), role, text, time: nowTime(), tone }]);
   };
 
+  const openFullPreview = (openInNewTab = false) => {
+    const html = String(draft?.pageCode || "").trim();
+    if (!html) {
+      addMessage("assistant", "Пока нет preview-кода. Сначала сгенерируй сайт.", "soft");
+      return;
+    }
+    const previewId = `p-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+    const payload = {
+      id: previewId,
+      createdAt: new Date().toISOString(),
+      title: draft?.businessName || "Generated Preview",
+      pageCode: html
+    };
+    try {
+      localStorage.setItem(`${SITE_TEMP_PREVIEW_PREFIX}${previewId}`, JSON.stringify(payload));
+      const path = `/sites/preview/${previewId}`;
+      if (openInNewTab) {
+        window.open(path, "_blank", "noopener,noreferrer");
+      } else {
+        onNavigate(path);
+      }
+    } catch {
+      addMessage("assistant", "Не удалось открыть полноэкранный preview. Попробуй снова.", "soft");
+    }
+  };
+
+  const openPublishedSite = () => {
+    if (!publishPath) return;
+    onNavigate(publishPath);
+  };
+
+  const copyPublishedLink = async () => {
+    const value = publishUrl || (publishPath && typeof window !== "undefined" ? `${window.location.origin}${publishPath}` : "");
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      addMessage("assistant", "Ссылка на опубликованный сайт скопирована.", "soft");
+    } catch {
+      addMessage("assistant", "Не удалось скопировать автоматически. Скопируй ссылку из блока публикации.", "soft");
+    }
+  };
+
+  const copyCurrentCode = async () => {
+    const code = String(draft?.componentCode || "").trim();
+    if (!code) {
+      addMessage("assistant", "Пока нечего копировать. Сначала сгенерируй сайт.", "soft");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(code);
+      addMessage("assistant", "Код App.jsx скопирован.", "soft");
+    } catch {
+      addMessage("assistant", "Не удалось скопировать автоматически. Открой блок с кодом и скопируй вручную.", "soft");
+    }
+  };
+
+  const quickActionPrompt = (action: (typeof postGenerationQuickActions)[number]["key"]) => {
+    if (action === "premium") return "Сделай премиальнее, усили hero и визуальную иерархию, сохрани тему бизнеса.";
+    if (action === "light") return "Сделай светлую версию дизайна, сохрани структуру и конверсионные блоки.";
+    if (action === "more_blocks") return "Добавь еще полезные блоки для конверсии: trust signals, кейсы, FAQ и усиленный контактный блок.";
+    if (action === "simplify") return "Упрости сайт: меньше визуального шума, более лаконичная структура, быстрый путь к ключевому CTA.";
+    return "Перегенерируй новый вариант с нуля под тот же бриф, но другим визуальным направлением.";
+  };
+
+  const handleManualPreviewFix = async () => {
+    const errorText = String(lastPreviewError || "").trim();
+    if (!draft?.componentCode?.trim() || !errorText || isAutoFixingPreview) return;
+    setIsAutoFixingPreview(true);
+    setPreviewFixFailed(false);
+    setPreviewFixLogs((prev) => [
+      ...prev,
+      {
+        id: uid(),
+        at: new Date().toISOString(),
+        mode: "manual",
+        status: "started",
+        errorText
+      }
+    ]);
+    try {
+      const endpoint = sitesGenerateEndpoint();
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "fix",
+          sessionId: sanitizeSessionId(generationSessionId),
+          round: generationRound + 1,
+          profile,
+          guidance: "Ручное исправление preview",
+          currentComponentCode: draft.componentCode,
+          errorText
+        })
+      });
+      const parsed = await parseJsonResponseSafe(response);
+      if (!parsed.ok) throw new Error(`manual_fix_invalid_json_response:${parsed.status}`);
+      const body = parsed.body as { draft?: unknown; error?: string; engine?: "openrouter" | "algorithm" };
+      if (!response.ok || body.engine !== "openrouter" || !body.draft) {
+        throw new Error(body.error || "manual_fix_failed");
+      }
+      const fallbackDraft = createDraftFromProfile(profile, "manual-fix-preview", generationRound + 1);
+      const nextDraft = hydrateGeneratedDraft(body.draft, fallbackDraft);
+      setDraft(nextDraft);
+      setGenerationRound((prev) => prev + 1);
+      setPreviewFixLogs((prev) => [
+        ...prev,
+        {
+          id: uid(),
+          at: new Date().toISOString(),
+          mode: "manual",
+          status: "succeeded",
+          errorText
+        }
+      ]);
+      addMessage("assistant", "Готово, вручную исправил preview-код.", "soft");
+    } catch (error: any) {
+      const reason = String(error?.message || "unknown");
+      setPreviewFixFailed(true);
+      setPreviewFixLogs((prev) => [
+        ...prev,
+        {
+          id: uid(),
+          at: new Date().toISOString(),
+          mode: "manual",
+          status: "failed",
+          errorText,
+          note: reason
+        }
+      ]);
+      addMessage("assistant", "Ручное исправление не удалось. Попробуй перегенерировать сайт.", "soft");
+    } finally {
+      setIsAutoFixingPreview(false);
+    }
+  };
+
   const generateFromProfile = async (nextProfile: AgentProfile, guidance: string, nextRound: number, currentDraft?: DraftState | null) => {
     setError(null);
+    setSiteReady(false);
     setGenerationStatus("loading");
     setPaymentStatus("idle");
     setPublishStatus("idle");
     setPublishPath("");
+    setPreviewAutoFixAttempts(0);
+    setPreviewFixFailed(false);
+    setPreviewFixLogs([]);
+    setLastPreviewError("");
     setIsWorking(true);
+    setGenerationStage("analyze");
     setWorkingText("Saving in my memory...");
 
     addMessage("assistant", "Окей, понял задачу. Делаю структуру и дизайн под твой запрос.", "soft");
+    setGenerationStage("structure");
     setWorkingText("Updating pages...");
+    const normalizedGuidance = normalizeGenerationGuidance(guidance, nextProfile);
 
     let debugStage = "init";
     let debugEndpoint = "";
@@ -2009,14 +2453,15 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
         const endpoint = sitesGenerateEndpoint();
         debugEndpoint = endpoint;
         try {
-          debugStage = "fetch_request";
+        debugStage = "fetch_request";
+        setGenerationStage("generate");
           return await fetch(endpoint, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               sessionId: sanitizeSessionId(sessionId),
               profile: nextProfile,
-              guidance,
+              guidance: normalizedGuidance,
               round: nextRound,
               target: "react-tailwind",
               currentPageCode: currentDraft?.pageCode || "",
@@ -2045,12 +2490,21 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
       }
 
       debugStage = "read_body";
+      setGenerationStage("preview_check");
       const parsed = await parseJsonResponseSafe(response);
       if (!parsed.ok) {
-        const snippet = parsed.rawText.replace(/\s+/g, " ").trim().slice(0, 220);
-        throw new Error(
-          `invalid_json_response:status=${parsed.status}:contentType=${parsed.contentType || "n/a"}:parse=${parsed.parseError}:snippet=${snippet}`
-        );
+        const fallbackDraft = createDraftFromProfile(nextProfile, normalizedGuidance, nextRound);
+        setDraft(fallbackDraft);
+        setGenerationRound(nextRound);
+        setProfile(nextProfile);
+        setGenerationEngine("algorithm");
+        setGenerationStatus("success");
+        const fallbackReason = isTimeoutLikeFailure(parsed)
+          ? "Upstream таймаут, показал быстрый fallback-вариант."
+          : "Сервер вернул не-JSON ответ, показал fallback-вариант.";
+        addMessage("assistant", `Сделал fallback-версию сайта. ${fallbackReason} Можем сразу перегенерировать для более сильного дизайна.`, "soft");
+        setSiteReady(true);
+        return;
       }
       const body = parsed.body as {
         error?: string;
@@ -2068,7 +2522,16 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
         const debugText =
           body.debug && typeof body.debug === "object" ? JSON.stringify(body.debug) : body.debug ? String(body.debug) : "";
         debugStage = "response_not_ok";
-        throw new Error(debugText ? `${body.error || "AI generation request failed"} | debug: ${debugText}` : body.error || "AI generation request failed");
+        const message = debugText ? `${body.error || "AI generation request failed"} | debug: ${debugText}` : body.error || "AI generation request failed";
+        const fallbackDraft = createDraftFromProfile(nextProfile, normalizedGuidance, nextRound);
+        setDraft(fallbackDraft);
+        setGenerationRound(nextRound);
+        setProfile(nextProfile);
+        setGenerationEngine("algorithm");
+        setGenerationStatus("success");
+        addMessage("assistant", `Сервер AI временно вернул ошибку, поэтому открыл fallback-вариант. Деталь: ${humanizeGenerationError(message)}`, "soft");
+        setSiteReady(true);
+        return;
       }
 
       if (body.sessionId) setGenerationSessionId(body.sessionId);
@@ -2084,7 +2547,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
         throw new Error("AI returned draft without componentCode");
       }
       debugStage = "hydrate_draft";
-      const fallbackDraft = createDraftFromProfile(nextProfile, guidance, nextRound);
+      const fallbackDraft = createDraftFromProfile(nextProfile, normalizedGuidance, nextRound);
       const finalDraft = hydrateGeneratedDraft(body.draft, fallbackDraft);
       if (Array.isArray(body.history)) setGenerationHistory(body.history);
       setGenerationEngine("openrouter");
@@ -2097,19 +2560,24 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
         `Готово. Собрал индивидуальный вариант #${nextRound}.\n\nЧто уже есть:\n${summary}\n\nЕсли нужно, напиши «перегенерируй» — сделаю новый дизайн с нуля под тот же бриф.`
       );
       setGenerationStatus("success");
+      setSiteReady(true);
     } catch (error: any) {
       const message = String(error?.message || "AI generation failed");
       const userMessage = humanizeGenerationError(message);
       const debugTrace = `stage=${debugStage}; endpoint=${debugEndpoint || "n/a"}; session=${debugSession}; raw=${message}`;
-      setGenerationStatus("error");
-      setError(`${userMessage}\n\nDEBUG: ${debugTrace}`);
-      addMessage(
-        "assistant",
-        `Не смог собрать сайт через AI: ${userMessage}\n\nDEBUG: ${debugTrace}`,
-        "soft"
-      );
+      const fallbackDraft = createDraftFromProfile(nextProfile, normalizedGuidance, nextRound);
+      setGenerationStatus("success");
+      setError(userMessage);
+      setDraft(fallbackDraft);
+      setGenerationRound(nextRound);
+      setProfile(nextProfile);
+      setGenerationEngine("algorithm");
+      console.error("[sites-builder] generateFromProfile fallback", debugTrace);
+      addMessage("assistant", `Открыл fallback-сайт из локальных шаблонов, чтобы не блокировать поток. Причина: ${userMessage}`, "soft");
+      setSiteReady(true);
     } finally {
       setIsWorking(false);
+      setGenerationStage("idle");
     }
   };
 
@@ -2264,8 +2732,13 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
 
     const profilePatch = parseProfileFromMessage(text);
     const mergedProfile = mergeProfile(profile, profilePatch);
+    const isWebsiteIntent = detectWebsiteIntent(text) || shouldForceGenerate(text);
 
     if (!draft) {
+      if (!isWebsiteIntent) {
+        addMessage("assistant", "Я в режиме Website Builder. Напиши запрос на сайт, например: «сделай сайт для барбершопа в Обнинске, премиальный стиль».", "soft");
+        return;
+      }
       void generateFromProfile(mergedProfile, text, 1, draft);
       return;
     }
@@ -2289,7 +2762,62 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
       return;
     }
 
-    void generateFromProfile(mergedProfile, text, generationRound + 1, draft);
+    if (isWebsiteIntent) {
+      void generateFromProfile(mergedProfile, text, generationRound + 1, draft);
+      return;
+    }
+
+    addMessage("assistant", "Могу сразу улучшить текущий сайт. Напиши конкретно, что изменить: стиль, секции, тексты или CTA.", "soft");
+  };
+
+  const runQuickWebsiteScenario = (scenario: (typeof quickWebsiteScenarios)[number]) => {
+    const visibleText = `Быстрый сценарий: ${scenario.label}`;
+    addMessage("user", visibleText);
+    setInput("");
+    setError(null);
+
+    const mergedProfile = mergeProfile(profile, scenario.profilePatch as Partial<AgentProfile>);
+    const nextRound = draft ? generationRound + 1 : 1;
+    void generateFromProfile(mergedProfile, scenario.hiddenPrompt, nextRound, draft);
+  };
+
+  const runClientSiteGeneration = () => {
+    const businessName = clientSiteForm.businessName.trim();
+    const city = clientSiteForm.city.trim();
+    const phone = clientSiteForm.phone.trim();
+    const selected = clientSiteBusinessOptions.find((item) => item.value === clientSiteForm.businessType) || clientSiteBusinessOptions[0];
+    if (!businessName || !city) {
+      addMessage("assistant", "Заполни минимум название бизнеса и город, и я сразу соберу сайт.", "soft");
+      return;
+    }
+
+    const visibleText = `Сделать сайт для клиента: ${businessName}, ${city}, ${selected.label}`;
+    addMessage("user", visibleText);
+    setInput("");
+    setError(null);
+
+    const mergedProfile = mergeProfile(profile, {
+      businessName,
+      city,
+      niche: selected.niche,
+      style: selected.style,
+      goal: selected.goal
+    });
+
+    const hiddenPrompt = [
+      `Собери коммерческий сайт для клиента: ${businessName}.`,
+      `Город: ${city}.`,
+      `Тип бизнеса: ${selected.label}.`,
+      `Контактный телефон: ${phone || "+7 (___) ___-__-__"}.`,
+      `Обязательный CTA: ${selected.cta}.`,
+      "Автоматически подставь контакты и тексты под этот бизнес.",
+      "Сделай сильный конверсионный landing page: hero, услуги/продукты, преимущества, отзывы, FAQ, форма заявки и контакты.",
+      "React + Tailwind, один App.jsx для preview."
+    ].join(" ");
+
+    const nextRound = draft ? generationRound + 1 : 1;
+    void generateFromProfile(mergedProfile, hiddenPrompt, nextRound, draft);
+    setShowClientSiteForm(false);
   };
 
   const onSubmit = (event: FormEvent) => {
@@ -2314,10 +2842,6 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
       setError("Сначала создай сайт через чат.");
       return;
     }
-    if (paymentStatus !== "success") {
-      setError("Перед публикацией нужно оплатить.");
-      return;
-    }
 
     setError(null);
     setPublishStatus("loading");
@@ -2332,30 +2856,30 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
-      const body = (await response.json()) as { path?: string; slug?: string; error?: string };
+      const body = (await response.json()) as { path?: string; slug?: string; url?: string; error?: string };
       const path = body.path || (body.slug ? `/s/${body.slug}` : "");
       if (!response.ok || !path) throw new Error(body.error || "Не удалось опубликовать");
 
+      const url = body.url || (typeof window !== "undefined" ? `${window.location.origin}${path}` : path);
       setPublishPath(path);
+      setPublishUrl(url);
       setPublishStatus("success");
-      setOverlayMessage("Сайт опубликован. Открываем...");
-      window.setTimeout(() => {
-        setPublishingOverlay(false);
-        onNavigate(path);
-      }, PUBLISH_REDIRECT_DELAY_MS);
+      localStorage.setItem(SITE_LAST_PUBLISHED_KEY, path);
+      setPublishingOverlay(false);
+      addMessage("assistant", `Сайт опубликован: ${url}`, "soft");
     } catch {
       try {
         setOverlayMessage("Облако недоступно. Включаем локальную публикацию...");
         const localSlug = `local-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
         localStorage.setItem(`${LOCAL_PUBLISHED_SITE_PREFIX}${localSlug}`, JSON.stringify({ slug: localSlug, payload }));
         const localPath = `/s/${localSlug}`;
+        const localUrl = typeof window !== "undefined" ? `${window.location.origin}${localPath}` : localPath;
         setPublishPath(localPath);
+        setPublishUrl(localUrl);
         setPublishStatus("success");
-        setOverlayMessage("Локальная ссылка готова. Открываем...");
-        window.setTimeout(() => {
-          setPublishingOverlay(false);
-          onNavigate(localPath);
-        }, PUBLISH_REDIRECT_DELAY_MS);
+        localStorage.setItem(SITE_LAST_PUBLISHED_KEY, localPath);
+        setPublishingOverlay(false);
+        addMessage("assistant", `Локальная публикация готова: ${localUrl}`, "soft");
       } catch {
         setPublishStatus("error");
         setPublishingOverlay(false);
@@ -2369,13 +2893,48 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
       <div className="rounded-[22px] border border-slate-200/90 bg-white p-4 shadow-[0_25px_70px_-45px_rgba(15,23,42,0.45)]">
         <div className="flex items-center justify-between">
           <p className="text-lg font-semibold text-slate-900">Live Preview</p>
-          <button
-            type="button"
-            onClick={() => setPreviewExpanded((prev) => !prev)}
-            className="text-sm text-slate-500 hover:text-slate-700"
-          >
-            {previewExpanded ? "⌃ Hide preview" : "⌄ Show preview"}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => openFullPreview(false)}
+              className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Открыть отдельно
+            </button>
+            <button
+              type="button"
+              onClick={handlePublish}
+              disabled={!canPublish}
+              className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold ${
+                canPublish ? "bg-sky-500 text-white hover:bg-sky-600" : "cursor-not-allowed bg-slate-200 text-slate-500"
+              }`}
+            >
+              Опубликовать
+            </button>
+            {publishPath ? (
+              <button
+                type="button"
+                onClick={openPublishedSite}
+                className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Открыть сайт
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => void copyCurrentCode()}
+              className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Копировать код
+            </button>
+            <button
+              type="button"
+              onClick={() => setPreviewExpanded((prev) => !prev)}
+              className="text-sm text-slate-500 hover:text-slate-700"
+            >
+              {previewExpanded ? "⌃ Hide preview" : "⌄ Show preview"}
+            </button>
+          </div>
         </div>
 
         <div className="mt-3">
@@ -2383,6 +2942,62 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
             Engine: {generationEngine} · React+Tailwind
           </span>
         </div>
+        {publishStatus !== "idle" ? (
+          <div className={`mt-2 rounded-xl border px-3 py-2 text-xs font-semibold ${statusClass(publishStatus)}`}>
+            {publishStatus === "loading" ? "Публикация..." : publishStatus === "success" ? `Опубликовано: ${publishPath || "ссылка готова"}` : "Ошибка публикации"}
+          </div>
+        ) : null}
+        {publishStatus === "success" && publishPath ? (
+          <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+            <p className="font-semibold">Публичная ссылка:</p>
+            <p className="mt-1 break-all">{publishUrl || publishPath}</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={openPublishedSite}
+                className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
+              >
+                Открыть сайт
+              </button>
+              <button
+                type="button"
+                onClick={() => void copyPublishedLink()}
+                className="rounded-lg border border-emerald-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+              >
+                Скопировать ссылку
+              </button>
+            </div>
+          </div>
+        ) : null}
+        {isAutoFixingPreview ? (
+          <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
+            Исправляю preview... попытка {Math.min(previewAutoFixAttempts + 1, PREVIEW_AUTO_FIX_MAX_ATTEMPTS)} из {PREVIEW_AUTO_FIX_MAX_ATTEMPTS}
+          </div>
+        ) : null}
+        {previewFixFailed ? (
+          <div className="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+            <p className="font-semibold">Не удалось автоматически исправить preview.</p>
+            <button
+              type="button"
+              onClick={() => void handleManualPreviewFix()}
+              className="mt-2 rounded-lg bg-rose-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-rose-700"
+            >
+              Попробовать исправить
+            </button>
+          </div>
+        ) : null}
+        {previewFixLogs.length > 0 ? (
+          <details className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            <summary className="cursor-pointer font-semibold">Repair log ({previewFixLogs.length})</summary>
+            <div className="mt-2 space-y-1">
+              {previewFixLogs.slice(-6).map((item) => (
+                <p key={item.id}>
+                  [{item.mode}] {item.status}
+                </p>
+              ))}
+            </div>
+          </details>
+        ) : null}
         {generationHistory.length > 0 ? (
           <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
             Варианты: {generationHistory.map((item) => `#${item.round} (${item.engine})`).join(" · ")}
@@ -2402,16 +3017,32 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
             </div>
 
             <div className="border-b border-slate-200 bg-white p-2">
-              <iframe
-                title="Generated code preview"
-                sandbox="allow-scripts allow-forms allow-popups allow-modals"
-                srcDoc={draft?.pageCode || ""}
-                className="h-[520px] w-full rounded-xl border border-slate-200 bg-white"
-              />
+              {!draft?.pageCode ? (
+                <div className="flex h-[520px] w-full items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50 px-6 text-center">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-700">Здесь появится live preview</p>
+                    <p className="mt-1 text-xs text-slate-500">Напиши задачу в чат, и мы сразу покажем сайт справа.</p>
+                  </div>
+                </div>
+              ) : isWorking ? (
+                <div className="h-[520px] w-full rounded-xl border border-slate-200 bg-white p-4">
+                  <div className="h-8 w-1/3 animate-pulse rounded bg-slate-200" />
+                  <div className="mt-4 h-20 w-full animate-pulse rounded bg-slate-100" />
+                  <div className="mt-4 grid grid-cols-2 gap-3">
+                    <div className="h-24 animate-pulse rounded bg-slate-100" />
+                    <div className="h-24 animate-pulse rounded bg-slate-100" />
+                  </div>
+                </div>
+              ) : (
+                <iframe
+                  title="Generated code preview"
+                  sandbox="allow-scripts allow-forms allow-popups allow-modals"
+                  srcDoc={draft.pageCode}
+                  className="h-[520px] w-full rounded-xl border border-slate-200 bg-white"
+                />
+              )}
               <details className="mt-2 rounded-xl border border-slate-200 bg-slate-50 p-2">
-                <summary className="cursor-pointer text-xs font-semibold text-slate-600">
-                  Generated React+Tailwind Code
-                </summary>
+                <summary className="cursor-pointer text-xs font-semibold text-slate-600">Generated React+Tailwind Code</summary>
                 <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap rounded-lg bg-white p-2 text-[11px] leading-5 text-slate-700">
 {draft?.componentCode || draft?.pageCode || ""}
                 </pre>
@@ -2459,6 +3090,14 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
       }
     });
 
+    const stageTitle: Record<GenerationStage, string> = {
+      idle: "Собираю сайт...",
+      analyze: "Анализируем запрос",
+      structure: "Строим структуру сайта",
+      generate: "Генерируем дизайн",
+      preview_check: "Готовим предпросмотр"
+    };
+
     if (isWorking) {
       rows.push({
         key: "working",
@@ -2470,7 +3109,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
                 <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-slate-400" />
                 <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-slate-400 [animation-delay:120ms]" />
                 <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-slate-400 [animation-delay:240ms]" />
-                Working...
+                {stageTitle[generationStage] || "Собираю сайт..."}
               </p>
               <div className="mt-1 rounded-3xl border border-slate-200 bg-white/80 px-5 py-3 shadow-[0_20px_50px_-42px_rgba(15,23,42,.45)]">
                 <p className="text-sm text-slate-500">{workingText}</p>
@@ -2482,7 +3121,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
     }
 
     return rows;
-  }, [messages, isWorking, workingText]);
+  }, [messages, isWorking, workingText, generationStage]);
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#edf8ff]">
@@ -2531,6 +3170,81 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
 
             <div className="space-y-4">{timeline.map((row) => <div key={row.key}>{row.node}</div>)}</div>
 
+            {isWorking ? (
+              <div className="mt-5 rounded-2xl border border-slate-200 bg-white/90 p-3 shadow-[0_16px_35px_-30px_rgba(15,23,42,.55)]">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Статус генерации</p>
+                <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                  <div className="h-full w-1/2 animate-pulse rounded-full bg-gradient-to-r from-sky-400 via-cyan-400 to-blue-500" />
+                </div>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {[
+                    { id: "analyze", label: "Анализируем запрос" },
+                    { id: "structure", label: "Строим структуру сайта" },
+                    { id: "generate", label: "Генерируем дизайн" },
+                    { id: "preview_check", label: "Готовим предпросмотр" }
+                  ].map((item, index) => {
+                    const order: Record<GenerationStage, number> = { idle: 0, analyze: 1, structure: 2, generate: 3, preview_check: 4 };
+                    const active = generationStage === item.id;
+                    const done = order[generationStage] > index + 1;
+                    return (
+                      <div
+                        key={item.id}
+                        className={`rounded-xl border px-2 py-2 text-center text-[11px] font-semibold ${
+                          active
+                            ? "border-sky-300 bg-sky-50 text-sky-700"
+                            : done
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                              : "border-slate-200 bg-slate-50 text-slate-500"
+                        }`}
+                      >
+                        {item.label}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+
+            {siteReady && draft && !isWorking ? (
+              <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 shadow-[0_14px_34px_-30px_rgba(16,185,129,.6)]">
+                <p className="text-sm font-semibold text-emerald-800">Сайт готов</p>
+                <p className="mt-1 text-xs text-emerald-700">Можно сразу открыть, опубликовать или доработать вариант.</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {postGenerationQuickActions.map((item) => (
+                    <button
+                      key={`ready-${item.key}`}
+                      type="button"
+                      onClick={() => onSend(quickActionPrompt(item.key))}
+                      className="rounded-lg border border-emerald-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => openFullPreview(false)}
+                    className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
+                  >
+                    Открыть отдельно
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handlePublish}
+                    className="rounded-lg border border-emerald-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+                  >
+                    Опубликовать
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void copyCurrentCode()}
+                    className="rounded-lg border border-emerald-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+                  >
+                    Копировать код
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
             <div className="mt-6 flex flex-wrap gap-2">
               {quickPrompts.map((prompt) => (
                 <button
@@ -2543,6 +3257,24 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
                 </button>
               ))}
             </div>
+
+            {draft && !isWorking ? (
+              <div className="mt-3 rounded-2xl border border-slate-200 bg-white/90 p-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Быстрые действия</p>
+                <div className="flex flex-wrap gap-2">
+                  {postGenerationQuickActions.map((item) => (
+                    <button
+                      key={item.key}
+                      type="button"
+                      onClick={() => onSend(quickActionPrompt(item.key))}
+                      className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:border-slate-400 hover:bg-slate-50"
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
 
             {error ? <p className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">{error}</p> : null}
           </div>
@@ -2564,13 +3296,88 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
             </form>
 
             <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-500">
-              <span className="font-semibold">Быстро</span>
+              <button
+                type="button"
+                onClick={() => setShowClientSiteForm((prev) => !prev)}
+                className="rounded-full border border-cyan-300 bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-800 transition hover:bg-cyan-100"
+              >
+                Сделать сайт для клиента
+              </button>
+              <span className="font-semibold">Быстро создать сайт</span>
+              {quickWebsiteScenarios.map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => runQuickWebsiteScenario(item)}
+                  className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+                >
+                  {item.label}
+                </button>
+              ))}
               {suggestions.map((item) => (
-                <button key={item} type="button" onClick={() => onSend(item)} className="rounded-full border border-slate-200 bg-white px-2.5 py-1 transition hover:border-slate-300 hover:bg-slate-50">
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => onSend(item)}
+                  className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs transition hover:border-slate-300 hover:bg-slate-50"
+                >
                   {item}
                 </button>
               ))}
             </div>
+
+            {showClientSiteForm ? (
+              <div className="mt-3 rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-[0_16px_35px_-30px_rgba(15,23,42,.55)]">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Сайт для клиента</p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <input
+                    value={clientSiteForm.businessName}
+                    onChange={(e) => setClientSiteForm((prev) => ({ ...prev, businessName: e.target.value }))}
+                    placeholder="Название бизнеса"
+                    className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-sky-400"
+                  />
+                  <input
+                    value={clientSiteForm.city}
+                    onChange={(e) => setClientSiteForm((prev) => ({ ...prev, city: e.target.value }))}
+                    placeholder="Город"
+                    className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-sky-400"
+                  />
+                  <input
+                    value={clientSiteForm.phone}
+                    onChange={(e) => setClientSiteForm((prev) => ({ ...prev, phone: e.target.value }))}
+                    placeholder="Телефон"
+                    className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-sky-400"
+                  />
+                  <select
+                    value={clientSiteForm.businessType}
+                    onChange={(e) => setClientSiteForm((prev) => ({ ...prev, businessType: e.target.value as ClientSiteBusinessType }))}
+                    className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-sky-400"
+                  >
+                    {clientSiteBusinessOptions.map((item) => (
+                      <option key={item.value} value={item.value}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="mt-3 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={runClientSiteGeneration}
+                    className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800"
+                  >
+                    Сгенерировать сайт
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowClientSiteForm(false)}
+                    className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    Отмена
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
         </main>
 
