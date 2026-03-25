@@ -45,10 +45,20 @@ function normalizeProfile(raw: any): AgentProfile {
 
 function parseComponentCodeFromModel(raw: string) {
   const parsed = parseJsonFromText(raw);
-  const candidate =
-    isValidCodePayloadShape(parsed) && typeof (parsed as any).componentCode === "string"
-      ? String((parsed as any).componentCode).trim()
-      : extractCodeBlock(raw);
+  let candidate = "";
+  if (parsed && typeof parsed === "object") {
+    const p = parsed as Record<string, unknown>;
+    const fromJson =
+      (typeof p.componentCode === "string" && p.componentCode) ||
+      (typeof p.code === "string" && p.code) ||
+      (typeof p.appCode === "string" && p.appCode) ||
+      (typeof p.jsx === "string" && p.jsx) ||
+      (typeof p.appJsx === "string" && p.appJsx) ||
+      "";
+    candidate = String(fromJson).trim();
+  }
+  if (!candidate) candidate = extractCodeBlock(raw);
+  if (!candidate && looksLikeReactComponent(raw)) candidate = String(raw || "").trim();
   if (!looksLikeReactComponent(candidate)) return "";
   return candidate;
 }

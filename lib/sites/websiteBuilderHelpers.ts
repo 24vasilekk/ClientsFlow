@@ -1,4 +1,4 @@
-import { WebsiteBrief } from "./websiteBuilderTypes";
+import type { WebsiteBrief } from "./websiteBuilderTypes";
 
 export function compact(input: unknown) {
   return String(input || "")

@@ -34,5 +34,11 @@ export function isValidWebsiteBriefShape(raw: unknown): raw is WebsiteBrief {
 export function isValidCodePayloadShape(raw: unknown) {
   if (!raw || typeof raw !== "object") return false;
   const c = raw as Record<string, unknown>;
-  return isNonEmptyString(c.componentCode);
+  return (
+    isNonEmptyString(c.componentCode) ||
+    isNonEmptyString(c.code) ||
+    isNonEmptyString(c.appCode) ||
+    isNonEmptyString(c.jsx) ||
+    isNonEmptyString(c.appJsx)
+  );
 }
