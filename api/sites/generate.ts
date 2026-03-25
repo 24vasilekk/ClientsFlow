@@ -9,6 +9,7 @@ import {
   parseJsonFromText
 } from "../../lib/sites/websiteBuilderHelpers.js";
 import {
+  codeGenerationPromptWithOptions,
   fixCodePrompt,
   improveCodePrompt,
   getWebsitePromptPack
@@ -397,34 +398,68 @@ export default async function handler(req: any, res: any) {
       code: modelCode,
       polish: modelPolish
     };
-    const result = await runWebsiteGenerationFlow(
-      {
-        userPrompt: guidance,
-        profile
-      },
-      {
-        complete: (input) =>
-          openRouterCompletionWithRetry({
-            apiKey,
-            model: input.model,
-            systemPrompt: input.systemPrompt,
-            userPrompt: input.userPrompt,
-            timeoutMs: input.timeoutMs,
-            temperature: input.temperature,
-            retries: input.retries
-          }),
-        models,
-        promptPackVersion,
-        promptPack
-      }
-    );
+    let result: Awaited<ReturnType<typeof runWebsiteGenerationFlow>> | null = null;
+    try {
+      result = await runWebsiteGenerationFlow(
+        {
+          userPrompt: guidance,
+          profile
+        },
+        {
+          complete: (input) =>
+            openRouterCompletionWithRetry({
+              apiKey,
+              model: input.model,
+              systemPrompt: input.systemPrompt,
+              userPrompt: input.userPrompt,
+              timeoutMs: input.timeoutMs,
+              temperature: input.temperature,
+              retries: input.retries
+            }),
+          models,
+          promptPackVersion,
+          promptPack
+        }
+      );
+    } catch (flowError: any) {
+      console.error("[sites/generate] orchestration_failed_try_code_only", {
+        id: debugId,
+        stage,
+        message: String(flowError?.message || "unknown")
+      });
+      stage = "code_only_retry";
+      // Non-template emergency path: one more direct code generation attempt from enriched brief.
+      const emergencyText = await openRouterCompletionWithRetry({
+        apiKey,
+        model: modelCode,
+        systemPrompt: promptPack.systemGeneration,
+        userPrompt:
+          "Аварийный режим: верни только содержимое App.jsx (React+Tailwind), без markdown/JSON/комментариев вокруг. " +
+          codeGenerationPromptWithOptions(fallbackBrief, { promptPack: promptPackVersion }),
+        timeoutMs: 28000,
+        temperature: 0.8,
+        retries: 1
+      });
+      const emergencyCode = parseComponentCodeFromModel(emergencyText);
+      if (!emergencyCode) throw flowError;
+      result = {
+        brief: fallbackBrief,
+        componentCode: emergencyCode,
+        meta: {
+          usedFallbackBrief: true,
+          usedFallbackCode: false,
+          usedPolish: false,
+          normalizedGuidance: guidance
+        }
+      };
+    }
 
     res.status(200).json(
       successPayload({
         sessionId,
         round,
-        brief: result.brief,
-        componentCode: result.componentCode,
+        brief: result!.brief,
+        componentCode: result!.componentCode,
         startedAt,
         debugId,
         stage: "ok"
