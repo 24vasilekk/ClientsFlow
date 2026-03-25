@@ -41,6 +41,7 @@ type DraftLike = {
   contrast: "soft" | "medium" | "high";
   layoutSpec: Array<Record<string, unknown>>;
   pageDsl: Array<Record<string, unknown>>;
+  componentCode: string;
   pageCode: string;
 };
 
@@ -301,6 +302,7 @@ function fallbackDraft(profile: AgentProfile, guidance: string): DraftLike {
     contrast: isComputerClub ? "high" : "medium",
     layoutSpec: [],
     pageDsl,
+    componentCode: "",
     pageCode: ""
   };
 }
@@ -328,6 +330,7 @@ function normalizeDraft(raw: any, base: DraftLike): DraftLike {
   str("contactLine");
   str("fontHeading");
   str("fontBody");
+  str("componentCode");
   str("pageCode");
 
   if (raw.headlineStyle === "serif" || raw.headlineStyle === "sans") next.headlineStyle = raw.headlineStyle;
@@ -393,7 +396,9 @@ export default async function handler(req: any, res: any) {
     const sessionId = String(req.body?.sessionId || "").trim() || `session-${Math.random().toString(36).slice(2, 10)}`;
     const round = Math.max(1, Number(req.body?.round || 1));
     const guidance = String(req.body?.guidance || "").trim();
+    const target = String(req.body?.target || "html").toLowerCase() === "react-tailwind" ? "react-tailwind" : "html";
     const currentPageCode = String(req.body?.currentPageCode || "").trim();
+    const currentComponentCode = String(req.body?.currentComponentCode || "").trim();
     const profile: AgentProfile = {
       businessName: String(profileRaw.businessName || ""),
       niche: String(profileRaw.niche || ""),
@@ -434,7 +439,9 @@ export default async function handler(req: any, res: any) {
 
     const isEdit = isEditRequest(guidance);
     const prompt = [
-      "Сгенерируй полный HTML+CSS код современного сайта на русском языке.",
+      target === "react-tailwind"
+        ? "Сгенерируй React+Tailwind код сайта на русском языке."
+        : "Сгенерируй полный HTML+CSS код современного сайта на русском языке.",
       `Бизнес: ${base.businessName}`,
       `Ниша: ${base.niche}`,
       `Город: ${base.city}`,
@@ -442,10 +449,14 @@ export default async function handler(req: any, res: any) {
       `Стиль: ${profile.style || "современный"}`,
       `Референс: ${profile.styleReference || "-"}`,
       `Запрос: ${guidance || "-"}`,
-      isEdit && currentPageCode
-        ? `ТЕКУЩИЙ HTML/CSS КОД (измени его по запросу и верни полную новую версию):\n${currentPageCode.slice(0, 24000)}`
-        : "Собери новый код с нуля под запрос.",
-      'Формат ответа: либо JSON {"pageCode":"<html...>"} либо чистый HTML документ.'
+      isEdit && target === "react-tailwind" && currentComponentCode
+        ? `ТЕКУЩИЙ REACT КОМПОНЕНТ (измени его по запросу и верни полную новую версию):\n${currentComponentCode.slice(0, 24000)}`
+        : isEdit && target === "html" && currentPageCode
+          ? `ТЕКУЩИЙ HTML/CSS КОД (измени его по запросу и верни полную новую версию):\n${currentPageCode.slice(0, 24000)}`
+          : "Собери новый код с нуля под запрос.",
+      target === "react-tailwind"
+        ? 'Формат ответа: JSON {"componentCode":"..."} (обязательно) и опционально pageCode. Либо чистый код React-компонента.'
+        : 'Формат ответа: либо JSON {"pageCode":"<html...>"} либо чистый HTML документ.'
     ].join("\n");
 
     const requestOpenRouter = async (timeoutMs: number, userPrompt: string = prompt) => {
@@ -466,7 +477,9 @@ export default async function handler(req: any, res: any) {
               {
                 role: "system",
                 content:
-                  "Ты senior frontend developer и web designer. Верни только код сайта."
+                  target === "react-tailwind"
+                    ? "Ты senior frontend developer. Верни только код React-компонента с Tailwind-классами."
+                    : "Ты senior frontend developer и web designer. Верни только код сайта."
               },
               { role: "user", content: userPrompt }
             ]
@@ -510,15 +523,26 @@ export default async function handler(req: any, res: any) {
     if (!parsed || typeof parsed !== "object") {
       parsed = {};
     }
-    if (typeof (parsed as any).pageCode !== "string" || !(parsed as any).pageCode.trim()) {
-      const htmlDoc = extractHtmlDocument(text);
-      if (htmlDoc) {
-        (parsed as any).pageCode = htmlDoc;
+    if (target === "react-tailwind") {
+      if (typeof (parsed as any).componentCode !== "string" || !(parsed as any).componentCode.trim()) {
+        const rawComponent = text.trim();
+        if (rawComponent) (parsed as any).componentCode = rawComponent;
       }
-    }
-    if (typeof (parsed as any).pageCode !== "string" || !(parsed as any).pageCode.trim()) {
-      finishWithFallback("PAGE_CODE_MISSING", compact(text));
-      return;
+      if (typeof (parsed as any).componentCode !== "string" || !(parsed as any).componentCode.trim()) {
+        finishWithFallback("COMPONENT_CODE_MISSING", compact(text));
+        return;
+      }
+    } else {
+      if (typeof (parsed as any).pageCode !== "string" || !(parsed as any).pageCode.trim()) {
+        const htmlDoc = extractHtmlDocument(text);
+        if (htmlDoc) {
+          (parsed as any).pageCode = htmlDoc;
+        }
+      }
+      if (typeof (parsed as any).pageCode !== "string" || !(parsed as any).pageCode.trim()) {
+        finishWithFallback("PAGE_CODE_MISSING", compact(text));
+        return;
+      }
     }
 
     const draft = normalizeDraft(parsed, base);

@@ -111,8 +111,10 @@ type DraftState = {
   contrast: ThemeContrast;
   layoutSpec: LayoutBlock[];
   pageDsl: PageDslBlock[];
+  componentCode: string;
   pageCode: string;
 };
+type GenerationTarget = "html" | "react-tailwind";
 
 type AgentProfile = {
   businessName: string;
@@ -305,6 +307,24 @@ function parseMaybeJsonObject(raw: string): Record<string, unknown> | null {
     }
   }
   return null;
+}
+
+function extractHtmlDocument(raw: string): string | null {
+  const text = String(raw || "").trim();
+  if (!text) return null;
+  const fenced = text.match(/```html\s*([\s\S]*?)```/i) || text.match(/```\s*([\s\S]*?)```/i);
+  const candidate = (fenced?.[1] || text).trim();
+  const lower = candidate.toLowerCase();
+  if (lower.includes("<!doctype html") || (lower.includes("<html") && lower.includes("</html>"))) return candidate;
+  return null;
+}
+
+function extractCodeBlock(raw: string): string | null {
+  const text = String(raw || "").trim();
+  if (!text) return null;
+  const fenced = text.match(/```(?:tsx|jsx|typescript|javascript|js|ts)?\s*([\s\S]*?)```/i);
+  if (fenced?.[1]) return fenced[1].trim();
+  return text;
 }
 
 function nowTime() {
@@ -847,6 +867,49 @@ function escapeHtml(value: string) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+function wrapReactComponentForPreview(componentCode: string) {
+  const sanitized = String(componentCode || "").trim();
+  const escaped = sanitized
+    .replace(/\\/g, "\\\\")
+    .replace(/`/g, "\\`")
+    .replace(/\$\{/g, "\\${");
+  return `<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-slate-100">
+  <div id="root"></div>
+  <script type="text/babel" data-presets="react">
+    const source = \`${escaped}\`;
+    let cleaned = source
+      .replace(/^\\s*export\\s+default\\s+/m, "")
+      .replace(/^\\s*import\\s+.*$/gm, "");
+    let Component = null;
+    try {
+      eval("Component = (" + cleaned + ")");
+    } catch (e) {
+      try {
+        eval(cleaned);
+        if (typeof ObninskBarbershopSite === "function") Component = ObninskBarbershopSite;
+      } catch (e2) {
+        document.body.innerHTML = "<pre style='padding:16px;color:#b91c1c;white-space:pre-wrap'>Ошибка рендера React-кода\\n\\n" + String(e2) + "</pre>";
+      }
+    }
+    if (Component) {
+      const root = ReactDOM.createRoot(document.getElementById("root"));
+      root.render(React.createElement(Component));
+    }
+  </script>
+</body>
+</html>`;
 }
 
 function buildPageCode(draft: Pick<DraftState, "businessName" | "niche" | "city" | "accentColor" | "pageBg" | "surfaceBg" | "fontHeading" | "fontBody" | "density" | "radius" | "contrast" | "pageDsl">) {
@@ -1600,6 +1663,7 @@ function createDraftFromProfile(profile: AgentProfile, guidance = "", round = 1)
     contrast: styleContext.includes("dark") ? "high" : "medium",
     layoutSpec: [],
     pageDsl: [],
+    componentCode: "",
     pageCode: ""
   };
   Object.assign(nextDraft, styleReferenceHints(`${profile.styleReference} ${guidance}`));
@@ -1709,7 +1773,9 @@ function normalizeAiDraftPatch(raw: any): Partial<DraftState> | null {
     "secondaryCta",
     "contactLine",
     "fontHeading",
-    "fontBody"
+    "fontBody",
+    "componentCode",
+    "pageCode"
   ];
   for (const key of strings) {
     const value = raw[key];
@@ -1775,6 +1841,9 @@ function normalizeAiDraftPatch(raw: any): Partial<DraftState> | null {
       }));
   }
 
+  if (typeof patch.componentCode === "string" && patch.componentCode.trim() && (!patch.pageCode || !String(patch.pageCode).trim())) {
+    patch.pageCode = wrapReactComponentForPreview(patch.componentCode);
+  }
   return patch;
 }
 
@@ -1796,12 +1865,17 @@ function hydrateGeneratedDraft(raw: any, fallback: DraftState): DraftState {
     summaryPoints: patch.summaryPoints?.length ? patch.summaryPoints : fallback.summaryPoints,
     layoutSpec: [],
     pageDsl: [],
+    componentCode: "",
     pageCode: ""
   };
   merged.layoutSpec = normalizeLayoutSpec(raw?.layoutSpec, merged);
   merged.pageDsl = normalizePageDsl(raw?.pageDsl, merged);
   const finalized = finalizeDraft(merged);
+  if (typeof raw?.componentCode === "string" && raw.componentCode.trim()) finalized.componentCode = raw.componentCode;
   if (typeof raw?.pageCode === "string" && raw.pageCode.trim()) finalized.pageCode = raw.pageCode;
+  if ((!finalized.pageCode || !finalized.pageCode.trim()) && finalized.componentCode?.trim()) {
+    finalized.pageCode = wrapReactComponentForPreview(finalized.componentCode);
+  }
   return finalized;
 }
 
@@ -1830,6 +1904,7 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
   const [previewExpanded, setPreviewExpanded] = useState(true);
   const [generationRound, setGenerationRound] = useState(1);
   const [generationEngine, setGenerationEngine] = useState<"openrouter" | "algorithm">("openrouter");
+  const [generationTarget, setGenerationTarget] = useState<GenerationTarget>("html");
   const [generationSessionId, setGenerationSessionId] = useState(() => {
     if (typeof window === "undefined") return `session-${uid()}`;
     return sanitizeSessionId(localStorage.getItem(SITE_SESSION_STORAGE_KEY) || `session-${uid()}`);
@@ -1906,7 +1981,9 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
               profile: nextProfile,
               guidance,
               round: nextRound,
+              target: generationTarget,
               currentPageCode: currentDraft?.pageCode || "",
+              currentComponentCode: currentDraft?.componentCode || "",
               currentBusinessName: currentDraft?.businessName || ""
             })
           });
@@ -1965,9 +2042,16 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
       const hasRawPageCode =
         typeof (body.draft as { pageCode?: unknown }).pageCode === "string" &&
         String((body.draft as { pageCode?: unknown }).pageCode || "").trim().length > 0;
-      if (!hasRawPageCode && currentDraft?.pageCode) {
+      const hasRawComponentCode =
+        typeof (body.draft as { componentCode?: unknown }).componentCode === "string" &&
+        String((body.draft as { componentCode?: unknown }).componentCode || "").trim().length > 0;
+      if (generationTarget === "html" && !hasRawPageCode && currentDraft?.pageCode) {
         debugStage = "missing_page_code";
         throw new Error("AI returned draft without pageCode");
+      }
+      if (generationTarget === "react-tailwind" && !hasRawComponentCode && !hasRawPageCode && (currentDraft?.componentCode || currentDraft?.pageCode)) {
+        debugStage = "missing_component_code";
+        throw new Error("AI returned draft without componentCode/pageCode");
       }
       debugStage = "hydrate_draft";
       const fallbackDraft = createDraftFromProfile(nextProfile, guidance, nextRound);
@@ -1997,7 +2081,9 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
       if (lower.includes("function_invocation_timeout") || lower.includes("status=504")) {
         try {
           const recoveryPrompt = [
-            "Верни только код сайта: либо JSON {\"pageCode\":\"<html...>\"}, либо чистый HTML документ.",
+            generationTarget === "react-tailwind"
+              ? "Верни только код React+Tailwind сайта: JSON {\"componentCode\":\"...\"} или чистый TSX/JSX."
+              : "Верни только код сайта: либо JSON {\"pageCode\":\"<html...>\"}, либо чистый HTML документ.",
             `Бизнес: ${nextProfile.businessName || "Studio Name"}`,
             `Ниша: ${nextProfile.niche || "service"}`,
             `Город: ${nextProfile.city || "Москва"}`,
@@ -2016,12 +2102,23 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
           const recoveryBody = (await recoveryRes.json()) as { reply?: string; error?: string };
           if (recoveryRes.ok && typeof recoveryBody.reply === "string") {
             const fallbackDraft = createDraftFromProfile(nextProfile, guidance, nextRound);
-            const aiJson = parseMaybeJsonObject(recoveryBody.reply);
-            if (!aiJson) {
-              throw new Error("Recovery channel returned non-JSON");
-            }
-            if (typeof aiJson.pageCode !== "string" || !aiJson.pageCode.trim()) {
-              throw new Error("Recovery JSON missing pageCode");
+            const aiJson = parseMaybeJsonObject(recoveryBody.reply) || {};
+            if (generationTarget === "react-tailwind") {
+              if (typeof (aiJson as any).componentCode !== "string" || !(aiJson as any).componentCode.trim()) {
+                const component = extractCodeBlock(recoveryBody.reply);
+                if (component) (aiJson as any).componentCode = component;
+              }
+              if (typeof (aiJson as any).componentCode !== "string" || !(aiJson as any).componentCode.trim()) {
+                throw new Error("Recovery payload missing componentCode");
+              }
+            } else {
+              if (typeof (aiJson as any).pageCode !== "string" || !(aiJson as any).pageCode.trim()) {
+                const htmlDoc = extractHtmlDocument(recoveryBody.reply);
+                if (htmlDoc) (aiJson as any).pageCode = htmlDoc;
+              }
+              if (typeof (aiJson as any).pageCode !== "string" || !(aiJson as any).pageCode.trim()) {
+                throw new Error("Recovery payload missing pageCode");
+              }
             }
             const recoveredDraft = hydrateGeneratedDraft(aiJson, fallbackDraft);
             setGenerationEngine("openrouter");
@@ -2341,8 +2438,24 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
           <span className={`rounded-full border px-2 py-1 text-xs ${statusClass(paymentStatus)}`}>Pay</span>
           <span className={`rounded-full border px-2 py-1 text-xs ${statusClass(publishStatus)}`}>Publish</span>
           <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-600">
-            Engine: {generationEngine}
+            Engine: {generationEngine} · {generationTarget}
           </span>
+          <div className="flex items-center gap-1 rounded-full border border-slate-200 bg-white p-1">
+            <button
+              type="button"
+              onClick={() => setGenerationTarget("html")}
+              className={`rounded-full px-2 py-1 text-xs font-semibold ${generationTarget === "html" ? "bg-sky-500 text-white" : "text-slate-600 hover:bg-slate-100"}`}
+            >
+              HTML
+            </button>
+            <button
+              type="button"
+              onClick={() => setGenerationTarget("react-tailwind")}
+              className={`rounded-full px-2 py-1 text-xs font-semibold ${generationTarget === "react-tailwind" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}
+            >
+              React+Tailwind
+            </button>
+          </div>
         </div>
         {generationHistory.length > 0 ? (
           <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
@@ -2370,9 +2483,11 @@ export default function ChatSitesBuilderPage({ onNavigate }: ChatSitesBuilderPag
                 className="h-[520px] w-full rounded-xl border border-slate-200 bg-white"
               />
               <details className="mt-2 rounded-xl border border-slate-200 bg-slate-50 p-2">
-                <summary className="cursor-pointer text-xs font-semibold text-slate-600">Generated HTML/CSS Code</summary>
+                <summary className="cursor-pointer text-xs font-semibold text-slate-600">
+                  {generationTarget === "react-tailwind" ? "Generated React+Tailwind Code" : "Generated HTML/CSS Code"}
+                </summary>
                 <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap rounded-lg bg-white p-2 text-[11px] leading-5 text-slate-700">
-{draft?.pageCode || ""}
+{generationTarget === "react-tailwind" ? (draft?.componentCode || draft?.pageCode || "") : (draft?.pageCode || "")}
                 </pre>
               </details>
             </div>
