@@ -1340,13 +1340,14 @@ function extractBusinessName(text: string) {
 
 function extractCity(text: string) {
   const lower = text.toLowerCase();
+  if (lower.includes("обнинск")) return "Обнинск";
   if (lower.includes("моск")) return "Москва";
   if (lower.includes("спб") || lower.includes("питер") || lower.includes("санкт")) return "Санкт-Петербург";
   if (lower.includes("казан")) return "Казань";
   if (lower.includes("екб") || lower.includes("екатерин")) return "Екатеринбург";
   const explicit = text.match(/(?:город|в городе|локация)\s*[:\-]?\s*([a-zа-яё\- ]{2,40})/i);
   if (explicit?.[1]) return explicit[1].trim();
-  const simple = text.match(/\bв\s+([A-ZА-ЯЁ][a-zа-яё\-]{2,30})\b/);
+  const simple = text.match(/\bв\s+([a-zа-яё][a-zа-яё\-]{2,30})\b/i);
   if (simple?.[1]) return simple[1].trim();
   return "";
 }

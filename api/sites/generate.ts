@@ -45,6 +45,21 @@ type DraftLike = {
   pageCode: string;
 };
 
+function deriveBusinessName(profile: AgentProfile, guidance: string) {
+  if (profile.businessName && profile.businessName.trim()) return profile.businessName.trim();
+  const niche = String(profile.niche || "").toLowerCase();
+  const city = String(profile.city || "").trim();
+  const g = String(guidance || "").toLowerCase();
+  const isBarber = niche.includes("barber") || niche.includes("барбер") || g.includes("барбершоп");
+  const isComputerClub = niche.includes("computer") || niche.includes("кибер") || g.includes("компьютерный клуб");
+  if (isBarber && city) return `Барбершоп в ${city}`;
+  if (isComputerClub && city) return `Компьютерный клуб в ${city}`;
+  if (city) return `Сайт бизнеса в ${city}`;
+  if (isBarber) return "Барбершоп";
+  if (isComputerClub) return "Компьютерный клуб";
+  return "Бизнес";
+}
+
 export const config = { maxDuration: 60 };
 
 function compact(input: unknown) {
@@ -434,8 +449,12 @@ export default async function handler(req: any, res: any) {
     const apiKey = String(process.env.OPENROUTER_API_KEY || "")
       .replace(/[\r\n\s\u200B-\u200D\uFEFF]+/g, "")
       .trim();
-    const model = String(process.env.OPENROUTER_MODEL || process.env.OPENROUTER_MODEL_FAST || "openai/gpt-4o-mini").trim();
-    const base = fallbackDraft(profile, guidance);
+    const model = String(process.env.OPENROUTER_MODEL || process.env.OPENROUTER_MODEL_FAST || "openai/gpt-4o").trim();
+    const resolvedProfile: AgentProfile = {
+      ...profile,
+      businessName: deriveBusinessName(profile, guidance)
+    };
+    const base = fallbackDraft(resolvedProfile, guidance);
     const finishWithFallback = (code: string, message: string) => {
       res.status(502).json({
         specVersion: "v1-lite",
@@ -444,7 +463,7 @@ export default async function handler(req: any, res: any) {
         sessionId,
         round,
         engine: "openrouter",
-        profile,
+        profile: resolvedProfile,
         stages: [{ id: "fallback", ms: Date.now() - startedAt, source: "local" }],
         candidates: [{ id: "fallback", engine: "openrouter", score: 100, label: "Safe Fallback" }],
         selectedCandidateId: "fallback",
@@ -463,6 +482,9 @@ export default async function handler(req: any, res: any) {
       "Сгенерируй React+Tailwind код сайта на русском языке.",
       "Верни только код компонента (JSX/TSX), без markdown-блоков ``` и без HTML-документа.",
       "Формат по умолчанию: export default function Site() { return (...) }",
+      "Строго запрещено использовать заглушки: Studio Name, Company Name, Business Name, Lorem ipsum.",
+      "Нужен не шаблон, а детальный, выразительный лендинг уровня production: hero, преимущества, услуги, мастера/команда, отзывы, FAQ, контакты, форма записи.",
+      "Код должен быть достаточно большим и содержательным (ориентир: 250+ строк JSX+JS), с массивами данных и map(), адаптивом и аккуратной типографикой.",
       `Бизнес: ${base.businessName}`,
       `Ниша: ${base.niche}`,
       `Город: ${base.city}`,
@@ -490,8 +512,8 @@ export default async function handler(req: any, res: any) {
           },
           body: JSON.stringify({
             model,
-            temperature: 0.6,
-            max_tokens: 2600,
+            temperature: 0.75,
+            max_tokens: 5200,
             messages: [
               {
                 role: "system",
@@ -559,7 +581,7 @@ export default async function handler(req: any, res: any) {
       round,
       engine: "openrouter",
       draft,
-      profile,
+      profile: resolvedProfile,
       stages: [{ id: "openrouter", ms: Date.now() - startedAt, source: "openrouter" }],
       candidates: [{ id: "ai-main", engine: "openrouter", score: 100, label: "AI Main" }],
       selectedCandidateId: "ai-main",
