@@ -2104,7 +2104,15 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
       },
       { trend: conversionTrend.label, direction: conversionTrend.direction, tone: conversionPercent >= 30 ? "good" : "neutral", strength: Math.round(conversionPercent) }
     ][idx];
-    return { ...item, ...preset };
+    const shortLabelByTitle: Record<string, string> = {
+      "Сколько написали": "Написали",
+      "В диалоге": "В диалоге",
+      "Купили / записались": "Купили",
+      "Ушли без покупки": "Потеряли",
+      "Как быстро отвечаем": "Ответ",
+      "Сколько купили": "Конверсия"
+    };
+    return { ...item, shortLabel: shortLabelByTitle[item.label] ?? item.label, ...preset };
   });
 
   const analyticsTrendDataLive = useMemo(() => {
@@ -2254,41 +2262,13 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
       : earnedRevenue > 0
         ? "Потерь в деньгах не зафиксировано. Фокус: удержать текущую конверсию."
         : "Подключите данные, чтобы увидеть сколько денег вы уже зарабатываете и теряете.";
-  const firstScreenInsight = useMemo(() => {
-    if (!hasLiveData || incomingLeads <= 0) {
-      return "Подключите Telegram или импортируйте JSON: после этого вы сразу увидите, где теряются деньги.";
-    }
-    return `У вас ${incomingLeads} лидов → ${lostLeads} потеряно → недополучено ${formatRub(lostRevenue)}.`;
-  }, [hasLiveData, incomingLeads, lostLeads, lostRevenue]);
-  const firstScreenSteps = useMemo(
-    () => [
-      {
-        id: "connect",
-        title: "1. Подключите источник",
-        description: "Подключите Telegram или API, чтобы видеть реальные обращения.",
-        done: hasLiveData || Boolean(serviceConnection.connectedAt || serviceConnection.botToken),
-        actionLabel: "Подключить",
-        action: () => handleNavChange("Настройки")
-      },
-      {
-        id: "checkLeads",
-        title: "2. Разберите лиды",
-        description: incomingLeads > 0 ? `Сейчас в работе ${incomingLeads} обращений.` : "После подключения тут появятся первые лиды.",
-        done: incomingLeads > 0,
-        actionLabel: "Открыть лиды",
-        action: () => handleNavChange("Лиды")
-      },
-      {
-        id: "recover",
-        title: "3. Верните потери",
-        description: lostLeads > 0 ? `Уже потеряно ${lostLeads} лидов на сумму ${formatRub(lostRevenue)}.` : "Проверьте блок потерь, чтобы не упускать выручку.",
-        done: false,
-        actionLabel: "Посмотреть потери",
-        action: () => handleNavChange("Потерянные")
-      }
-    ],
-    [hasLiveData, incomingLeads, lostLeads, lostRevenue, serviceConnection.connectedAt, serviceConnection.botToken]
-  );
+  const monthlyLostRevenue = lostRevenueByPeriodLive["30d"].estimatedRevenue;
+  const leadLossPercent = incomingLeads > 0 ? Math.round((lostLeads / incomingLeads) * 100) : 30;
+  const monthlyRecoverableRevenue = Math.round(monthlyLostRevenue * 0.4);
+  const heroMoneyHeadline =
+    monthlyLostRevenue > 0
+      ? `Вы теряете до ${leadLossPercent}% заявок → это ≈ ${formatRub(monthlyLostRevenue)} в месяц`
+      : "Подключите данные и сразу увидите потери в деньгах";
   const aiRecommendationsLive = useMemo<AiRecommendation[]>(() => {
     const uniqueLeadIds = new Set(liveLeadRecords.map((lead) => lead.id));
     const totalLeads = uniqueLeadIds.size;
@@ -4129,17 +4109,17 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
       className={`app-shell studio-ui premium-ui mobile-ux ${standaloneSites ? "premium-sites" : "premium-business"} min-h-screen text-slate-900 ${
         standaloneSites
           ? "bg-[radial-gradient(70%_80%_at_10%_10%,rgba(56,189,248,0.18),transparent_60%),radial-gradient(50%_60%_at_90%_0%,rgba(59,130,246,0.2),transparent_60%),#020617]"
-          : "bg-[radial-gradient(80%_80%_at_10%_0%,rgba(20,99,255,0.2),transparent_55%),radial-gradient(70%_80%_at_90%_0%,rgba(14,165,233,0.18),transparent_60%),#090909]"
+          : "bg-[radial-gradient(80%_80%_at_10%_0%,rgba(14,165,233,0.12),transparent_56%),radial-gradient(70%_80%_at_90%_0%,rgba(59,130,246,0.08),transparent_62%),#F7F9FB]"
       }`}
     >
       <div className="flex min-h-screen">
         {!standaloneSites ? (
-        <aside className="hidden w-[260px] shrink-0 border-r border-slate-800 bg-slate-950/90 px-4 py-5 lg:block">
+        <aside className="hidden w-[260px] shrink-0 border-r border-slate-200 bg-white/90 px-4 py-5 lg:block">
           <div className="mb-8 px-2">
             <p className="text-lg font-extrabold tracking-tight">
-              <BrandWordmark cClass="text-cyan-300" flowClass="text-slate-100" />
+              <BrandWordmark cClass="text-cyan-600" flowClass="text-slate-900" />
             </p>
-            <p className="mt-1 text-xs text-slate-400">AI Client Operations</p>
+            <p className="mt-1 text-xs text-slate-500">AI Client Operations</p>
           </div>
 
           <nav className="space-y-4">
@@ -4153,13 +4133,13 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                       onClick={() => handleNavChange(item)}
                       className={`sidebar-nav-button group relative w-full rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition ${
                         activeNav === item
-                          ? "bg-cyan-400 text-slate-950 shadow-[0_10px_24px_rgba(34,211,238,0.28)]"
-                          : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                          ? "bg-slate-900 text-white shadow-[0_10px_24px_rgba(15,23,42,0.18)]"
+                          : "text-slate-700 hover:bg-slate-100 hover:text-slate-900"
                       }`}
                     >
                       <span
                         className={`absolute left-1.5 top-1/2 h-5 w-1 -translate-y-1/2 rounded-full transition ${
-                          activeNav === item ? "bg-slate-950/85" : "bg-transparent group-hover:bg-cyan-300/70"
+                          activeNav === item ? "bg-cyan-300/95" : "bg-transparent group-hover:bg-cyan-400/70"
                         }`}
                       />
                       <span className="pl-2">{NAV_LABELS[item]}</span>
@@ -4170,9 +4150,9 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
             ))}
           </nav>
 
-          <div className="mt-8 rounded-2xl border border-cyan-500/40 bg-slate-900 p-3">
-            <p className="text-xs font-bold uppercase tracking-[0.12em] text-cyan-300">Текущий план</p>
-            <p className="mt-1 text-sm font-semibold text-slate-100">{currentPlanLabel}</p>
+          <div className="mt-8 rounded-2xl border border-cyan-200 bg-cyan-50 p-3">
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-cyan-700">Текущий план</p>
+            <p className="mt-1 text-sm font-semibold text-slate-900">{currentPlanLabel}</p>
           </div>
         </aside>
         ) : null}
@@ -4180,15 +4160,15 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
         <div className="flex min-w-0 flex-1 flex-col">
           <header
             className={`sticky top-0 z-30 px-3 py-3 backdrop-blur md:px-6 md:py-4 ${
-              standaloneSites ? "border-b border-blue-900/50 bg-slate-950/90" : "border-b border-slate-800/80 bg-slate-950/80"
+              standaloneSites ? "border-b border-blue-900/50 bg-slate-950/90" : "border-b border-slate-200/90 bg-white/92"
             }`}
           >
             <div className="flex items-center justify-between gap-4">
               <div>
-                <h1 className={`text-lg font-extrabold tracking-tight sm:text-xl ${standaloneSites ? "text-white" : "text-white"}`}>
+                <h1 className={`text-lg font-extrabold tracking-tight sm:text-xl ${standaloneSites ? "text-white" : "text-slate-900"}`}>
                   {standaloneSites ? "CFlow Sites" : NAV_LABELS[activeNav]}
                 </h1>
-                <p className={`text-xs sm:text-sm ${standaloneSites ? "text-slate-300" : "text-slate-300"}`}>
+                <p className={`text-xs sm:text-sm ${standaloneSites ? "text-slate-300" : "text-slate-600"}`}>
                   {standaloneSites ? "Конструктор сайтов для бизнеса: шаблон, контент, публикация" : "Рабочая панель управления потоком обращений"}
                 </p>
               </div>
@@ -4212,7 +4192,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                   <>
                     <button
                       onClick={() => triggerNotice("Период: последние 30 дней")}
-                      className="hidden rounded-full border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200 sm:block"
+                      className="hidden rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 sm:block"
                     >
                       Последние 30 дней
                     </button>
@@ -4230,7 +4210,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                     key={`mobile-${item}`}
                     onClick={() => handleNavChange(item)}
                     className={`mobile-secondary-chip rounded-full px-3.5 py-2 text-xs font-semibold transition ${
-                      activeNav === item ? "bg-cyan-400 text-slate-950" : "border border-slate-700 bg-slate-900 text-slate-200 hover:border-cyan-500/60"
+                      activeNav === item ? "bg-slate-900 text-white" : "border border-slate-300 bg-white text-slate-700 hover:border-cyan-500/60"
                     }`}
                   >
                     {NAV_LABELS[item]}
@@ -4249,24 +4229,24 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
               </div>
             ) : null}
             {!standaloneSites ? (
-              <section className="mobile-priority-strip mb-4 rounded-2xl border border-cyan-300/40 bg-slate-950/80 p-3 shadow-sm lg:hidden">
-                <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-cyan-300">Главное сейчас</p>
+              <section className="mobile-priority-strip mb-4 rounded-2xl border border-cyan-200 bg-white p-3 shadow-sm lg:hidden">
+                <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-cyan-700">Главное сейчас</p>
                 <div className="mt-2 grid grid-cols-2 gap-2">
                   <button
                     onClick={() => handleNavChange("Потерянные")}
-                    className="mobile-priority-card rounded-xl border border-rose-300/45 bg-rose-500/10 p-3 text-left"
+                    className="mobile-priority-card rounded-xl border border-rose-300/60 bg-rose-50 p-3 text-left"
                   >
-                    <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-rose-200">Потери</p>
-                    <p className="mt-1 text-lg font-extrabold text-white">{formatRub(lostRevenue)}</p>
-                    <p className="mt-1 text-xs text-rose-100/85">Нажмите, чтобы вернуть деньги</p>
+                    <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-rose-700">Потери</p>
+                    <p className="mt-1 text-lg font-extrabold text-rose-900">{formatRub(lostRevenue)}</p>
+                    <p className="mt-1 text-xs text-rose-700">Нажмите, чтобы вернуть деньги</p>
                   </button>
                   <button
                     onClick={() => handleNavChange("Лиды")}
-                    className="mobile-priority-card rounded-xl border border-cyan-300/45 bg-cyan-500/10 p-3 text-left"
+                    className="mobile-priority-card rounded-xl border border-cyan-300/60 bg-cyan-50 p-3 text-left"
                   >
-                    <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-cyan-200">Лиды</p>
-                    <p className="mt-1 text-lg font-extrabold text-white">{incomingLeads}</p>
-                    <p className="mt-1 text-xs text-cyan-100/90">Открыть работу с лидами</p>
+                    <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-cyan-700">Лиды</p>
+                    <p className="mt-1 text-lg font-extrabold text-cyan-900">{incomingLeads}</p>
+                    <p className="mt-1 text-xs text-cyan-700">Открыть работу с лидами</p>
                   </button>
                 </div>
               </section>
@@ -4954,14 +4934,14 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                 ) : null}
                 <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                   {analyticsKpisLive.map((kpi) => (
-                    <div key={kpi.label} className={`metric-card metric-tone-${kpi.tone} rounded-2xl border border-slate-200 bg-white p-5 shadow-sm`}>
+                    <div key={kpi.label} className={`metric-card metric-tone-${kpi.tone} rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5`}>
                       <div className="flex items-start justify-between gap-3">
-                        <p className="metric-label text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
-                          {kpi.label}
+                        <p className="metric-label text-[11px] font-bold uppercase tracking-[0.1em] text-slate-700">
+                          {kpi.shortLabel}
                           {"hint" in kpi && kpi.hint ? (
                             <span
                               title={kpi.hint}
-                              className="ml-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 bg-white text-[10px] font-bold text-slate-500"
+                              className="ml-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 bg-white text-[10px] font-bold text-slate-600"
                             >
                               ?
                             </span>
@@ -4971,15 +4951,9 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                           {kpi.direction === "up" ? "↗" : kpi.direction === "down" ? "↘" : "→"} {kpi.trend}
                         </span>
                       </div>
-                      <p key={`${kpi.label}-${kpi.value}`} className="metric-value mt-3 text-3xl font-extrabold tracking-tight text-slate-900">
+                      <p key={`${kpi.label}-${kpi.value}`} className="metric-value mt-2 text-4xl font-extrabold tracking-tight text-slate-950">
                         {kpi.value}
                       </p>
-                      <div className="mt-3">
-                        <div className="metric-bar">
-                          <div className="metric-bar-fill" style={{ width: `${Math.max(0, Math.min(100, kpi.strength))}%` }} />
-                        </div>
-                      </div>
-                      <p className="mt-2 text-sm text-slate-600">{kpi.note}</p>
                     </div>
                   ))}
                 </section>
@@ -6938,48 +6912,41 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                 ) : null}
 
                 <section className="first-screen-hero rounded-3xl border border-cyan-200 p-6 shadow-sm">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="max-w-3xl">
                     <div>
-                      <p className="text-xs font-bold uppercase tracking-[0.12em] text-cyan-300">Первые шаги</p>
-                      <h2 className="mt-1 text-2xl font-extrabold tracking-tight text-white">Что сделать прямо сейчас</h2>
-                      <p className="mt-2 text-sm text-cyan-100">Пройдите 3 шага, чтобы быстро получить выручку из текущих обращений.</p>
+                      <p className="text-xs font-bold uppercase tracking-[0.12em] text-cyan-700">CFlow</p>
+                      <h2 className="mt-1 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">Получайте клиентов из каждого обращения</h2>
+                      <p className="mt-3 text-base font-semibold text-slate-700">
+                        {hasLiveData && incomingLeads > 0
+                          ? `У вас ${incomingLeads} лида, ${bookedLeads} уже купили, а ${lostLeads} ушли.`
+                          : "Подключите Telegram и увидите, сколько клиентов и денег теряется уже сегодня."}
+                      </p>
                     </div>
+                  </div>
+
+                  <div className="first-screen-money-callout mt-4 rounded-2xl border border-rose-300/40 p-4">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-rose-700">Деньги, которые уходят</p>
+                    <p className="mt-1 text-xl font-extrabold text-rose-900 sm:text-2xl">{heroMoneyHeadline}</p>
+                    <p className="mt-1 text-sm text-rose-700">
+                      {monthlyLostRevenue > 0
+                        ? `Можно вернуть примерно ${formatRub(monthlyRecoverableRevenue)} в месяц за счет follow-up и улучшения ответов.`
+                        : "После первой синхронизации покажем сумму потерь и сколько можно вернуть."}
+                    </p>
+                  </div>
+
+                  <div className="mt-5 flex flex-wrap items-center gap-3">
                     <button
-                      onClick={() => handleNavChange("Лиды")}
-                      className="rounded-xl border border-cyan-300/60 bg-cyan-400/90 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-cyan-300"
+                      onClick={() => handleNavChange(hasLiveData ? "Лиды" : "Настройки")}
+                      className="first-screen-cta rounded-xl px-5 py-3 text-base font-extrabold text-slate-950"
                     >
-                      Начать с лидов
+                      {hasLiveData ? "Открыть лиды и вернуть клиентов" : "Подключить Telegram"}
                     </button>
-                  </div>
-
-                  <div className="first-screen-wow mt-4 rounded-2xl border border-rose-300/40 bg-rose-500/10 p-4">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-rose-200">Вау-момент</p>
-                    <p className="mt-1 text-lg font-extrabold text-white">{firstScreenInsight}</p>
-                    <p className="mt-1 text-xs text-rose-100/90">Это ключевая ценность CFlow: показывать, где вы теряете деньги, и что сделать дальше.</p>
-                  </div>
-
-                  <div className="mt-4 grid gap-3 md:grid-cols-3">
-                    {firstScreenSteps.map((step) => (
-                      <div key={step.id} className="first-screen-step rounded-2xl border border-slate-700/70 bg-slate-900/65 p-4">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-sm font-semibold text-slate-100">{step.title}</p>
-                          <span
-                            className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
-                              step.done ? "bg-emerald-400/20 text-emerald-200" : "bg-amber-400/20 text-amber-200"
-                            }`}
-                          >
-                            {step.done ? "Готово" : "Нужно сделать"}
-                          </span>
-                        </div>
-                        <p className="mt-2 text-xs text-slate-300">{step.description}</p>
-                        <button
-                          onClick={step.action}
-                          className="mt-3 w-full rounded-xl border border-slate-600 bg-slate-800 px-3 py-2 text-sm font-semibold text-white hover:border-cyan-400 hover:bg-slate-700"
-                        >
-                          {step.actionLabel}
-                        </button>
-                      </div>
-                    ))}
+                    <button
+                      onClick={() => handleNavChange("Потерянные")}
+                      className="rounded-xl border border-slate-300 bg-transparent px-4 py-3 text-sm font-semibold text-slate-700 hover:border-cyan-500 hover:text-slate-900"
+                    >
+                      Где теряются деньги
+                    </button>
                   </div>
                 </section>
 
@@ -7017,196 +6984,34 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                   </div>
                 </section>
 
-                <section className="mobile-kpi-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                  {kpis.map((kpi) => (
-                    <div key={kpi.label} className={`metric-card metric-tone-${kpi.tone} rounded-2xl border border-slate-200 bg-white p-5 shadow-sm`}>
-                      <div className="flex items-start justify-between gap-3">
-                        <p className="metric-label text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
-                          {kpi.label}
-                          {"hint" in kpi && kpi.hint ? (
-                            <span
-                              title={kpi.hint}
-                              className="ml-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 bg-white text-[10px] font-bold text-slate-500"
-                            >
-                              ?
-                            </span>
-                          ) : null}
-                        </p>
-                        <span className={`metric-trend metric-trend-${kpi.direction}`}>
-                          {kpi.direction === "up" ? "↗" : kpi.direction === "down" ? "↘" : "→"} {kpi.trend}
-                        </span>
-                      </div>
-                      <p key={`${kpi.label}-${kpi.value}`} className="metric-value mt-3 text-3xl font-extrabold text-slate-900">
-                        {kpi.value}
-                      </p>
-                      <div className="mt-3">
-                        <div className="metric-bar">
-                          <div className="metric-bar-fill" style={{ width: `${Math.max(0, Math.min(100, kpi.strength))}%` }} />
-                        </div>
-                      </div>
-                      <p className="mt-2 text-sm text-slate-600">{kpi.note}</p>
+                <section className="signature-panel rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Ключевая демонстрация</p>
+                  <h3 className="mt-1 text-xl font-extrabold tracking-tight text-slate-900">Сколько можно вернуть в этом месяце</h3>
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    <div className="signature-tile rounded-2xl border border-rose-200 bg-rose-50 p-4">
+                      <p className="text-xs font-bold uppercase tracking-[0.1em] text-rose-700">Теряете сейчас</p>
+                      <p className="mt-2 text-4xl font-extrabold tracking-tight text-rose-900">{formatRub(monthlyLostRevenue)}</p>
+                      <p className="mt-1 text-sm text-rose-800">{leadLossPercent}% от входящих заявок уходит без покупки</p>
                     </div>
-                  ))}
-                </section>
-
-                <section className="grid gap-4 xl:grid-cols-3">
-                  <div className="signature-panel rounded-3xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
-                    <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Лиды по дням</p>
-                    <svg viewBox="0 0 100 100" className="mt-4 h-48 w-full text-cyan-600" aria-hidden="true">
-                      <polyline
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2.6"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        points={linePoints}
-                      />
-                    </svg>
-                    <div className="mt-2 hidden grid-cols-12 text-center text-xs text-slate-500 sm:grid">
-                      {overviewLeadDays.map((d) => (
-                        <span key={d}>{d}</span>
-                      ))}
+                    <div className="signature-tile rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                      <p className="text-xs font-bold uppercase tracking-[0.1em] text-emerald-700">Можно вернуть</p>
+                      <p className="mt-2 text-4xl font-extrabold tracking-tight text-emerald-900">{formatRub(monthlyRecoverableRevenue)}</p>
+                      <p className="mt-1 text-sm text-emerald-800">за счет follow-up и улучшения скриптов ответов</p>
                     </div>
                   </div>
-
-                  <div className="signature-panel rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                    <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Воронка лидов</p>
-                    <div className="mt-4 space-y-4">
-                      {overviewFunnel.map((step) => (
-                        <div key={step.label}>
-                          <div className="mb-1 flex items-center justify-between text-xs text-slate-600">
-                            <span>{step.label}</span>
-                            <span className="font-semibold">{step.value}</span>
-                          </div>
-                          <div className="h-2.5 rounded-full bg-slate-100">
-                            <div className={`h-2.5 rounded-full ${step.color}`} style={{ width: `${step.width}%` }} />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </section>
-
-                <section className="grid gap-4 xl:grid-cols-3">
-                  <div className="signature-panel rounded-3xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Последние диалоги</p>
-                      <button
-                        onClick={() => handleNavChange("Диалоги")}
-                        className="text-xs font-semibold text-cyan-700"
-                      >
-                        Открыть все
-                      </button>
-                    </div>
-                    <div className="mt-4 space-y-3">
-                      {recentConversationsLive.length > 0 ? (
-                        recentConversationsLive.map((c) => (
-                          <div key={`${c.client}-${c.time}`} className="signature-tile rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                            <div className="flex items-center justify-between">
-                              <p className="font-semibold text-slate-900">{c.client}</p>
-                              <span className="text-xs text-slate-500">{c.time}</span>
-                            </div>
-                            <p className="mt-1 text-xs text-slate-500">{c.channel} • {c.status}</p>
-                            <p className="mt-2 text-sm text-slate-700">{c.summary}</p>
-                          </div>
-                        ))
-                      ) : (
-                        <div className="signature-tile rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-                          Диалоги появятся после первой синхронизации или импорта событий.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div className="rounded-3xl border border-rose-200 bg-gradient-to-br from-rose-50 via-white to-rose-100 p-5 shadow-sm">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-xs font-bold uppercase tracking-[0.12em] text-rose-700">Потерянная выручка</p>
-                        <div className="flex rounded-full border border-rose-200 bg-white p-0.5">
-                          <button
-                            onClick={() => setLostRevenuePeriod("7d")}
-                            className={`rounded-full px-2.5 py-1 text-xs font-semibold transition ${
-                              lostRevenuePeriod === "7d" ? "bg-rose-600 text-white" : "text-slate-600"
-                            }`}
-                          >
-                            7 дней
-                          </button>
-                          <button
-                            onClick={() => setLostRevenuePeriod("30d")}
-                            className={`rounded-full px-2.5 py-1 text-xs font-semibold transition ${
-                              lostRevenuePeriod === "30d" ? "bg-rose-600 text-white" : "text-slate-600"
-                            }`}
-                          >
-                            30 дней
-                          </button>
-                        </div>
-                      </div>
-
-                      <p className="mt-3 text-sm font-semibold text-slate-700">
-                        За последние {lostRevenueSnapshot.periodLabel} потеряно {lostRevenueSnapshot.lostLeads} лидов
-                      </p>
-                      <p className="mt-1 text-3xl font-extrabold tracking-tight text-slate-900">
-                        {formatRub(lostRevenueSnapshot.estimatedRevenue)}
-                      </p>
-                      <p className="mt-1 text-sm text-slate-700">Потенциальная недополученная выручка.</p>
-
-                      <div className="mt-3 rounded-2xl border border-rose-200 bg-white p-3">
-                        <p className="text-xs font-bold uppercase tracking-[0.08em] text-rose-700">Чаще всего</p>
-                        <p className="mt-1 text-sm font-semibold text-slate-800">{lostRevenueSnapshot.topReason}</p>
-                      </div>
-
-                      <div className="mt-3 space-y-2 text-xs text-slate-700">
-                        {lostRevenueSnapshot.reasons.slice(0, 3).map((item) => (
-                          <div key={item.reason} className="rounded-xl border border-rose-200 bg-white px-3 py-2">
-                            <p className="font-semibold">{item.reason}</p>
-                            <p>{item.count} лидов • {formatRub(item.revenue)}</p>
-                          </div>
-                        ))}
-                      </div>
-
-                      <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-3">
-                        <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Рекомендуем</p>
-                        <p className="mt-1 text-sm text-slate-700">{lostRevenueSnapshot.actions[1]}</p>
-                      </div>
-                    </div>
-
-                    <div className="signature-panel rounded-3xl border border-cyan-200 bg-cyan-50 p-5 shadow-sm">
-                      <p className="text-xs font-bold uppercase tracking-[0.12em] text-cyan-700">CFlow Sites</p>
-                      <h3 className="mt-1 text-lg font-bold tracking-tight text-slate-900">Сайт за 5 минут + автоворонка лидов</h3>
-                      <p className="mt-2 text-sm text-slate-700">
-                        Клиент выбирает шаблон, заполняет данные бизнеса, получает AI-переписанный сайт и сразу передает лиды в CFlow.
-                      </p>
-                      <div className="mt-3 grid gap-2">
-                        <div className="signature-tile rounded-xl border border-cyan-200 bg-white px-3 py-2 text-xs text-slate-700">1. Шаблон + данные бизнеса</div>
-                        <div className="signature-tile rounded-xl border border-cyan-200 bg-white px-3 py-2 text-xs text-slate-700">2. AI генерирует контент и структуру</div>
-                        <div className="signature-tile rounded-xl border border-cyan-200 bg-white px-3 py-2 text-xs text-slate-700">3. Публикация и обработка входящих в AI Inbox</div>
-                      </div>
-                      <div className="mt-3 flex flex-col items-start justify-between gap-2 text-xs text-slate-700 sm:flex-row sm:items-center">
-                        <span>Фиксированная цена: <span className="font-semibold text-slate-900">3 500 ₽</span></span>
-                        <button
-                          onClick={() => {
-                            if (onNavigate) onNavigate("/sites");
-                            else handleNavChange("CFlow Sites");
-                          }}
-                          className="w-full rounded-lg bg-slate-900 px-2.5 py-2 font-semibold text-white transition hover:bg-slate-700 sm:w-auto"
-                        >
-                          Открыть модуль
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </section>
-
-                <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                  <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">AI рекомендации</p>
-                  <div className="mt-4 grid gap-3 md:grid-cols-3">
-                    {aiRecommendations.map((rec) => (
-                      <div key={rec.title} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                        <p className="font-semibold text-slate-900">{rec.title}</p>
-                        <p className="mt-1 text-xs font-semibold text-cyan-700">{rec.impact}</p>
-                        <p className="mt-2 text-sm text-slate-700">{rec.description}</p>
-                      </div>
-                    ))}
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <button
+                      onClick={() => handleNavChange("Потерянные")}
+                      className="first-screen-cta rounded-xl px-5 py-3 text-sm font-extrabold text-slate-950"
+                    >
+                      Запустить возврат лидов
+                    </button>
+                    <button
+                      onClick={() => handleNavChange("Диалоги")}
+                      className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:border-slate-500"
+                    >
+                      Посмотреть диалоги
+                    </button>
                   </div>
                 </section>
               </div>
