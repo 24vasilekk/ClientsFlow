@@ -96,14 +96,17 @@ function SitesWordmark() {
 }
 
 const navLinks = [
-  { id: "problem", label: "Проблема" },
-  { id: "offer", label: "Что мы предлагаем" },
-  { id: "audience", label: "Для кого" },
-  { id: "platform", label: "Платформа" },
-  { id: "cases", label: "Кейсы" },
+  { id: "problem", label: "Результат" },
+  { id: "offer", label: "Что получаете" },
   { id: "demo", label: "Демо" },
-  { id: "faq", label: "FAQ" },
+  { id: "cases", label: "Кейсы" },
   { id: "cta", label: "Запуск" }
+];
+
+const managerQuickQuestions = [
+  "Что такое CFlow?",
+  "Чем полезен CFlow Sites?",
+  "Сколько занимает запуск?"
 ];
 
 
@@ -494,6 +497,27 @@ function buildDemoReply(userText: string, kind: ChatMessage["kind"]) {
   return null;
 }
 
+function buildManagerFallbackReply(userText: string) {
+  const text = userText.toLowerCase();
+
+  if (text.includes("sites") || text.includes("сайт")) {
+    return "CFlow Sites помогает быстро собрать продающий сайт под вашу нишу и подключить лиды прямо в CFlow, чтобы заявки не терялись между каналами.";
+  }
+  if (text.includes("цена") || text.includes("сколько стоит")) {
+    return "Стоимость зависит от задачи и количества каналов. В демо покажем прогноз по выручке и подберем формат запуска под ваш бизнес.";
+  }
+  if (text.includes("запуск") || text.includes("как быстро")) {
+    return "Базовый запуск занимает 1–3 дня: подключаем каналы, настраиваем сценарии ответов и включаем аналитику потерь.";
+  }
+  if (text.includes("телеграм") || text.includes("telegram")) {
+    return "Telegram подключается через Bot Token. После подключения сообщения попадают в AI Inbox, а ответы и follow-up можно автоматизировать.";
+  }
+  if (text.includes("crm") || text.includes("менеджер")) {
+    return "Готовые лиды можно передавать в CRM или менеджеру со статусом и краткой сводкой диалога.";
+  }
+  return "CFlow отвечает на входящие, квалифицирует лиды, запускает follow-up и показывает, где вы теряете деньги. Могу подсказать, как это будет работать именно в вашей нише.";
+}
+
 function buildWebsitePreviewDoc(appCode: string) {
   const source = String(appCode || "").trim();
   if (!source) return "";
@@ -580,6 +604,16 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
   const [websiteFixLog, setWebsiteFixLog] = useState<WebsiteFixLogItem[]>([]);
   const [websitePromptPack, setWebsitePromptPack] = useState<"A" | "B">("A");
   const [websiteActionLoading, setWebsiteActionLoading] = useState<null | "regenerate" | "premium" | "light" | "simplify">(null);
+  const [managerChatOpen, setManagerChatOpen] = useState(false);
+  const [managerChatTyping, setManagerChatTyping] = useState(false);
+  const [managerChatInput, setManagerChatInput] = useState("");
+  const [managerChatMessages, setManagerChatMessages] = useState<Array<{ id: string; role: ChatRole; text: string }>>([
+    {
+      id: uid(),
+      role: "assistant",
+      text: "Я AI-менеджер CFlow. Подскажу по CFlow и CFlow Sites: запуск, сценарии продаж, каналы и окупаемость."
+    }
+  ]);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const websiteFixKeyRef = useRef("");
 
@@ -768,6 +802,43 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
     }
   };
 
+  const sendManagerMessage = async (rawText: string) => {
+    const text = rawText.trim();
+    if (!text || managerChatTyping) return;
+
+    const userMessage = { id: uid(), role: "user" as const, text };
+    const next = [...managerChatMessages, userMessage];
+    setManagerChatMessages(next);
+    setManagerChatInput("");
+    setManagerChatTyping(true);
+
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 9000);
+      let response: Response;
+      try {
+        response = await fetch("/api/openrouter/product-chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: next.slice(-10).map((item) => ({ role: item.role, content: item.text }))
+          }),
+          signal: controller.signal
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
+      if (!response.ok) throw new Error(`API status ${response.status}`);
+      const data = (await response.json()) as { reply?: string };
+      const reply = formatSalesReply(String(data.reply || "").trim() || buildManagerFallbackReply(text));
+      setManagerChatMessages((prev) => [...prev, { id: uid(), role: "assistant", text: reply }]);
+    } catch {
+      setManagerChatMessages((prev) => [...prev, { id: uid(), role: "assistant", text: buildManagerFallbackReply(text) }]);
+    } finally {
+      setManagerChatTyping(false);
+    }
+  };
+
   const runWebsiteAction = async (action: "regenerate" | "premium" | "light" | "simplify") => {
     if (!websiteCode.trim()) return;
     setWebsiteActionLoading(action);
@@ -914,11 +985,11 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
   return (
     <div className="landing-luxe bg-[var(--ds-bg)] text-slate-900">
       <header className="landing-header sticky top-0 z-40 border-b border-slate-200/90 bg-white/90 backdrop-blur">
-        <div className="mx-auto flex max-w-[1240px] items-center justify-between gap-4 px-4 py-4 sm:px-6">
+        <div className="mx-auto flex max-w-[1240px] items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <button onClick={() => onNavigate("/")} className="text-lg font-extrabold tracking-tight">
             <BrandWordmark />
           </button>
-          <nav className="hidden items-center gap-6 text-sm font-semibold text-slate-600 lg:flex">
+          <nav className="hidden items-center gap-4 text-xs font-semibold uppercase tracking-[0.06em] text-slate-500 lg:flex">
             {navLinks.map((link) => (
               <a key={link.id} href={`#${link.id}`} className="transition hover:text-slate-900">
                 {link.label}
@@ -930,13 +1001,12 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
               onClick={() => onNavigate("/sites")}
               className="landing-sites-entry inline-flex items-center rounded-full border border-cyan-200 bg-cyan-50 px-3 py-2 text-xs font-semibold text-slate-800"
             >
-              <span className="sm:hidden">Sites</span>
-              <span className="hidden sm:inline"><SitesWordmark /></span>
+              <span>Sites</span>
             </button>
-            <button onClick={() => onNavigate("/login")} className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
-              Личный кабинет
+            <button onClick={() => onNavigate("/login")} className="rounded-full border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 sm:px-4 sm:text-sm">
+              Кабинет
             </button>
-            <button onClick={() => document.getElementById("demo")?.scrollIntoView({ behavior: "smooth" })} className="landing-cta-main rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
+            <button onClick={() => document.getElementById("demo")?.scrollIntoView({ behavior: "smooth" })} className="landing-cta-main rounded-full bg-slate-900 px-3 py-2 text-xs font-semibold text-white sm:px-4 sm:text-sm">
               Попробовать демо
             </button>
           </div>
@@ -971,7 +1041,7 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
           </div>
         </section>
 
-        <section id="offer" className="landing-order-solution border-b border-slate-200">
+        <section id="offer" className="landing-order-offer border-b border-slate-200">
           <div className="landing-shell landing-shell-section">
             <motion.div
               initial={{ opacity: 0, y: 18 }}
@@ -1005,7 +1075,7 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
           </div>
         </section>
 
-        <section id="audience" className="border-b border-slate-200">
+        <section id="audience" className="landing-order-audience border-b border-slate-200">
           <div className="landing-shell landing-shell-section">
             <motion.div
               initial={{ opacity: 0, y: 18 }}
@@ -1047,7 +1117,7 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
           </div>
         </section>
 
-        <section id="platform" className="border-b border-slate-200">
+        <section id="platform" className="landing-order-platform border-b border-slate-200">
           <div className="landing-shell landing-shell-section">
             <motion.div
               initial={{ opacity: 0, y: 18 }}
@@ -1149,7 +1219,7 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
           </div>
         </section>
 
-        <section id="demo" className="landing-order-solution landing-transition-shell landing-transition-demo border-b border-slate-200">
+        <section id="demo" className="landing-order-demo landing-transition-shell landing-transition-demo border-b border-slate-200">
           <div className="landing-shell landing-shell-section">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -1212,7 +1282,7 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
           </div>
         </section>
 
-        <section id="faq" className="border-b border-slate-200">
+        <section id="faq" className="landing-order-faq border-b border-slate-200">
           <div className="landing-shell landing-shell-section">
             <motion.div
               initial={{ opacity: 0, y: 18 }}
@@ -1313,14 +1383,91 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
         </section>
       </main>
 
+      <div className="fixed bottom-5 right-4 z-50 sm:bottom-6 sm:right-6">
+        {managerChatOpen ? (
+          <div className="w-[min(92vw,360px)] overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_20px_48px_rgba(15,23,42,0.2)]">
+            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+              <div>
+                <p className="text-sm font-bold text-slate-900">AI-менеджер CFlow</p>
+                <p className="text-xs text-slate-500">Ответы про CFlow и CFlow Sites</p>
+              </div>
+              <button onClick={() => setManagerChatOpen(false)} className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-600">
+                Закрыть
+              </button>
+            </div>
+            <div className="h-64 space-y-2 overflow-y-auto bg-slate-50 p-3">
+              {managerChatMessages.map((message) => (
+                <div
+                  key={message.id}
+                  className={`max-w-[88%] rounded-2xl border px-3 py-2 text-sm ${
+                    message.role === "assistant"
+                      ? "border-slate-200 bg-white text-slate-800"
+                      : "ml-auto border-cyan-200 bg-cyan-50 text-cyan-950"
+                  }`}
+                >
+                  {message.text}
+                </div>
+              ))}
+              {managerChatTyping ? (
+                <div className="inline-flex items-center gap-1 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-slate-400" />
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-slate-400 [animation-delay:120ms]" />
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-slate-400 [animation-delay:240ms]" />
+                </div>
+              ) : null}
+            </div>
+            <div className="border-t border-slate-200 bg-white p-3">
+              <div className="mb-2 flex flex-wrap gap-1.5">
+                {managerQuickQuestions.map((question) => (
+                  <button
+                    key={question}
+                    onClick={() => sendManagerMessage(question)}
+                    className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700"
+                  >
+                    {question}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-end gap-2">
+                <input
+                  value={managerChatInput}
+                  onChange={(e) => setManagerChatInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void sendManagerMessage(managerChatInput);
+                    }
+                  }}
+                  placeholder="Задайте вопрос..."
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
+                />
+                <button
+                  onClick={() => void sendManagerMessage(managerChatInput)}
+                  className="landing-cta-main rounded-xl px-3 py-2 text-sm font-semibold"
+                >
+                  Отправить
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => setManagerChatOpen(true)}
+            className="landing-cta-main rounded-full px-5 py-3 text-sm font-semibold"
+          >
+            Чат с AI-менеджером
+          </button>
+        )}
+      </div>
+
       <footer className="border-t border-slate-200 bg-white">
         <div className="mx-auto flex max-w-[1240px] flex-wrap items-center justify-between gap-3 px-4 py-6 text-sm text-slate-600 sm:px-6">
           <p className="font-bold text-slate-900"><BrandWordmark /></p>
-          <div className="flex flex-wrap gap-4">
-            <button onClick={() => onNavigate("/sites")} className="hover:text-slate-900"><SitesWordmark /></button>
-            <button onClick={() => onNavigate("/login")} className="hover:text-slate-900">Личный кабинет</button>
-            <button onClick={() => onNavigate("/pricing")} className="hover:text-slate-900">Тарифы</button>
-            <span>Контакты</span>
+          <div className="flex flex-wrap items-center gap-4 leading-none">
+            <button onClick={() => onNavigate("/sites")} className="inline-flex items-center hover:text-slate-900"><SitesWordmark /></button>
+            <button onClick={() => onNavigate("/login")} className="inline-flex items-center hover:text-slate-900">Личный кабинет</button>
+            <button onClick={() => onNavigate("/pricing")} className="inline-flex items-center hover:text-slate-900">Тарифы</button>
+            <span className="inline-flex items-center">Контакты</span>
           </div>
         </div>
       </footer>

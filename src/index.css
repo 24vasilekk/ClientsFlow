@@ -506,11 +506,13 @@ body {
   }
 
   .landing-luxe .landing-order-problem { order: 1; }
-  .landing-luxe .landing-order-solution { order: 2; }
-  .landing-luxe .landing-order-how { order: 3; }
-  .landing-luxe .landing-order-cases { order: 4; }
-  .landing-luxe .landing-order-integrations { order: 5; }
-  .landing-luxe .landing-order-cta { order: 6; }
+  .landing-luxe .landing-order-offer { order: 2; }
+  .landing-luxe .landing-order-demo { order: 3; }
+  .landing-luxe .landing-order-audience { order: 4; }
+  .landing-luxe .landing-order-platform { order: 5; }
+  .landing-luxe .landing-order-faq { order: 6; }
+  .landing-luxe .landing-order-cases { order: 7; }
+  .landing-luxe .landing-order-cta { order: 8; }
 
   .landing-luxe .landing-hero {
     border-color: var(--ds-border) !important;

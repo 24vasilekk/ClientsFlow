@@ -4109,12 +4109,12 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
       className={`app-shell studio-ui premium-ui mobile-ux ${standaloneSites ? "premium-sites" : "premium-business"} min-h-screen text-slate-900 ${
         standaloneSites
           ? "bg-[radial-gradient(70%_80%_at_10%_10%,rgba(56,189,248,0.18),transparent_60%),radial-gradient(50%_60%_at_90%_0%,rgba(59,130,246,0.2),transparent_60%),#020617]"
-          : "bg-[radial-gradient(80%_80%_at_10%_0%,rgba(14,165,233,0.12),transparent_56%),radial-gradient(70%_80%_at_90%_0%,rgba(59,130,246,0.08),transparent_62%),#F7F9FB]"
+          : "bg-[radial-gradient(85%_75%_at_0%_0%,rgba(14,165,233,0.1),transparent_58%),radial-gradient(65%_60%_at_100%_0%,rgba(56,189,248,0.07),transparent_62%),#F7F9FB]"
       }`}
     >
       <div className="flex min-h-screen">
         {!standaloneSites ? (
-        <aside className="hidden w-[260px] shrink-0 border-r border-slate-200 bg-white/90 px-4 py-5 lg:block">
+        <aside className="hidden w-[248px] shrink-0 border-r border-slate-200 bg-white px-4 py-5 shadow-[8px_0_24px_rgba(15,23,42,0.04)] lg:block">
           <div className="mb-8 px-2">
             <p className="text-lg font-extrabold tracking-tight">
               <BrandWordmark cClass="text-cyan-600" flowClass="text-slate-900" />
@@ -4160,7 +4160,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
         <div className="flex min-w-0 flex-1 flex-col">
           <header
             className={`sticky top-0 z-30 px-3 py-3 backdrop-blur md:px-6 md:py-4 ${
-              standaloneSites ? "border-b border-blue-900/50 bg-slate-950/90" : "border-b border-slate-200/90 bg-white/92"
+              standaloneSites ? "border-b border-blue-900/50 bg-slate-950/90" : "border-b border-slate-200/90 bg-white/96 shadow-[0_6px_20px_rgba(15,23,42,0.04)]"
             }`}
           >
             <div className="flex items-center justify-between gap-4">
