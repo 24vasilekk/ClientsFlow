@@ -97,130 +97,15 @@ function SitesWordmark() {
 
 const navLinks = [
   { id: "problem", label: "Проблема" },
-  { id: "solution", label: "Решение" },
-  { id: "how", label: "Как работает" },
-  { id: "cases", label: "Кейсы" },
-  { id: "integrations", label: "Интеграции" }
-];
-
-const promptChips = [
-  "Я теряю клиентов в директе",
-  "Покажи, как ты отвечаешь на входящий лид",
-  "Как ты работаешь с голосовыми?",
-  "Можешь понять, что на фото?",
-  "Мне нужна автоматическая запись",
-  "Хочу видеть аналитику по лидам"
-];
-
-const integrations = [
-  { name: "Telegram", note: "Входящие и follow-up", status: "Live" },
-  { name: "WhatsApp", note: "Быстрые ответы и запись", status: "Live" },
-  { name: "Instagram", note: "Direct и комментарии", status: "Beta" },
-  { name: "Website Chat", note: "Форма и онлайн-чат", status: "Live" },
-  { name: "CRM", note: "Передача квалифицированных лидов", status: "Sync" },
-  { name: "Email", note: "Уведомления и отчёты", status: "Live" }
-];
-
-const powerCards = [
-  {
-    title: "Отвечайте первыми",
-    text: "Первый ответ за секунды, даже ночью.",
-    chip: "⚡ Скорость",
-    meta: "До 60 сек"
-  },
-  {
-    title: "Закрывайте в запись",
-    text: "AI ведет диалог к конкретному действию.",
-    chip: "🎯 Продажа",
-    meta: "Запись / оплата"
-  },
-  {
-    title: "Не теряйте контекст",
-    text: "История клиента и этап воронки всегда под рукой.",
-    chip: "🧠 Контекст",
-    meta: "Единая карточка"
-  },
-  {
-    title: "Возвращайте потерянных",
-    text: "Follow-up поднимает лиды, которые уже остыли.",
-    chip: "💰 Выручка",
-    meta: "Recovery-сценарии"
-  }
-];
-
-const useCaseStories = [
-  {
-    title: "Салон красоты: возврат потерянных лидов",
-    scenario: "Клиенты спрашивали цену, уходили «подумать» и не возвращались.",
-    beforeLabel: "Было",
-    beforeValue: "24% доходили до записи",
-    afterLabel: "Стало",
-    afterValue: "39% доходят до записи",
-    metric: "+15 п.п. к конверсии за 30 дней",
-    money: "+126 000 ₽ дополнительной выручки в месяц"
-  },
-  {
-    title: "Клиника: быстрый первый ответ",
-    scenario: "Часть заявок терялась из-за ответа через 20–40 минут.",
-    beforeLabel: "Было",
-    beforeValue: "Средний ответ: 18 минут",
-    afterLabel: "Стало",
-    afterValue: "Средний ответ: 54 секунды",
-    metric: "x20 быстрее первый контакт",
-    money: "+31% квалифицированных лидов"
-  },
-  {
-    title: "Онлайн-школа: дожим до оплаты",
-    scenario: "После вопросов по тарифам лиды зависали без следующего шага.",
-    beforeLabel: "Было",
-    beforeValue: "11 оплат из 100 лидов",
-    afterLabel: "Стало",
-    afterValue: "19 оплат из 100 лидов",
-    metric: "+8 оплат на каждые 100 лидов",
-    money: "+184 000 ₽ к выручке за месяц"
-  }
+  { id: "demo", label: "Демо" },
+  { id: "cta", label: "Запуск" }
 ];
 
 
-const demoSalesScenario = [
-  {
-    stage: "Первый контакт",
-    client: "Клиент: «Сколько стоит окрашивание и есть ли окно на этой неделе?»",
-    ai: "AI: «Диапазон 4 500–6 000 ₽, в цену входит консультация и подбор оттенка. Могу предложить два ближайших окна: ср 18:30 или чт 11:00.»"
-  },
-  {
-    stage: "Снятие сомнений",
-    client: "Клиент: «Дорого, я подумаю.»",
-    ai: "AI: «Понимаю. Чтобы было проще сравнить, отправлю 2 фото-результата и что именно входит в процедуру. Зафиксировать текущую цену до пятницы?»"
-  },
-  {
-    stage: "Закрытие",
-    client: "Клиент: «Да, давайте четверг 11:00.»",
-    ai: "AI: «Отлично, записал вас на четверг 11:00. За день отправлю напоминание и инструкцию перед визитом.»"
-  }
-];
-
-const howItWorksSlides = [
-  {
-    title: "Подключаете каналы",
-    text: "Telegram, WhatsApp, Instagram и сайт объединяются в одну операционную ленту.",
-    badge: "Шаг 1"
-  },
-  {
-    title: "Настраиваете сценарии",
-    text: "Определяете правила ответа, квалификацию лидов и условия передачи менеджеру.",
-    badge: "Шаг 2"
-  },
-  {
-    title: "CFlow обрабатывает обращения",
-    text: "Система отвечает, уточняет задачу, ведет к записи и не теряет контекст клиента.",
-    badge: "Шаг 3"
-  },
-  {
-    title: "Управляете ростом по аналитике",
-    text: "Видите конверсию, причины потерь и действия, которые улучшают результат.",
-    badge: "Шаг 4"
-  }
+const demoOutcomes = [
+  "Первый ответ клиенту за секунды",
+  "Автодоведение до записи",
+  "Контроль потерь в деньгах"
 ];
 
 function normalizePath(pathname: string): RoutePath {
@@ -535,7 +420,6 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
   const [isTyping, setIsTyping] = useState(false);
   const [showCabinetCta, setShowCabinetCta] = useState(false);
   const [chatMode, setChatMode] = useState<"openrouter" | "mock">("openrouter");
-  const [howStepIndex, setHowStepIndex] = useState(0);
   const [websiteCode, setWebsiteCode] = useState("");
   const [websiteTitle, setWebsiteTitle] = useState("AI Website Preview");
   const [websiteBrief, setWebsiteBrief] = useState<WebsiteBriefPreview | null>(null);
@@ -892,10 +776,10 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
               </a>
             ))}
           </nav>
-          <div className="flex items-center gap-2">
+          <div className="landing-top-actions flex items-center gap-2">
             <button
               onClick={() => onNavigate("/sites")}
-              className="inline-flex items-center rounded-full border border-cyan-200 bg-cyan-50 px-3 py-2 text-xs font-semibold text-slate-800"
+              className="landing-sites-entry inline-flex items-center rounded-full border border-cyan-200 bg-cyan-50 px-3 py-2 text-xs font-semibold text-slate-800"
             >
               <span className="sm:hidden">Sites</span>
               <span className="hidden sm:inline"><SitesWordmark /></span>
@@ -911,53 +795,59 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
       </header>
 
       <main className="landing-flow">
-        <section id="problem" className="landing-hero landing-order-problem relative overflow-hidden border-b border-slate-200">
-          <div className="absolute inset-0 bg-[radial-gradient(70%_50%_at_15%_100%,rgba(125,211,252,0.24),transparent_70%),radial-gradient(40%_40%_at_90%_65%,rgba(99,102,241,0.18),transparent_70%)]" />
-          <div className="relative mx-auto grid max-w-[1240px] gap-10 px-4 py-14 sm:px-6 lg:grid-cols-[1.1fr_1fr] lg:py-20">
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-              <span className="inline-flex items-center rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1 text-xs font-bold uppercase tracking-[0.12em] text-cyan-700">
-                AI Client Operations Platform
-              </span>
-              <h1 className="mt-5 text-4xl font-extrabold leading-[1.05] tracking-tight sm:text-5xl lg:text-6xl">
-                Вы теряете лиды, пока команда не успевает отвечать.
+        <section id="problem" className="landing-hero landing-order-problem landing-transition-shell landing-transition-problem relative border-b border-slate-200">
+          <div className="landing-shell landing-shell-hero">
+            <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }}>
+              <h1 className="mt-7 max-w-4xl text-5xl font-extrabold leading-[0.98] tracking-tight sm:text-7xl">
+                Превращайте каждый входящий диалог в клиента.
               </h1>
               <p className="mt-5 max-w-2xl text-base text-slate-600 sm:text-lg">
-                Каждый пропущенный диалог превращается в потерянную выручку. CFlow показывает это в цифрах и закрывает разрыв.
+                AI отвечает за секунды и доводит лид до записи без потерь.
               </p>
-              <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-                <button onClick={() => document.getElementById("demo")?.scrollIntoView({ behavior: "smooth" })} className="landing-cta-main rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white sm:text-base">
-                  Попробовать демо
-                </button>
-                <button onClick={() => onNavigate("/login")} className="rounded-full border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-700 sm:text-base">
-                  Личный кабинет
+              <div className="mt-9">
+                <button onClick={() => document.getElementById("demo")?.scrollIntoView({ behavior: "smooth" })} className="landing-cta-main rounded-full px-8 py-3.5 text-sm font-semibold sm:text-base">
+                  Посмотреть демо
                 </button>
               </div>
-              <p className="mt-4 text-sm text-slate-500">Включает AI Inbox, аналитику, воронку лидов, recovery-сценарии и AI-рекомендации.</p>
-            </motion.div>
-
-            <motion.div
-              id="demo"
-              initial={{ opacity: 0, y: 18 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.55, delay: 0.05 }}
-              className="landing-demo-grid grid gap-4 lg:grid-cols-2"
-            >
-              <div className="luxe-panel rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-                <div className="mb-3 flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-bold text-slate-900">Интерактивный демо-диалог</p>
-                    <p className="text-xs text-slate-500">{chatMode === "openrouter" ? "Онлайн-режим" : "Резервный демо-режим"}</p>
-                  </div>
-                  <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-[11px] font-semibold text-cyan-700">Чат • Website Builder</span>
+              <div className="landing-hero-asym mt-10">
+                <div className="landing-money-signal rounded-2xl border border-rose-200 bg-white px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-rose-700">Потери в деньгах</p>
+                  <p className="mt-1 text-lg font-extrabold leading-tight text-slate-900 sm:text-xl">
+                    Вы теряете до 30% заявок, это около 120 000 ₽ в месяц.
+                  </p>
                 </div>
-                <div className="h-[340px] space-y-2 overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50 p-3 sm:h-[380px]">
+                <div className="landing-hero-orbit" aria-hidden="true" />
+              </div>
+            </motion.div>
+          </div>
+        </section>
+
+        <section id="demo" className="landing-order-solution landing-transition-shell landing-transition-demo border-b border-slate-200">
+          <div className="landing-shell landing-shell-section">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.2 }}
+              transition={{ duration: 0.45 }}
+            >
+              <div className="mb-8">
+                <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Демо в реальном интерфейсе</h2>
+                <p className="mt-3 max-w-2xl text-slate-600">Сообщение клиента → ответ AI → запись.</p>
+              </div>
+
+              <motion.div whileHover={{ y: -2 }} transition={{ duration: 0.2 }} className="landing-demo-stage luxe-panel rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-2xl font-extrabold tracking-tight text-slate-900">AI ведет диалог до целевого действия</h3>
+                  <p className="text-xs font-semibold text-slate-500">{chatMode === "openrouter" ? "Онлайн" : "Демо-режим"}</p>
+                </div>
+                <div className="mt-4 h-[340px] space-y-2 overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50 p-3 sm:h-[370px]">
                   {messages.map((message) => (
                     <div key={message.id} className={`max-w-[92%] rounded-2xl border px-3 py-2 text-sm ${message.role === "assistant" ? "border-slate-200 bg-white text-slate-800" : "ml-auto border-cyan-200 bg-cyan-50 text-cyan-950"}`}>
                       {message.imageUrl ? <img src={message.imageUrl} alt="upload" className="mb-2 h-28 w-full rounded-xl object-cover" /> : null}
                       <p>{message.text}</p>
                       {message.kind === "cta" && showCabinetCta ? (
                         <button onClick={() => onNavigate("/login")} className="mt-2 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white">
-                          Перейти в личный кабинет
+                          Перейти в кабинет
                         </button>
                       ) : null}
                     </div>
@@ -970,256 +860,55 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
                     </div>
                   ) : null}
                 </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {promptChips.slice(0, 4).map((chip) => (
-                    <button key={chip} onClick={() => sendUserMessage(chip)} className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:border-slate-500">
-                      {chip}
-                    </button>
-                  ))}
-                </div>
-                <div className="mt-3 flex items-end gap-2">
-                  <button onClick={() => fileRef.current?.click()} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700">Фото</button>
-                  <button onClick={() => sendUserMessage("Голосовое сообщение", "voice")} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700">Голос</button>
+                <div className="landing-demo-composer mt-3 flex items-end gap-2">
+                  <div className="landing-demo-tools flex items-end gap-2">
+                    <button onClick={() => fileRef.current?.click()} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700">Фото</button>
+                    <button onClick={() => sendUserMessage("Голосовое сообщение", "voice")} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700">Голос</button>
+                  </div>
                   <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => onImagePick(e.target.files?.[0])} />
-                  <div className="flex-1">
+                  <div className="landing-demo-input flex-1">
                     <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Введите сообщение..." className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm" />
                   </div>
-                  <button onClick={() => sendUserMessage(input)} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white">Отправить</button>
+                  <button onClick={() => sendUserMessage(input)} className="landing-demo-send rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white">Отправить</button>
                 </div>
-              </div>
+              </motion.div>
 
-              <div className="luxe-panel rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-                <div className="mb-3 flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-bold text-slate-900">Как AI реально продаёт</p>
-                    <p className="text-xs text-slate-500">Сценарий: цена → сомнение → подтверждённая запись</p>
+              <div className="landing-outcome-strip mt-6 grid gap-3 sm:grid-cols-3">
+                {demoOutcomes.map((item, idx) => (
+                  <div key={item} className={`asym-outcome-card asym-outcome-${idx + 1} rounded-2xl border border-slate-200 bg-white p-4`}>
+                    <p className="text-sm font-semibold text-slate-900">{item}</p>
                   </div>
-                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">Результат в CRM</span>
-                </div>
-
-                <div className="space-y-3">
-                  {demoSalesScenario.map((step) => (
-                    <div key={step.stage} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                      <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-cyan-700">{step.stage}</p>
-                      <p className="mt-1 text-sm text-slate-700">{step.client}</p>
-                      <p className="mt-1 text-sm font-semibold text-slate-900">{step.ai}</p>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-emerald-700">Итог сделки</p>
-                  <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                    <div className="rounded-xl border border-emerald-200 bg-white px-3 py-2">
-                      <p className="text-[11px] text-slate-500">Статус</p>
-                      <p className="text-sm font-bold text-slate-900">Лид квалифицирован</p>
-                    </div>
-                    <div className="rounded-xl border border-emerald-200 bg-white px-3 py-2">
-                      <p className="text-[11px] text-slate-500">Цель</p>
-                      <p className="text-sm font-bold text-slate-900">Запись подтверждена</p>
-                    </div>
-                    <div className="rounded-xl border border-emerald-200 bg-white px-3 py-2">
-                      <p className="text-[11px] text-slate-500">Ожидаемая выручка</p>
-                      <p className="text-sm font-bold text-slate-900">≈ 6 000 ₽</p>
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => onNavigate("/login")}
-                  className="mt-4 w-full rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white"
-                >
-                  Посмотреть это в личном кабинете
-                </button>
+                ))}
               </div>
             </motion.div>
           </div>
         </section>
 
-        <section id="solution" className="landing-order-solution luxe-band border-y border-slate-200 bg-white/60">
-          <div className="mx-auto max-w-[1240px] px-4 py-16 sm:px-6">
-            <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Решение: AI, который закрывает в запись</h2>
-            <p className="mt-3 max-w-3xl text-slate-600">Каждый блок ниже напрямую влияет на продажи и скорость обработки заявок.</p>
-            <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              {powerCards.map((card) => (
-                <motion.div whileHover={{ y: -2 }} key={card.title} className="feature-sell-card rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="feature-chip inline-flex rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.08em] text-cyan-800">
-                      {card.chip}
-                    </span>
-                    <span className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-600">
-                      {card.meta}
-                    </span>
-                  </div>
-                  <h3 className="mt-5 text-2xl font-extrabold leading-tight tracking-tight text-slate-900">{card.title}</h3>
-                  <p className="mt-2 text-sm font-medium leading-relaxed text-slate-700">{card.text}</p>
-                  <div className="mt-4 h-1.5 w-16 rounded-full bg-gradient-to-r from-cyan-400 to-blue-500" />
-                </motion.div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section id="how" className="landing-order-how luxe-band border-y border-slate-200 bg-white/60">
-          <div className="mx-auto max-w-[1240px] px-4 py-16 sm:px-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Как это работает</h2>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setHowStepIndex((prev) => (prev - 1 + howItWorksSlides.length) % howItWorksSlides.length)}
-                  className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-500"
-                >
-                  ←
+        <section id="cta" className="landing-order-cta">
+          <div className="landing-shell landing-shell-section">
+            <motion.div
+              initial={{ opacity: 0, y: 18 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.35 }}
+              transition={{ duration: 0.42 }}
+              className="landing-final-cta rounded-3xl border px-6 py-10 sm:px-10 sm:py-14"
+            >
+              <p className="text-xs font-semibold uppercase tracking-[0.1em] text-cyan-700">Финальный шаг</p>
+              <h2 className="mt-3 max-w-3xl text-3xl font-extrabold leading-tight tracking-tight text-slate-900 sm:text-5xl">
+                Запустите CFlow и верните потерянные заявки в выручку
+              </h2>
+              <p className="mt-3 max-w-3xl text-sm text-slate-600 sm:text-base">
+                Подключение занимает несколько минут: после запуска вы сразу видите, где теряются лиды и сколько денег можно вернуть.
+              </p>
+              <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:items-center">
+                <button onClick={() => document.getElementById("demo")?.scrollIntoView({ behavior: "smooth" })} className="landing-cta-main rounded-full px-8 py-4 text-base font-extrabold">
+                  Запустить демо сейчас
                 </button>
-                <button
-                  onClick={() => setHowStepIndex((prev) => (prev + 1) % howItWorksSlides.length)}
-                  className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-500"
-                >
-                  →
+                <button onClick={() => onNavigate("/login")} className="rounded-full border border-slate-300 bg-white px-7 py-3 text-sm font-semibold text-slate-700">
+                  Перейти в кабинет
                 </button>
               </div>
-            </div>
-            <div className="mt-8 grid gap-4 lg:grid-cols-[1.1fr_1fr]">
-              <motion.div
-                key={`how-visual-${howStepIndex}`}
-                initial={{ opacity: 0, x: 16 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.3 }}
-                className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
-              >
-                <div className="h-64 rounded-2xl border border-slate-200 bg-[radial-gradient(80%_70%_at_15%_20%,rgba(125,211,252,0.32),transparent_62%),radial-gradient(55%_60%_at_90%_100%,rgba(59,130,246,0.22),transparent_58%),#f8fafc] p-4 sm:h-72">
-                  <div className="rounded-xl border border-slate-200 bg-white/90 p-3 shadow-sm">
-                    <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">{howItWorksSlides[howStepIndex].badge}</p>
-                    <p className="mt-1 text-sm font-semibold text-slate-900">{howItWorksSlides[howStepIndex].title}</p>
-                  </div>
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    <div className="h-20 rounded-xl border border-slate-200 bg-white/80" />
-                    <div className="h-20 rounded-xl border border-slate-200 bg-white/80" />
-                    <div className="h-20 rounded-xl border border-slate-200 bg-white/80" />
-                    <div className="h-20 rounded-xl border border-slate-200 bg-white/80" />
-                  </div>
-                </div>
-              </motion.div>
-              <motion.div
-                key={`how-copy-${howStepIndex}`}
-                initial={{ opacity: 0, x: 12 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.3 }}
-                className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
-              >
-                <span className="inline-flex rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.1em] text-cyan-700">
-                  {howItWorksSlides[howStepIndex].badge}
-                </span>
-                <h3 className="mt-4 text-2xl font-extrabold tracking-tight text-slate-900">{howItWorksSlides[howStepIndex].title}</h3>
-                <p className="mt-3 text-sm leading-relaxed text-slate-600">{howItWorksSlides[howStepIndex].text}</p>
-                <div className="mt-6 flex items-center gap-2">
-                  {howItWorksSlides.map((_, i) => (
-                    <span key={`dot-${i}`} className={`h-1.5 rounded-full transition-all ${i === howStepIndex ? "w-8 bg-slate-900" : "w-3 bg-slate-300"}`} />
-                  ))}
-                </div>
-              </motion.div>
-            </div>
-          </div>
-        </section>
-
-        <section id="cases" className="landing-order-cases luxe-section mx-auto max-w-[1240px] overflow-hidden px-4 py-16 sm:px-6">
-          <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Кейсы, где CFlow дал измеримый рост</h2>
-          <p className="mt-3 max-w-3xl text-slate-600">Не “красивые обещания”, а конкретные сценарии с цифрами: что было до, что стало после внедрения.</p>
-          <div className="mt-8 grid gap-4 lg:grid-cols-3">
-            {useCaseStories.map((item) => (
-              <div key={item.title} className="case-story-card rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-cyan-700">Живой сценарий</p>
-                <h3 className="mt-2 text-xl font-extrabold tracking-tight text-slate-900">{item.title}</h3>
-                <p className="mt-2 text-sm text-slate-600">{item.scenario}</p>
-                <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                  <div className="rounded-xl border border-rose-200 bg-rose-50 p-3">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-rose-700">{item.beforeLabel}</p>
-                    <p className="mt-1 text-sm font-semibold text-rose-900">{item.beforeValue}</p>
-                  </div>
-                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-emerald-700">{item.afterLabel}</p>
-                    <p className="mt-1 text-sm font-semibold text-emerald-900">{item.afterValue}</p>
-                  </div>
-                </div>
-                <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                  <p className="text-xs font-bold text-slate-900">{item.metric}</p>
-                  <p className="mt-1 text-xs font-semibold text-cyan-800">{item.money}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section id="integrations" className="landing-order-integrations luxe-section mx-auto max-w-[1240px] px-4 py-16 sm:px-6">
-          <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Все заявки в одном месте</h2>
-          <p className="mt-3 max-w-3xl text-slate-600">Telegram, WhatsApp, Instagram и сайт сходятся в единый CFlow Inbox, где AI доводит клиента до записи или передачи в CRM.</p>
-          <div className="integrations-system mt-8 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {integrations.map((item) => {
-                const visual =
-                  item.name === "Telegram"
-                    ? { icon: "TG", tone: "from-sky-100 to-sky-50 text-sky-700 border-sky-200" }
-                    : item.name === "WhatsApp"
-                      ? { icon: "WA", tone: "from-emerald-100 to-emerald-50 text-emerald-700 border-emerald-200" }
-                      : item.name === "Instagram"
-                        ? { icon: "IG", tone: "from-fuchsia-100 to-rose-50 text-fuchsia-700 border-fuchsia-200" }
-                        : item.name === "Website Chat"
-                          ? { icon: "WEB", tone: "from-indigo-100 to-indigo-50 text-indigo-700 border-indigo-200" }
-                          : item.name === "CRM"
-                            ? { icon: "CRM", tone: "from-slate-200 to-slate-50 text-slate-700 border-slate-300" }
-                            : { icon: "MAIL", tone: "from-amber-100 to-amber-50 text-amber-700 border-amber-200" };
-
-                return (
-                  <div key={item.name} className="channel-node rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className={`inline-flex min-w-[50px] items-center justify-center rounded-xl border bg-gradient-to-br px-2 py-1.5 text-[11px] font-extrabold uppercase tracking-[0.08em] ${visual.tone}`}>
-                        {visual.icon}
-                      </div>
-                      <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] text-cyan-700">
-                        {item.status}
-                      </span>
-                    </div>
-                    <p className="mt-3 text-base font-bold text-slate-900">{item.name}</p>
-                    <p className="mt-1 text-sm text-slate-600">{item.note}</p>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="flow-chain mt-5 flex flex-col items-stretch gap-2 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flow-box rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">
-                Входящие из всех каналов
-              </div>
-              <div className="flow-arrow text-center text-xl font-bold text-slate-400">→</div>
-              <div className="flow-hub rounded-2xl border border-cyan-300 bg-cyan-50 px-4 py-3">
-                <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-cyan-700">Единый центр</p>
-                <p className="text-sm font-extrabold text-slate-900">CFlow AI Inbox</p>
-              </div>
-              <div className="flow-arrow text-center text-xl font-bold text-slate-400">→</div>
-              <div className="flow-box rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">
-                Запись, сделка или передача в CRM
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section id="cta" className="landing-order-cta mx-auto max-w-[1240px] px-4 py-16 sm:px-6">
-          <div className="rounded-3xl border border-slate-900 bg-slate-900 px-6 py-10 text-white sm:px-10 sm:py-14">
-            <p className="text-xs font-bold uppercase tracking-[0.12em] text-cyan-300">Запуск сегодня</p>
-            <h2 className="mt-2 text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl">Начните получать заявки уже сегодня, а не «когда-нибудь»</h2>
-            <p className="mt-3 max-w-3xl text-sm text-slate-300 sm:text-base">
-              CFlow берет входящие в работу сразу: отвечает за секунды, доводит до записи и возвращает часть потерянной выручки уже в первый месяц.
-            </p>
-            <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
-              <span className="rounded-full border border-cyan-300/40 bg-cyan-400/10 px-3 py-1 text-cyan-100">Ответ клиенту &lt; 60 сек</span>
-              <span className="rounded-full border border-emerald-300/40 bg-emerald-400/10 px-3 py-1 text-emerald-100">Follow-up без ручной рутины</span>
-              <span className="rounded-full border border-rose-300/40 bg-rose-400/10 px-3 py-1 text-rose-100">Контроль потерь в ₽</span>
-            </div>
-            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-              <button onClick={() => document.getElementById("demo")?.scrollIntoView({ behavior: "smooth" })} className="rounded-full bg-white px-6 py-3 text-sm font-extrabold text-slate-900">Запустить демо и получить первых лидов</button>
-              <button onClick={() => onNavigate("/login")} className="rounded-full border border-white/40 px-6 py-3 text-sm font-semibold text-white">Перейти в кабинет</button>
-            </div>
-            <p className="mt-3 text-xs font-semibold text-slate-300">Чем дольше откладываете запуск, тем больше заявок уходит конкурентам.</p>
+            </motion.div>
           </div>
         </section>
       </main>
