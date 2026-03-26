@@ -1,4 +1,4 @@
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import DashboardApp from "./DashboardApp";
 import SitesBuilderPage from "./sites/ChatSitesBuilderPage";
@@ -97,7 +97,12 @@ function SitesWordmark() {
 
 const navLinks = [
   { id: "problem", label: "Проблема" },
+  { id: "offer", label: "Что мы предлагаем" },
+  { id: "audience", label: "Для кого" },
+  { id: "platform", label: "Платформа" },
+  { id: "cases", label: "Кейсы" },
   { id: "demo", label: "Демо" },
+  { id: "faq", label: "FAQ" },
   { id: "cta", label: "Запуск" }
 ];
 
@@ -106,6 +111,181 @@ const demoOutcomes = [
   "Первый ответ клиенту за секунды",
   "Автодоведение до записи",
   "Контроль потерь в деньгах"
+];
+
+const offerTiles = [
+  {
+    layout: "hero",
+    kicker: "Первый контакт",
+    title: "AI отвечает на входящие",
+    text: "Каждое новое сообщение получает быстрый и понятный ответ без ожидания. Клиент не уходит к конкуренту, пока вы заняты."
+  },
+  {
+    layout: "compact",
+    kicker: "Качество лида",
+    title: "Квалифицирует лидов",
+    text: "Система уточняет задачу клиента и отделяет горячие заявки от случайных обращений."
+  },
+  {
+    layout: "wide",
+    kicker: "Продажи",
+    title: "Доводит до записи или заявки",
+    text: "Диалог не обрывается на середине: клиент получает конкретный следующий шаг и подтверждение."
+  },
+  {
+    layout: "compact",
+    kicker: "Возврат диалогов",
+    title: "Запускает follow-up",
+    text: "Если клиент замолчал, CFlow аккуратно напоминает о себе и возвращает диалог в работу."
+  },
+  {
+    layout: "focus",
+    kicker: "Контроль денег",
+    title: "Показывает аналитику и потери",
+    text: "Вы сразу видите, где теряются деньги, какие этапы проседают и что улучшить в первую очередь."
+  },
+  {
+    layout: "compact",
+    kicker: "Передача в работу",
+    title: "Передаёт лиды в CRM или менеджеру",
+    text: "Готовые лиды уходят в нужный канал без ручной рутины и потерь между системами."
+  }
+];
+
+const caseStories = [
+  {
+    business: "Салон красоты",
+    problem: "Отвечали клиентам с задержкой 30–60 минут, часть заявок уходила к конкурентам.",
+    action: "CFlow начал отвечать сразу, уточнять услугу и подводить клиента к записи в один диалог.",
+    result: "+15% записей за 30 дней"
+  },
+  {
+    business: "Клиника",
+    problem: "Лиды спрашивали цену и пропадали без следующего шага.",
+    action: "Система давала понятный ответ по стоимости и предлагала ближайшее окно для визита.",
+    result: "Конверсия в запись: 18% -> 27%"
+  },
+  {
+    business: "Онлайн-школа",
+    problem: "После вопроса по тарифам пользователи зависали и не доходили до оплаты.",
+    action: "CFlow запускал follow-up с нужным тарифом и закрывал частые возражения автоматически.",
+    result: "+22% оплат с диалогов"
+  },
+  {
+    business: "Агентство недвижимости",
+    problem: "Менеджеры тратили время на первичный отсев нецелевых обращений.",
+    action: "AI проводил первичную квалификацию и передавал в работу только релевантные лиды.",
+    result: "-34% нагрузки на менеджеров"
+  }
+];
+
+const faqItems = [
+  {
+    question: "Как быстро можно запустить CFlow?",
+    answer: "Базовый запуск обычно занимает от 1 до 3 дней: подключаем каналы, согласуем сценарии ответов и включаем аналитику."
+  },
+  {
+    question: "Какие каналы можно подключить?",
+    answer: "Можно подключить Telegram, WhatsApp, Instagram Direct и другие источники входящих сообщений в единую систему."
+  },
+  {
+    question: "Нужен ли свой менеджер или AI работает сам?",
+    answer: "AI берет на себя первичные ответы, квалификацию и follow-up. Менеджер подключается на важных этапах и финальном согласовании."
+  },
+  {
+    question: "Можно ли передавать лиды в CRM?",
+    answer: "Да. Лиды и статусы можно передавать в CRM или напрямую менеджеру, чтобы команда работала в привычном процессе."
+  },
+  {
+    question: "Как считается эффективность?",
+    answer: "В кабинете видно скорость ответа, конверсию по этапам, недополученную выручку и динамику по периодам."
+  },
+  {
+    question: "Подходит ли это для малого бизнеса?",
+    answer: "Да. CFlow подходит и для небольших команд, когда важно не терять заявки при ограниченных ресурсах."
+  },
+  {
+    question: "Можно ли настроить ответы под мою нишу?",
+    answer: "Да. Мы адаптируем тон, скрипты и логику под ваш бизнес: услуги, цены, частые вопросы и сценарии продаж."
+  },
+  {
+    question: "Что входит в демо?",
+    answer: "Показываем живой сценарий обработки лидов, логику доведения до записи и дашборд с ключевыми метриками."
+  }
+];
+
+const audienceSegments = [
+  {
+    title: "Салоны и клиники",
+    request: "«Сколько стоит и когда можно записаться?»",
+    loss: "Клиент уходит, если ответ пришёл поздно или без конкретного окна.",
+    help: "CFlow отвечает сразу, уточняет услугу и доводит до подтвержденной записи."
+  },
+  {
+    title: "Онлайн-школы",
+    request: "«Какой тариф мне подойдет и когда старт?»",
+    loss: "После вопроса о цене диалог зависает и не доходит до оплаты.",
+    help: "Система подбирает оффер, закрывает частые вопросы и запускает follow-up."
+  },
+  {
+    title: "Агентства услуг",
+    request: "«Сколько стоит проект и что входит?»",
+    loss: "Лиды теряются между менеджерами и долгими первыми ответами.",
+    help: "CFlow проводит первичную квалификацию и передает менеджеру готовый лид."
+  },
+  {
+    title: "Недвижимость",
+    request: "«Есть ли похожий объект и какая цена?»",
+    loss: "Входящий поток большой, менеджеры не успевают быстро обработать запросы.",
+    help: "AI собирает базовые параметры, отсеивает нерелевантные обращения и ускоряет работу команды."
+  },
+  {
+    title: "Локальный сервисный бизнес",
+    request: "«Когда можете приехать и сколько это стоит?»",
+    loss: "Заявки из мессенджеров теряются, особенно вечером и в выходные.",
+    help: "CFlow принимает входящие 24/7, фиксирует лиды и ведет клиента к заявке."
+  },
+  {
+    title: "E-commerce с входящими запросами",
+    request: "«Есть ли в наличии и когда доставка?»",
+    loss: "Покупатели не получают быстрый ответ и уходят на другой магазин.",
+    help: "Система отвечает по наличию и доставке, возвращает молчащих клиентов повторным касанием."
+  }
+];
+
+const platformModules = [
+  {
+    title: "AI Inbox",
+    description: "Все входящие диалоги в одном окне: видно, кто написал и на каком этапе находится клиент."
+  },
+  {
+    title: "Квалификация лидов",
+    description: "Система задает нужные вопросы и отделяет целевые обращения от случайных."
+  },
+  {
+    title: "Follow-up сценарии",
+    description: "Если клиент не ответил, CFlow автоматически возвращает его в диалог аккуратными касаниями."
+  },
+  {
+    title: "Аналитика",
+    description: "Показывает динамику заявок, скорость ответа и этапы, где проседает конверсия."
+  },
+  {
+    title: "Потерянные лиды",
+    description: "Вы сразу видите, какие заявки ушли и сколько денег бизнес недополучил."
+  },
+  {
+    title: "AI рекомендации",
+    description: "Платформа подсказывает, что именно изменить в сценариях, чтобы вернуть конверсию."
+  },
+  {
+    title: "CRM передача",
+    description: "Готовые лиды передаются в CRM или менеджеру без ручного копирования данных."
+  },
+  {
+    title: "Управление статусами",
+    description: "Каждому лиду присваивается понятный статус, чтобы команда не теряла контекст."
+  }
 ];
 
 function normalizePath(pathname: string): RoutePath {
@@ -388,6 +568,7 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
   const [isTyping, setIsTyping] = useState(false);
   const [showCabinetCta, setShowCabinetCta] = useState(false);
   const [chatMode, setChatMode] = useState<"openrouter" | "mock">("openrouter");
+  const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [websiteCode, setWebsiteCode] = useState("");
   const [websiteTitle, setWebsiteTitle] = useState("AI Website Preview");
   const [websiteBrief, setWebsiteBrief] = useState<WebsiteBriefPreview | null>(null);
@@ -790,6 +971,184 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
           </div>
         </section>
 
+        <section id="offer" className="landing-order-solution border-b border-slate-200">
+          <div className="landing-shell landing-shell-section">
+            <motion.div
+              initial={{ opacity: 0, y: 18 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.25 }}
+              transition={{ duration: 0.42 }}
+            >
+              <div className="landing-section-intro">
+                <p className="landing-section-kicker">После подключения CFlow</p>
+                <h2 className="landing-section-title max-w-5xl">Что мы предлагаем бизнесу</h2>
+                <p className="landing-section-lead max-w-2xl">Простая система, которая ведёт клиента от первого сообщения до оплаты и показывает, где вы теряете выручку.</p>
+              </div>
+              <div className="landing-offer-composition">
+                {offerTiles.map((tile, idx) => (
+                  <motion.article
+                    key={tile.title}
+                    initial={{ opacity: 0, y: 14 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true, amount: 0.24 }}
+                    transition={{ duration: 0.34, delay: idx * 0.04, ease: [0.22, 1, 0.36, 1] }}
+                    className={`offer-tile offer-tile--${tile.layout} rounded-2xl border border-slate-200 bg-white p-5 sm:p-6`}
+                  >
+                    <p className="offer-tile-index text-[11px] font-semibold tracking-[0.09em] text-slate-500">{String(idx + 1).padStart(2, "0")}</p>
+                    <p className="offer-tile-kicker mt-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-cyan-700">{tile.kicker}</p>
+                    <h3 className="mt-3 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">{tile.title}</h3>
+                    <p className="mt-2 text-sm text-slate-600">{tile.text}</p>
+                  </motion.article>
+                ))}
+              </div>
+            </motion.div>
+          </div>
+        </section>
+
+        <section id="audience" className="border-b border-slate-200">
+          <div className="landing-shell landing-shell-section">
+            <motion.div
+              initial={{ opacity: 0, y: 18 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.2 }}
+              transition={{ duration: 0.42 }}
+            >
+              <div className="landing-section-intro">
+                <p className="landing-section-kicker">Применение по сегментам</p>
+                <h2 className="landing-section-title max-w-5xl">Для кого CFlow</h2>
+                <p className="landing-section-lead max-w-3xl">Если вы узнаете свой сценарий ниже, продукт уже решает вашу задачу по входящим лидам.</p>
+              </div>
+
+              <div className="landing-audience-list">
+                {audienceSegments.map((segment, index) => (
+                  <article key={segment.title} className="audience-row">
+                    <div className="audience-head">
+                      <p className="audience-number">{String(index + 1).padStart(2, "0")}</p>
+                      <h3 className="audience-title">{segment.title}</h3>
+                    </div>
+                    <div className="audience-body">
+                      <div>
+                        <p className="audience-label">Типовой запрос</p>
+                        <p className="audience-text">{segment.request}</p>
+                      </div>
+                      <div>
+                        <p className="audience-label">Где теряются лиды</p>
+                        <p className="audience-text">{segment.loss}</p>
+                      </div>
+                      <div>
+                        <p className="audience-label">Как помогает CFlow</p>
+                        <p className="audience-text audience-text-strong">{segment.help}</p>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </motion.div>
+          </div>
+        </section>
+
+        <section id="platform" className="border-b border-slate-200">
+          <div className="landing-shell landing-shell-section">
+            <motion.div
+              initial={{ opacity: 0, y: 18 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.2 }}
+              transition={{ duration: 0.42 }}
+              className="landing-platform-shell"
+            >
+              <div className="landing-platform-intro">
+                <p className="landing-section-kicker">Возможности CFlow</p>
+                <h2 className="landing-section-title max-w-4xl">Что входит в платформу</h2>
+                <p className="landing-section-lead max-w-xl">Набор модулей, который закрывает полный цикл работы с входящими лидами: от первого ответа до передачи в продажу.</p>
+              </div>
+
+              <div className="landing-platform-list">
+                {platformModules.map((module, index) => (
+                  <article key={module.title} className="platform-item">
+                    <p className="platform-number">{String(index + 1).padStart(2, "0")}</p>
+                    <div>
+                      <h3 className="platform-title">{module.title}</h3>
+                      <p className="platform-description">{module.description}</p>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </motion.div>
+          </div>
+        </section>
+
+        <section id="cases" className="landing-order-cases border-b border-slate-200">
+          <div className="landing-shell landing-shell-section">
+            <motion.div
+              initial={{ opacity: 0, y: 18 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.2 }}
+              transition={{ duration: 0.44 }}
+            >
+              <div className="landing-section-intro">
+                <p className="landing-section-kicker">Результаты клиентов</p>
+                <h2 className="landing-section-title max-w-5xl">Кейсы: как CFlow работает в разных бизнесах</h2>
+                <p className="landing-section-lead max-w-3xl">Реальные сценарии: от первого сообщения до измеримого результата в деньгах, записях и загрузке команды.</p>
+              </div>
+
+              <div className="landing-cases-layout">
+                <motion.article
+                  initial={{ opacity: 0, y: 16 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  whileHover={{ y: -3 }}
+                  viewport={{ once: true, amount: 0.25 }}
+                  transition={{ duration: 0.36, ease: [0.22, 1, 0.36, 1] }}
+                  className="case-panel case-panel--featured rounded-3xl border border-slate-200 bg-white p-6 sm:p-8"
+                >
+                  <p className="case-label text-xs font-semibold uppercase tracking-[0.1em] text-cyan-700">{caseStories[0].business}</p>
+                  <p className="case-kicker mt-6 text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">Результат</p>
+                  <h3 className="case-result-main mt-2 text-4xl font-extrabold tracking-tight text-slate-900 sm:text-6xl">{caseStories[0].result}</h3>
+                  <div className="mt-6 space-y-4">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.09em] text-slate-500">Проблема</p>
+                      <p className="mt-1 text-sm text-slate-700">{caseStories[0].problem}</p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.09em] text-slate-500">Что сделал CFlow</p>
+                      <p className="mt-1 text-sm text-slate-700">{caseStories[0].action}</p>
+                    </div>
+                  </div>
+                </motion.article>
+
+                <div className="case-panel case-panel--stack">
+                  {caseStories.slice(1).map((story, index) => (
+                    <motion.article
+                      key={story.business}
+                      initial={{ opacity: 0, y: 14 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      whileHover={{ y: -2 }}
+                      viewport={{ once: true, amount: 0.22 }}
+                      transition={{ duration: 0.3, delay: 0.03 * index, ease: [0.22, 1, 0.36, 1] }}
+                      className="case-item rounded-2xl border border-slate-200 bg-white p-5 sm:p-6"
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <p className="case-label text-xs font-semibold uppercase tracking-[0.1em] text-cyan-700">{story.business}</p>
+                      </div>
+                      <p className="case-kicker mt-4 text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">Результат</p>
+                      <p className="case-result mt-1 text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">{story.result}</p>
+                      <div className="mt-4 space-y-3">
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.09em] text-slate-500">Проблема</p>
+                          <p className="mt-1 text-sm text-slate-700">{story.problem}</p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.09em] text-slate-500">Что сделал CFlow</p>
+                          <p className="mt-1 text-sm text-slate-700">{story.action}</p>
+                        </div>
+                      </div>
+                    </motion.article>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        </section>
+
         <section id="demo" className="landing-order-solution landing-transition-shell landing-transition-demo border-b border-slate-200">
           <div className="landing-shell landing-shell-section">
             <motion.div
@@ -798,9 +1157,10 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
               viewport={{ once: true, amount: 0.2 }}
               transition={{ duration: 0.45 }}
             >
-              <div className="mb-8">
-                <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Демо в реальном интерфейсе</h2>
-                <p className="mt-3 max-w-2xl text-slate-600">Сообщение клиента → ответ AI → запись.</p>
+              <div className="landing-section-intro">
+                <p className="landing-section-kicker">Рабочий сценарий</p>
+                <h2 className="landing-section-title max-w-4xl">Демо в реальном интерфейсе</h2>
+                <p className="landing-section-lead max-w-2xl">Сообщение клиента → ответ AI → запись.</p>
               </div>
 
               <motion.div whileHover={{ y: -2 }} transition={{ duration: 0.2 }} className="landing-demo-stage luxe-panel rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
@@ -847,6 +1207,78 @@ function HomePage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
                     <p className="text-sm font-semibold text-slate-900">{item}</p>
                   </div>
                 ))}
+              </div>
+            </motion.div>
+          </div>
+        </section>
+
+        <section id="faq" className="border-b border-slate-200">
+          <div className="landing-shell landing-shell-section">
+            <motion.div
+              initial={{ opacity: 0, y: 18 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.2 }}
+              transition={{ duration: 0.42 }}
+            >
+              <div className="landing-faq-shell">
+                <div className="landing-faq-intro">
+                  <p className="landing-section-kicker">Перед запуском</p>
+                  <h2 className="landing-section-title max-w-4xl">FAQ: ответы на ключевые вопросы</h2>
+                  <p className="landing-section-lead max-w-xl">Коротко и по делу: как работает система, что входит в запуск и какую пользу вы получите для бизнеса.</p>
+                </div>
+
+                <div className="landing-faq-list">
+                  {faqItems.map((item, index) => {
+                    const isOpen = openFaq === index;
+                    return (
+                      <motion.article
+                        key={item.question}
+                        initial={{ opacity: 0, y: 10 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true, amount: 0.22 }}
+                        transition={{ duration: 0.28, delay: index * 0.02, ease: [0.22, 1, 0.36, 1] }}
+                        className={`faq-item ${isOpen ? "is-open" : ""}`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => setOpenFaq(isOpen ? null : index)}
+                          className="faq-trigger"
+                        >
+                          <span className="faq-question-wrap">
+                            <span className="faq-number">{String(index + 1).padStart(2, "0")}</span>
+                            <span className="faq-question">{item.question}</span>
+                          </span>
+                          <span className={`faq-indicator ${isOpen ? "open" : ""}`} aria-hidden="true">
+                            <span className="faq-indicator-line faq-indicator-line-h" />
+                            <span className="faq-indicator-line faq-indicator-line-v" />
+                          </span>
+                        </button>
+                        <AnimatePresence initial={false}>
+                          {isOpen ? (
+                            <motion.div
+                              key="answer"
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: "auto", opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+                            className="faq-answer-wrap"
+                          >
+                              <motion.p
+                                initial={{ opacity: 0, y: 4 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -2 }}
+                                transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                                className="faq-answer"
+                              >
+                                {item.answer}
+                              </motion.p>
+                          </motion.div>
+                        ) : null}
+                      </AnimatePresence>
+                      </motion.article>
+                    );
+                  })}
+                </div>
               </div>
             </motion.div>
           </div>
