@@ -2,6 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { createPublishedSite, getPublishedSite, type PublishedSitePayload } from "./lib/sites/store";
 import chatApiHandler from "./api/openrouter/chat";
+import dialogAnalysisApiHandler from "./api/openrouter/dialog-analysis";
 
 function openRouterMiddleware() {
   const systemPrompt =
@@ -91,6 +92,7 @@ function openRouterMiddleware() {
 
   const handler = async (req: any, res: any, next: () => void) => {
     const isChatRoute = req.method === "POST" && req.url === "/api/openrouter/chat";
+    const isDialogAnalysisRoute = req.method === "POST" && req.url === "/api/openrouter/dialog-analysis";
     const isSitesRoute = req.method === "POST" && req.url === "/api/openrouter/sites-copy";
     const isProductRoute = req.method === "POST" && req.url === "/api/openrouter/product-chat";
     const isAuditRoute = req.method === "POST" && req.url === "/api/openrouter/business-audit";
@@ -103,6 +105,7 @@ function openRouterMiddleware() {
     const isSitesGetRoute = req.method === "GET" && String(req.url || "").startsWith("/api/sites/get");
     if (
       !isChatRoute &&
+      !isDialogAnalysisRoute &&
       !isSitesRoute &&
       !isProductRoute &&
       !isAuditRoute &&
@@ -192,6 +195,11 @@ function openRouterMiddleware() {
 
     if (isChatRoute) {
       await chatApiHandler(req, res);
+      return;
+    }
+
+    if (isDialogAnalysisRoute) {
+      await dialogAnalysisApiHandler(req, res);
       return;
     }
 

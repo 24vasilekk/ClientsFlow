@@ -45,14 +45,24 @@ type SubscriptionState = {
 };
 
 type Channel = "Telegram" | "WhatsApp" | "Instagram" | "Website";
-type LeadStatus = "новый" | "квалифицирован" | "ожидает записи" | "записан" | "потерян" | "эскалация";
-type LeadStage = "новый" | "квалифицирован" | "ожидает записи" | "записан" | "потерян" | "передан менеджеру";
+type LeadStage = "новый" | "заинтересован" | "спросил цену" | "думает" | "записан" | "потерян";
+type LeadStatus = LeadStage | "эскалация";
 type BookingState = "не начата" | "в процессе" | "подтверждена" | "отменена";
 
 type TimelineMessage = {
   role: "client" | "ai" | "manager";
   text: string;
   time: string;
+};
+
+type DialogLossAnalysis = {
+  lostAtStage: LeadStage;
+  reason: string;
+  improvedReply: string;
+  confidence: number;
+  lostAtMessageIndex?: number;
+  lostAtMessageText?: string;
+  mode?: "openrouter" | "fallback";
 };
 
 type InboxConversation = {
@@ -105,6 +115,7 @@ type AiRecommendation = {
   expectedImpact: string;
   actionLabel: string;
   area: string;
+  actionSteps: string[];
 };
 
 type SitesTemplate = {
@@ -213,6 +224,14 @@ type TelegramProfile = {
   };
 };
 
+type TelegramErrorLogEntry = {
+  id: string;
+  at: string;
+  scope: "get-updates" | "send-message" | "sync-flow";
+  message: string;
+  details?: string;
+};
+
 type BusinessBriefAnswer = {
   question: string;
   answer: string;
@@ -240,6 +259,18 @@ type BusinessTuningState = {
   updatedAt: string | null;
 };
 
+type NewUserOnboardingState = {
+  startedAt: string;
+  completedAt: string | null;
+  dismissed: boolean;
+  steps: {
+    firstLaunch: boolean;
+    telegramConnected: boolean;
+    firstLead: boolean;
+    valueShown: boolean;
+  };
+};
+
 type SettingsQuestion = {
   id: string;
   question: string;
@@ -257,17 +288,36 @@ type PlanDefinition = {
   gates: Record<PlanFeatureKey, boolean>;
 };
 
-const navItems: NavItem[] = [
-  "Обзор",
-  "Диалоги",
-  "Лиды",
-  "Аналитика",
-  "Потерянные",
-  "AI рекомендации",
-  "Настройки"
+const NAV_LABELS: Record<NavItem, string> = {
+  "Обзор": "Главная",
+  "Диалоги": "Сообщения",
+  "Лиды": "Лиды",
+  "Аналитика": "Отчеты",
+  "Потерянные": "Потери и возврат",
+  "AI рекомендации": "Что улучшить",
+  "CFlow Sites": "CFlow Sites",
+  "Настройки": "Интеграции и настройки"
+};
+
+const MOBILE_NAV_LABELS: Record<NavItem, string> = {
+  "Обзор": "Главная",
+  "Диалоги": "Диалоги",
+  "Лиды": "Лиды",
+  "Аналитика": "Отчеты",
+  "Потерянные": "Потери",
+  "AI рекомендации": "Улучшения",
+  "CFlow Sites": "Sites",
+  "Настройки": "Настройки"
+};
+
+const sidebarNavGroups: Array<{ title: string; items: NavItem[] }> = [
+  { title: "Работа с клиентами", items: ["Обзор", "Диалоги", "Лиды"] },
+  { title: "Рост выручки", items: ["Аналитика", "Потерянные", "AI рекомендации"] },
+  { title: "Система", items: ["Настройки"] }
 ];
 
-const mobilePrimaryNav: NavItem[] = ["Обзор", "Диалоги", "Лиды", "Аналитика", "AI рекомендации"];
+const mobilePrimaryNav: NavItem[] = ["Обзор", "Диалоги", "Лиды", "Аналитика", "Настройки"];
+const mobileSecondaryNav: NavItem[] = ["Потерянные", "AI рекомендации"];
 
 function BrandWordmark({
   cClass = "text-cyan-500",
@@ -434,7 +484,7 @@ const inboxConversations: InboxConversation[] = [
     id: "CV-101",
     client: "Анна Л.",
     channel: "Instagram",
-    status: "квалифицирован",
+    status: "заинтересован",
     summary: "Интерес к окрашиванию + стрижке, бюджет подтвержден, просит ближайшее окно.",
     score: 82,
     purchaseProbability: 74,
@@ -458,7 +508,7 @@ const inboxConversations: InboxConversation[] = [
     id: "CV-102",
     client: "Игорь Н.",
     channel: "WhatsApp",
-    status: "ожидает записи",
+    status: "думает",
     summary: "Услуга выбрана, клиент запросил детали по длительности процедуры.",
     score: 71,
     purchaseProbability: 61,
@@ -503,7 +553,7 @@ const inboxConversations: InboxConversation[] = [
     id: "CV-104",
     client: "Сергей В.",
     channel: "Telegram",
-    status: "эскалация",
+    status: "спросил цену",
     summary: "Нестандартный запрос по корпоративному обслуживанию, требуется менеджер.",
     score: 88,
     purchaseProbability: 79,
@@ -572,8 +622,9 @@ const inboxConversations: InboxConversation[] = [
 const allStatuses: Array<LeadStatus | "все"> = [
   "все",
   "новый",
-  "квалифицирован",
-  "ожидает записи",
+  "заинтересован",
+  "спросил цену",
+  "думает",
   "записан",
   "потерян",
   "эскалация"
@@ -584,11 +635,11 @@ const allChannels: Array<Channel | "все"> = ["все", "Telegram", "WhatsApp"
 const leadStages: Array<LeadStage | "все"> = [
   "все",
   "новый",
-  "квалифицирован",
-  "ожидает записи",
+  "заинтересован",
+  "спросил цену",
+  "думает",
   "записан",
-  "потерян",
-  "передан менеджеру"
+  "потерян"
 ];
 
 const bookingStates: Array<BookingState | "все"> = ["все", "не начата", "в процессе", "подтверждена", "отменена"];
@@ -598,7 +649,7 @@ const leadRecords: LeadRecord[] = [
     id: "LD-2401",
     name: "Анна Лебедева",
     business: "Салон красоты Aura",
-    stage: "квалифицирован",
+    stage: "заинтересован",
     channel: "Instagram",
     score: 84,
     estimatedRevenue: 8200,
@@ -612,7 +663,7 @@ const leadRecords: LeadRecord[] = [
     id: "LD-2402",
     name: "Игорь Смирнов",
     business: "Barber Point",
-    stage: "ожидает записи",
+    stage: "думает",
     channel: "WhatsApp",
     score: 72,
     estimatedRevenue: 3600,
@@ -640,7 +691,7 @@ const leadRecords: LeadRecord[] = [
     id: "LD-2404",
     name: "Сергей Власов",
     business: "Local Service Hub",
-    stage: "передан менеджеру",
+    stage: "спросил цену",
     channel: "Telegram",
     score: 89,
     estimatedRevenue: 12500,
@@ -682,7 +733,7 @@ const leadRecords: LeadRecord[] = [
     id: "LD-2407",
     name: "Никита Орлов",
     business: "Barber Point",
-    stage: "квалифицирован",
+    stage: "заинтересован",
     channel: "Telegram",
     score: 77,
     estimatedRevenue: 4300,
@@ -696,7 +747,7 @@ const leadRecords: LeadRecord[] = [
     id: "LD-2408",
     name: "Дарья Климова",
     business: "Experts Lab",
-    stage: "ожидает записи",
+    stage: "думает",
     channel: "Website",
     score: 68,
     estimatedRevenue: 7100,
@@ -793,63 +844,6 @@ const analyticsInsights = [
   "Telegram даёт больше целевых обращений, чем сайт.",
   "Есть 12 лидов, которым стоит написать повторно.",
   "Пик входящих обращений приходится на 17:00-20:00, увеличьте плотность слотов в это окно."
-];
-
-const aiRecommendationsFeed: AiRecommendation[] = [
-  {
-    id: "AI-201",
-    title: "Слишком резкий ответ на вопрос о стоимости",
-    description: "В 37% диалогов ответ на цену не объясняет ценность услуги и не предлагает следующий шаг.",
-    priority: "Критично",
-    expectedImpact: "+6-10% к конверсии в запись",
-    actionLabel: "Обновить сценарий",
-    area: "Скрипт первого ответа"
-  },
-  {
-    id: "AI-202",
-    title: "Есть 9 лидов без повторного касания",
-    description: "Лиды проявили интерес, но после первого ответа не получили follow-up в течение 24 часов.",
-    priority: "Высокий",
-    expectedImpact: "До 42 000 ₽ возврата выручки",
-    actionLabel: "Запустить follow-up",
-    area: "Recovery-цепочка"
-  },
-  {
-    id: "AI-203",
-    title: "В WhatsApp выше конверсия, чем в Instagram",
-    description: "Конверсия в запись: WhatsApp 39%, Instagram 30%. Рекомендуется перераспределить трафик.",
-    priority: "Средний",
-    expectedImpact: "+3-5 п.п. общей конверсии",
-    actionLabel: "Применить",
-    area: "Канальная стратегия"
-  },
-  {
-    id: "AI-204",
-    title: "Запись предлагается слишком поздно",
-    description: "После выявления намерения система в среднем делает 2 лишних шага перед предложением слота.",
-    priority: "Высокий",
-    expectedImpact: "-18% потерь на этапе записи",
-    actionLabel: "Обновить сценарий",
-    area: "Логика доведения до записи"
-  }
-];
-
-const aiPriorityActions = [
-  {
-    title: "Переписать блок ответа о цене",
-    detail: "Добавить диапазон стоимости + короткое обоснование + предложение двух слотов.",
-    action: "Обновить сценарий"
-  },
-  {
-    title: "Вернуть «тихие» лиды за 24 часа",
-    detail: "Запустить 2-step follow-up для 9 лидов с высоким lead score.",
-    action: "Запустить follow-up"
-  },
-  {
-    title: "Сместить приоритет в WhatsApp",
-    detail: "Увеличить долю обращений из WhatsApp в промо-источниках на 20%.",
-    action: "Применить"
-  }
 ];
 
 const aiBeforeAfterExamples = [
@@ -1107,6 +1101,8 @@ const SERVICE_CONNECTION_KEY = "clientsflow_service_connection_v1";
 const SERVICE_EVENTS_KEY = "clientsflow_service_events_v1";
 const TELEGRAM_OFFSET_KEY = "clientsflow_telegram_offset_v1";
 const TELEGRAM_PROFILES_KEY = "clientsflow_telegram_profiles_v1";
+const TELEGRAM_ERROR_LOGS_KEY = "clientsflow_telegram_error_logs_v1";
+const NEW_USER_ONBOARDING_KEY = "clientsflow_new_user_onboarding_v1";
 const BUSINESS_BRIEF_KEY = "clientsflow_business_brief_v1";
 const BUSINESS_TUNING_KEY = "clientsflow_business_tuning_v1";
 const SITES_BUILDER_PREFS_KEY = "clientsflow_sites_builder_prefs_v1";
@@ -1324,7 +1320,7 @@ function loadServiceEvents(): ServiceEvent[] {
     const raw = localStorage.getItem(SERVICE_EVENTS_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as ServiceEvent[];
-    return Array.isArray(parsed) ? parsed : [];
+    return parseServiceEvents(parsed);
   } catch {
     return [];
   }
@@ -1362,6 +1358,76 @@ function loadTelegramProfiles(): Record<string, TelegramProfile> {
 function saveTelegramProfiles(profiles: Record<string, TelegramProfile>): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(TELEGRAM_PROFILES_KEY, JSON.stringify(profiles));
+}
+
+function loadTelegramErrorLogs(): TelegramErrorLogEntry[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(TELEGRAM_ERROR_LOGS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as Array<Partial<TelegramErrorLogEntry>>;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((item) => ({
+        id: typeof item.id === "string" ? item.id : `log-${Math.random().toString(36).slice(2)}`,
+        at: typeof item.at === "string" ? item.at : new Date().toISOString(),
+        scope:
+          item.scope === "get-updates" || item.scope === "send-message" || item.scope === "sync-flow"
+            ? item.scope
+            : "sync-flow",
+        message: typeof item.message === "string" ? item.message : "unknown_telegram_error",
+        details: typeof item.details === "string" ? item.details : undefined
+      }))
+      .slice(0, 100);
+  } catch {
+    return [];
+  }
+}
+
+function saveTelegramErrorLogs(logs: TelegramErrorLogEntry[]): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(TELEGRAM_ERROR_LOGS_KEY, JSON.stringify(logs.slice(0, 100)));
+}
+
+function createDefaultNewUserOnboardingState(): NewUserOnboardingState {
+  return {
+    startedAt: new Date().toISOString(),
+    completedAt: null,
+    dismissed: false,
+    steps: {
+      firstLaunch: false,
+      telegramConnected: false,
+      firstLead: false,
+      valueShown: false
+    }
+  };
+}
+
+function loadNewUserOnboardingState(): NewUserOnboardingState {
+  if (typeof window === "undefined") return createDefaultNewUserOnboardingState();
+  try {
+    const raw = localStorage.getItem(NEW_USER_ONBOARDING_KEY);
+    if (!raw) return createDefaultNewUserOnboardingState();
+    const parsed = JSON.parse(raw) as Partial<NewUserOnboardingState>;
+    return {
+      startedAt: typeof parsed.startedAt === "string" ? parsed.startedAt : new Date().toISOString(),
+      completedAt: typeof parsed.completedAt === "string" ? parsed.completedAt : null,
+      dismissed: parsed.dismissed === true,
+      steps: {
+        firstLaunch: parsed.steps?.firstLaunch === true,
+        telegramConnected: parsed.steps?.telegramConnected === true,
+        firstLead: parsed.steps?.firstLead === true,
+        valueShown: parsed.steps?.valueShown === true
+      }
+    };
+  } catch {
+    return createDefaultNewUserOnboardingState();
+  }
+}
+
+function saveNewUserOnboardingState(state: NewUserOnboardingState): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(NEW_USER_ONBOARDING_KEY, JSON.stringify(state));
 }
 
 function loadBusinessBrief(): BusinessBriefState {
@@ -1449,6 +1515,35 @@ function parseServiceEvents(raw: unknown): ServiceEvent[] {
       const channel = e.channel;
       const validChannel = channel === "Telegram" || channel === "WhatsApp" || channel === "Instagram" || channel === "Website";
       if (!e.leadId || !e.clientName || !validChannel || !e.direction || !e.text || !e.timestamp) return null;
+      const timestamp = String(e.timestamp);
+      const tsMs = new Date(timestamp).getTime();
+      if (!Number.isFinite(tsMs)) return null;
+      const status = e.status;
+      const safeStatus: LeadStatus | undefined =
+        status === "новый" ||
+        status === "заинтересован" ||
+        status === "спросил цену" ||
+        status === "думает" ||
+        status === "записан" ||
+        status === "потерян" ||
+        status === "эскалация"
+          ? status
+          : undefined;
+      const stage = e.stage;
+      const safeStage: LeadStage | undefined =
+        stage === "новый" ||
+        stage === "заинтересован" ||
+        stage === "спросил цену" ||
+        stage === "думает" ||
+        stage === "записан" ||
+        stage === "потерян"
+          ? stage
+          : undefined;
+      const booking = e.bookingState;
+      const safeBooking: BookingState | undefined =
+        booking === "не начата" || booking === "в процессе" || booking === "подтверждена" || booking === "отменена"
+          ? booking
+          : undefined;
       return {
         id: e.id || `EV-${index}-${Math.random().toString(36).slice(2, 8)}`,
         leadId: String(e.leadId),
@@ -1456,10 +1551,10 @@ function parseServiceEvents(raw: unknown): ServiceEvent[] {
         channel,
         direction: e.direction === "outbound" ? "outbound" : "inbound",
         text: String(e.text),
-        timestamp: String(e.timestamp),
-        status: e.status,
-        stage: e.stage,
-        bookingState: e.bookingState,
+        timestamp,
+        status: safeStatus,
+        stage: safeStage,
+        bookingState: safeBooking,
         responseSeconds: typeof e.responseSeconds === "number" ? e.responseSeconds : undefined,
         revenue: typeof e.revenue === "number" ? e.revenue : undefined,
         lostReason: typeof e.lostReason === "string" ? e.lostReason : undefined
@@ -1470,6 +1565,7 @@ function parseServiceEvents(raw: unknown): ServiceEvent[] {
 
 function formatLastActivity(timestamp: string): { label: string; minutes: number } {
   const ms = new Date(timestamp).getTime();
+  if (!Number.isFinite(ms)) return { label: "нет времени", minutes: Number.MAX_SAFE_INTEGER };
   const diffMin = Math.max(0, Math.round((Date.now() - ms) / 60000));
   if (diffMin < 1) return { label: "только что", minutes: 0 };
   if (diffMin < 60) return { label: `${diffMin} мин назад`, minutes: diffMin };
@@ -1536,13 +1632,14 @@ function normalizeContactLink(value: string): string {
 }
 
 function buildLinePoints(values: number[]): string {
+  if (values.length === 0) return "";
   const max = Math.max(...values);
   const min = Math.min(...values);
   const range = Math.max(max - min, 1);
 
   return values
     .map((v, i) => {
-      const x = (i / (values.length - 1)) * 100;
+      const x = values.length <= 1 ? 0 : (i / (values.length - 1)) * 100;
       const y = 100 - ((v - min) / range) * 100;
       return `${x},${y}`;
     })
@@ -1556,6 +1653,9 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
   const [statusFilter, setStatusFilter] = useState<LeadStatus | "все">("все");
   const [channelFilter, setChannelFilter] = useState<Channel | "все">("все");
   const [selectedConversationId, setSelectedConversationId] = useState<string>("");
+  const [dialogAnalysis, setDialogAnalysis] = useState<DialogLossAnalysis | null>(null);
+  const [dialogAnalysisLoading, setDialogAnalysisLoading] = useState(false);
+  const [dialogAnalysisError, setDialogAnalysisError] = useState<string | null>(null);
   const [leadQuery, setLeadQuery] = useState("");
   const [leadStageFilter, setLeadStageFilter] = useState<LeadStage | "все">("все");
   const [leadChannelFilter, setLeadChannelFilter] = useState<Channel | "все">("все");
@@ -1611,21 +1711,15 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
   const [mobileInboxView, setMobileInboxView] = useState<"list" | "detail">("list");
   const [subscription, setSubscription] = useState<SubscriptionState>(() => loadSubscription());
   const [checkoutPlanId, setCheckoutPlanId] = useState<PlanDefinition["id"] | null>(null);
-  const [checkoutCardholder, setCheckoutCardholder] = useState("Иван Петров");
-  const [checkoutCardNumber, setCheckoutCardNumber] = useState("4242 4242 4242 4242");
-  const [checkoutExpiry, setCheckoutExpiry] = useState("12/29");
-  const [checkoutCvv, setCheckoutCvv] = useState("123");
   const [checkoutState, setCheckoutState] = useState<"idle" | "processing" | "success">("idle");
-  const [onboardingStep, setOnboardingStep] = useState(1);
-  const [onboardingBusinessType, setOnboardingBusinessType] = useState("салон красоты");
-  const [onboardingChannels, setOnboardingChannels] = useState<string[]>(["WhatsApp"]);
-  const [onboardingGoals, setOnboardingGoals] = useState<string[]>(["быстрее отвечать"]);
   const [uiNotice, setUiNotice] = useState<string | null>(null);
   const [serviceConnection, setServiceConnection] = useState<ServiceConnection>(() => loadServiceConnection());
   const [serviceEvents, setServiceEvents] = useState<ServiceEvent[]>(() => loadServiceEvents());
   const [serviceSyncLoading, setServiceSyncLoading] = useState(false);
   const [telegramOffset, setTelegramOffset] = useState<number>(() => loadTelegramOffset());
   const [telegramProfiles, setTelegramProfiles] = useState<Record<string, TelegramProfile>>(() => loadTelegramProfiles());
+  const [telegramErrorLogs, setTelegramErrorLogs] = useState<TelegramErrorLogEntry[]>(() => loadTelegramErrorLogs());
+  const [newUserOnboarding, setNewUserOnboarding] = useState<NewUserOnboardingState>(() => loadNewUserOnboardingState());
   const [businessBrief, setBusinessBrief] = useState<BusinessBriefState>(() => loadBusinessBrief());
   const [businessBriefAnswer, setBusinessBriefAnswer] = useState("");
   const [businessBriefLoading, setBusinessBriefLoading] = useState(false);
@@ -1641,6 +1735,40 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
   const [settingsSummaryLoading, setSettingsSummaryLoading] = useState(false);
 
   const hasLiveData = serviceEvents.length > 0;
+  const priceIntentRegex = /(цен|стоим|сколько|прайс)/i;
+
+  function hasPriceIntent(text: string): boolean {
+    return priceIntentRegex.test(String(text || "").toLowerCase());
+  }
+
+  function inferLeadStageFromEvents(events: ServiceEvent[]): LeadStage {
+    if (events.some((event) => event.stage === "записан" || event.status === "записан")) return "записан";
+    if (events.some((event) => event.stage === "потерян" || event.status === "потерян")) return "потерян";
+
+    const sorted = [...events].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    const last = sorted[sorted.length - 1];
+    if (!last) return "новый";
+
+    const hasOutbound = sorted.some((event) => event.direction === "outbound");
+    const lastInbound = [...sorted].reverse().find((event) => event.direction === "inbound");
+    const askedPrice = lastInbound ? hasPriceIntent(lastInbound.text) : false;
+
+    if (askedPrice) {
+      if (last.direction === "outbound") return "спросил цену";
+      return "думает";
+    }
+    if (!hasOutbound) return "новый";
+    if (last.direction === "outbound") return "заинтересован";
+    return "думает";
+  }
+
+  function nextLeadStage(stage: LeadStage): LeadStage | null {
+    if (stage === "новый") return "заинтересован";
+    if (stage === "заинтересован") return "спросил цену";
+    if (stage === "спросил цену") return "думает";
+    if (stage === "думает") return "записан";
+    return null;
+  }
 
   const liveConversations = useMemo<InboxConversation[]>(() => {
     const grouped = serviceEvents.reduce<Record<string, ServiceEvent[]>>((acc, event) => {
@@ -1657,16 +1785,18 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
         const status: LeadStatus = last.status ?? "новый";
         const scoreMap: Record<LeadStatus, number> = {
           новый: 45,
-          квалифицирован: 74,
-          "ожидает записи": 67,
+          заинтересован: 72,
+          "спросил цену": 66,
+          думает: 61,
           записан: 95,
           потерян: 28,
           эскалация: 82
         };
         const probabilityMap: Record<LeadStatus, number> = {
           новый: 34,
-          квалифицирован: 68,
-          "ожидает записи": 62,
+          заинтересован: 64,
+          "спросил цену": 57,
+          думает: 52,
           записан: 96,
           потерян: 14,
           эскалация: 71
@@ -1679,10 +1809,12 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
         const suggestedAction =
           status === "новый"
             ? "Уточнить задачу и предложить следующий шаг."
-            : status === "квалифицирован"
-              ? "Перевести в запись с выбором времени."
-              : status === "ожидает записи"
-                ? "Подтвердить слот и закрыть запись."
+            : status === "заинтересован"
+              ? "Закрепить интерес и перейти к цене/условиям."
+              : status === "спросил цену"
+                ? "Дать диапазон и предложить 2 слота."
+                : status === "думает"
+                  ? "Сделать follow-up и подтолкнуть к записи."
                 : status === "потерян"
                   ? "Запустить recovery-касание."
                   : status === "эскалация"
@@ -1719,26 +1851,15 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
     return liveConversations.map((conv) => {
       const related = serviceEvents.filter((event) => event.leadId === conv.id);
       const latest = related[related.length - 1];
-      const stage: LeadStage =
-        latest?.stage ??
-        (conv.status === "эскалация"
-          ? "передан менеджеру"
-          : conv.status === "квалифицирован"
-            ? "квалифицирован"
-            : conv.status === "ожидает записи"
-              ? "ожидает записи"
-              : conv.status === "записан"
-                ? "записан"
-                : conv.status === "потерян"
-                  ? "потерян"
-                  : "новый");
+      const stage: LeadStage = latest?.stage ?? inferLeadStageFromEvents(related);
       const activity = formatLastActivity(latest?.timestamp || new Date().toISOString());
       const estimatedRevenue = Math.round(
-        related.reduce((sum, event) => sum + (event.revenue ?? 0), 0) || (conv.status === "записан" ? 5000 : conv.status === "квалифицирован" ? 3500 : 0)
+        related.reduce((sum, event) => sum + (event.revenue ?? 0), 0) ||
+          (stage === "записан" ? 5000 : stage === "заинтересован" || stage === "спросил цену" || stage === "думает" ? 3500 : 0)
       );
       const bookingState: BookingState =
         latest?.bookingState ??
-        (stage === "записан" ? "подтверждена" : stage === "потерян" ? "отменена" : stage === "ожидает записи" ? "в процессе" : "не начата");
+        (stage === "записан" ? "подтверждена" : stage === "потерян" ? "отменена" : stage === "новый" ? "не начата" : "в процессе");
       return {
         id: conv.id,
         name: conv.client,
@@ -1757,7 +1878,9 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
   }, [liveConversations, serviceEvents, serviceConnection.serviceName]);
 
   const incomingLeads = liveLeadRecords.length;
-  const qualifiedLeads = liveLeadRecords.filter((lead) => lead.stage === "квалифицирован" || lead.stage === "ожидает записи" || lead.stage === "записан" || lead.stage === "передан менеджеру").length;
+  const qualifiedLeads = liveLeadRecords.filter(
+    (lead) => lead.stage === "заинтересован" || lead.stage === "спросил цену" || lead.stage === "думает" || lead.stage === "записан"
+  ).length;
   const bookedLeads = liveLeadRecords.filter((lead) => lead.stage === "записан").length;
   const lostLeads = liveLeadRecords.filter((lead) => lead.stage === "потерян").length;
   const responseSamples = serviceEvents.map((event) => event.responseSeconds).filter((value): value is number => typeof value === "number" && value > 0);
@@ -1765,16 +1888,136 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
   const worstResponse = responseSamples.length > 0 ? Math.max(...responseSamples) : 0;
   const conversionPercent = incomingLeads > 0 ? Number(((bookedLeads / incomingLeads) * 100).toFixed(1)) : 0;
 
+  const nowTs = Date.now();
+  const dayMs = 24 * 60 * 60 * 1000;
+  const startLast7 = nowTs - 7 * dayMs;
+  const startPrev7 = nowTs - 14 * dayMs;
+  const inRange = (ts: string, from: number, to: number) => {
+    const time = new Date(ts).getTime();
+    return Number.isFinite(time) && time >= from && time < to;
+  };
+  const incomingLast7 = serviceEvents.filter((event) => event.direction === "inbound" && inRange(event.timestamp, startLast7, nowTs)).length;
+  const incomingPrev7 = serviceEvents.filter((event) => event.direction === "inbound" && inRange(event.timestamp, startPrev7, startLast7)).length;
+  const bookedLast7 = serviceEvents.filter(
+    (event) => (event.status === "записан" || event.stage === "записан") && inRange(event.timestamp, startLast7, nowTs)
+  ).length;
+  const bookedPrev7 = serviceEvents.filter(
+    (event) => (event.status === "записан" || event.stage === "записан") && inRange(event.timestamp, startPrev7, startLast7)
+  ).length;
+  const lostLast7 = serviceEvents.filter(
+    (event) => (event.status === "потерян" || event.stage === "потерян") && inRange(event.timestamp, startLast7, nowTs)
+  ).length;
+  const lostPrev7 = serviceEvents.filter(
+    (event) => (event.status === "потерян" || event.stage === "потерян") && inRange(event.timestamp, startPrev7, startLast7)
+  ).length;
+  const responseLast7 = serviceEvents
+    .filter((event) => typeof event.responseSeconds === "number" && event.responseSeconds > 0 && inRange(event.timestamp, startLast7, nowTs))
+    .map((event) => event.responseSeconds as number);
+  const responsePrev7 = serviceEvents
+    .filter((event) => typeof event.responseSeconds === "number" && event.responseSeconds > 0 && inRange(event.timestamp, startPrev7, startLast7))
+    .map((event) => event.responseSeconds as number);
+  const avgRespLast7 = responseLast7.length ? Math.round(responseLast7.reduce((sum, value) => sum + value, 0) / responseLast7.length) : 0;
+  const avgRespPrev7 = responsePrev7.length ? Math.round(responsePrev7.reduce((sum, value) => sum + value, 0) / responsePrev7.length) : 0;
+
+  function metricTrend(current: number, previous: number, positiveWhenUp = true): { label: string; direction: "up" | "down" | "flat" } {
+    if (previous <= 0 && current <= 0) return { label: "без изменений", direction: "flat" };
+    if (previous <= 0 && current > 0) return { label: "новые данные", direction: "up" };
+    const deltaPct = Math.round(((current - previous) / previous) * 100);
+    if (deltaPct === 0) return { label: "без изменений", direction: "flat" };
+    const isPositive = positiveWhenUp ? deltaPct > 0 : deltaPct < 0;
+    if (isPositive) return { label: `${Math.abs(deltaPct)}% лучше`, direction: "up" };
+    return { label: `${Math.abs(deltaPct)}% хуже`, direction: "down" };
+  }
+
+  const incomingTrend = metricTrend(incomingLast7, incomingPrev7, true);
+  const bookedTrend = metricTrend(bookedLast7, bookedPrev7, true);
+  const lostTrend = metricTrend(lostLast7, lostPrev7, false);
+  const responseTrend = metricTrend(avgRespLast7, avgRespPrev7, false);
+  const conversionTrend = metricTrend(bookedLast7, bookedPrev7, true);
+
   const kpis = useMemo(
     () => [
-      { label: "Входящие лиды", value: `${incomingLeads}`, note: hasLiveData ? "Данные из подключенного сервиса" : "Подключите сервис, чтобы увидеть статистику" },
-      { label: "Квалифицировано", value: `${qualifiedLeads}`, note: incomingLeads > 0 ? `${Math.round((qualifiedLeads / incomingLeads) * 100)}% от входящих` : "—" },
-      { label: "Записано", value: `${bookedLeads}`, note: incomingLeads > 0 ? `Конверсия в запись ${conversionPercent}%` : "—" },
-      { label: "Потеряно", value: `${lostLeads}`, note: incomingLeads > 0 ? `${Math.round((lostLeads / incomingLeads) * 100)}% от входящих` : "—" },
-      { label: "Среднее время ответа", value: averageResponse > 0 ? `${averageResponse} сек` : "—", note: averageResponse > 0 ? `Худшее значение ${worstResponse} сек` : "Нет данных responseSeconds" },
-      { label: "Конверсия", value: incomingLeads > 0 ? `${conversionPercent}%` : "—", note: hasLiveData ? "Считается по вашим событиям" : "Добавьте события, чтобы рассчитать конверсию" }
+      {
+        label: "Новые обращения",
+        value: `${incomingLeads}`,
+        note: hasLiveData ? "Сколько людей написали вам" : "Подключите источник данных",
+        hint: "Все входящие сообщения от клиентов.",
+        trend: incomingTrend.label,
+        direction: incomingTrend.direction,
+        tone: "neutral" as const,
+        strength: Math.min(100, Math.max(8, incomingLeads * 6))
+      },
+      {
+        label: "Поняли запрос",
+        value: `${qualifiedLeads}`,
+        note: incomingLeads > 0 ? `${Math.round((qualifiedLeads / incomingLeads) * 100)}% от всех обращений` : "—",
+        hint: "Клиенты, с которыми дошли до предметного обсуждения.",
+        trend: incomingLeads > 0 ? `${Math.round((qualifiedLeads / incomingLeads) * 100)}% от всех` : "—",
+        direction: "up" as const,
+        tone: "neutral" as const,
+        strength: incomingLeads > 0 ? Math.round((qualifiedLeads / incomingLeads) * 100) : 0
+      },
+      {
+        label: "Купили / записались",
+        value: `${bookedLeads}`,
+        note: incomingLeads > 0 ? `${conversionPercent}% от всех обращений` : "—",
+        hint: "Клиенты, которые дошли до оплаты или подтвержденной записи.",
+        trend: bookedTrend.label,
+        direction: bookedTrend.direction,
+        tone: "good" as const,
+        strength: incomingLeads > 0 ? Math.round((bookedLeads / incomingLeads) * 100) : 0
+      },
+      {
+        label: "Ушли без покупки",
+        value: `${lostLeads}`,
+        note: incomingLeads > 0 ? `${Math.round((lostLeads / incomingLeads) * 100)}% от всех обращений` : "—",
+        hint: "Клиенты, которые не дошли до покупки.",
+        trend: lostTrend.label,
+        direction: lostTrend.direction,
+        tone: "bad" as const,
+        strength: incomingLeads > 0 ? Math.round((lostLeads / incomingLeads) * 100) : 0
+      },
+      {
+        label: "Как быстро отвечаем",
+        value: averageResponse > 0 ? `${averageResponse} сек` : "—",
+        note: averageResponse > 0 ? `Самый долгий ответ: ${worstResponse} сек` : "Нет данных по времени ответа",
+        hint: "Среднее время между сообщением клиента и вашим ответом.",
+        trend: responseTrend.label,
+        direction: responseTrend.direction,
+        tone: averageResponse > 90 ? ("bad" as const) : ("good" as const),
+        strength: averageResponse > 0 ? Math.max(10, 100 - Math.min(100, averageResponse)) : 0
+      },
+      {
+        label: "Сколько купили",
+        value: incomingLeads > 0 ? `${conversionPercent}%` : "—",
+        note: hasLiveData ? "Из всех, кто написал" : "Появится после первых обращений",
+        hint: "Доля клиентов, которые купили или записались.",
+        trend: conversionTrend.label,
+        direction: conversionTrend.direction,
+        tone: conversionPercent >= 30 ? ("good" as const) : ("neutral" as const),
+        strength: Math.round(conversionPercent)
+      }
     ],
-    [incomingLeads, qualifiedLeads, bookedLeads, lostLeads, averageResponse, worstResponse, conversionPercent, hasLiveData]
+    [
+      incomingLeads,
+      qualifiedLeads,
+      bookedLeads,
+      lostLeads,
+      averageResponse,
+      worstResponse,
+      conversionPercent,
+      hasLiveData,
+      incomingTrend.label,
+      incomingTrend.direction,
+      bookedTrend.label,
+      bookedTrend.direction,
+      lostTrend.label,
+      lostTrend.direction,
+      responseTrend.label,
+      responseTrend.direction,
+      conversionTrend.label,
+      conversionTrend.direction
+    ]
   );
 
   const currentPlanLabel =
@@ -1811,13 +2054,58 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
   const conversionLostPercent = conversionTotal > 0 ? Math.round((lostLeads / conversionTotal) * 100) : 0;
 
   const analyticsKpisLive = [
-    { label: "Всего входящих", value: `${incomingLeads}`, note: "По подключенному сервису" },
-    { label: "Квалифицировано", value: `${qualifiedLeads}`, note: incomingLeads > 0 ? `${Math.round((qualifiedLeads / incomingLeads) * 100)}% от входящих` : "—" },
-    { label: "Записано", value: `${bookedLeads}`, note: qualifiedLeads > 0 ? `${Math.round((bookedLeads / qualifiedLeads) * 100)}% от квалифицированных` : "—" },
-    { label: "Потеряно", value: `${lostLeads}`, note: incomingLeads > 0 ? `${Math.round((lostLeads / incomingLeads) * 100)}% от входящих` : "—" },
-    { label: "Среднее время ответа", value: averageResponse > 0 ? `${averageResponse} сек` : "—", note: averageResponse > 0 ? `Худшее ${worstResponse} сек` : "Нет данных" },
-    { label: "Общая конверсия", value: incomingLeads > 0 ? `${conversionPercent}%` : "—", note: "В запись от всех входящих" }
-  ];
+    { label: "Сколько написали", value: `${incomingLeads}`, note: "Все новые обращения", hint: "Сумма входящих обращений за период." },
+    {
+      label: "В диалоге",
+      value: `${qualifiedLeads}`,
+      note: incomingLeads > 0 ? `${Math.round((qualifiedLeads / incomingLeads) * 100)}% от обращений` : "—",
+      hint: "Люди, с которыми уже идет предметный диалог."
+    },
+    {
+      label: "Купили / записались",
+      value: `${bookedLeads}`,
+      note: qualifiedLeads > 0 ? `${Math.round((bookedLeads / qualifiedLeads) * 100)}% от тех, кто в диалоге` : "—",
+      hint: "Фактические продажи и записи."
+    },
+    {
+      label: "Ушли без покупки",
+      value: `${lostLeads}`,
+      note: incomingLeads > 0 ? `${Math.round((lostLeads / incomingLeads) * 100)}% от обращений` : "—",
+      hint: "Клиенты, которых не удалось довести до покупки."
+    },
+    {
+      label: "Как быстро отвечаем",
+      value: averageResponse > 0 ? `${averageResponse} сек` : "—",
+      note: averageResponse > 0 ? `Самый долгий ответ: ${worstResponse} сек` : "Нет данных",
+      hint: "Среднее время ответа на сообщение клиента."
+    },
+    {
+      label: "Сколько купили",
+      value: incomingLeads > 0 ? `${conversionPercent}%` : "—",
+      note: "Доля продаж от всех обращений",
+      hint: "Главный показатель: сколько из написавших дошли до покупки."
+    }
+  ].map((item, idx) => {
+    const preset = [
+      { trend: incomingTrend.label, direction: incomingTrend.direction, tone: "neutral", strength: Math.min(100, Math.max(8, incomingLeads * 6)) },
+      {
+        trend: incomingLeads > 0 ? `${Math.round((qualifiedLeads / incomingLeads) * 100)}% от всех` : "—",
+        direction: "up",
+        tone: "neutral",
+        strength: incomingLeads > 0 ? Math.round((qualifiedLeads / incomingLeads) * 100) : 0
+      },
+      { trend: bookedTrend.label, direction: bookedTrend.direction, tone: "good", strength: incomingLeads > 0 ? Math.round((bookedLeads / incomingLeads) * 100) : 0 },
+      { trend: lostTrend.label, direction: lostTrend.direction, tone: "bad", strength: incomingLeads > 0 ? Math.round((lostLeads / incomingLeads) * 100) : 0 },
+      {
+        trend: responseTrend.label,
+        direction: responseTrend.direction,
+        tone: averageResponse > 90 ? "bad" : "good",
+        strength: averageResponse > 0 ? Math.max(10, 100 - Math.min(100, averageResponse)) : 0
+      },
+      { trend: conversionTrend.label, direction: conversionTrend.direction, tone: conversionPercent >= 30 ? "good" : "neutral", strength: Math.round(conversionPercent) }
+    ][idx];
+    return { ...item, ...preset };
+  });
 
   const analyticsTrendDataLive = useMemo(() => {
     const days = Array.from({ length: 10 }).map((_, index) => {
@@ -1834,10 +2122,11 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
   }, [serviceEvents]);
 
   const analyticsFunnelDataLive = [
-    { stage: "Входящие", value: incomingLeads },
-    { stage: "Ответ получен", value: liveLeadRecords.filter((lead) => serviceEvents.some((event) => event.leadId === lead.id && event.direction === "outbound")).length },
-    { stage: "Квалифицировано", value: qualifiedLeads },
-    { stage: "Доведено до записи", value: bookedLeads },
+    { stage: "Новый", value: liveLeadRecords.filter((lead) => lead.stage === "новый").length },
+    { stage: "Заинтересован", value: liveLeadRecords.filter((lead) => lead.stage === "заинтересован").length },
+    { stage: "Спросил цену", value: liveLeadRecords.filter((lead) => lead.stage === "спросил цену").length },
+    { stage: "Думает", value: liveLeadRecords.filter((lead) => lead.stage === "думает").length },
+    { stage: "Записан", value: bookedLeads },
     { stage: "Потеряно", value: lostLeads }
   ];
 
@@ -1851,7 +2140,9 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
     return channels.map((channel) => {
       const channelLeads = liveLeadRecords.filter((lead) => lead.channel === channel);
       const incoming = channelLeads.length;
-      const qualified = channelLeads.filter((lead) => lead.stage === "квалифицирован" || lead.stage === "ожидает записи" || lead.stage === "записан" || lead.stage === "передан менеджеру").length;
+      const qualified = channelLeads.filter(
+        (lead) => lead.stage === "заинтересован" || lead.stage === "спросил цену" || lead.stage === "думает" || lead.stage === "записан"
+      ).length;
       const booked = channelLeads.filter((lead) => lead.stage === "записан").length;
       const conversion = incoming > 0 ? Number(((booked / incoming) * 100).toFixed(1)) : 0;
       return { channel, incoming, qualified, booked, conversion };
@@ -1885,7 +2176,9 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
       ? `Среднее время ответа ${averageResponse} сек. Цель: удерживать ниже 60 секунд.`
       : "Добавьте поле responseSeconds в событиях для расчёта SLA.",
     `Наиболее конверсионный канал: ${
-      analyticsChannelDataLive.sort((a, b) => b.conversion - a.conversion)[0]?.channel || "—"
+      analyticsChannelDataLive.some((item) => item.incoming > 0)
+        ? [...analyticsChannelDataLive].sort((a, b) => b.conversion - a.conversion)[0]?.channel || "—"
+        : "—"
     }.`
   ];
 
@@ -1939,6 +2232,217 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
   };
 
   const lostRevenueSnapshot = lostRevenueByPeriodLive[lostRevenuePeriod];
+  const earnedRevenue = useMemo(
+    () =>
+      liveLeadRecords
+        .filter((lead) => lead.stage === "записан")
+        .reduce((sum, lead) => sum + lead.estimatedRevenue, 0),
+    [liveLeadRecords]
+  );
+  const lostRevenue = useMemo(
+    () =>
+      liveLeadRecords
+        .filter((lead) => lead.stage === "потерян")
+        .reduce((sum, lead) => sum + lead.estimatedRevenue, 0),
+    [liveLeadRecords]
+  );
+  const potentialRevenue = earnedRevenue + lostRevenue;
+  const lostRevenueShare = potentialRevenue > 0 ? Math.round((lostRevenue / potentialRevenue) * 100) : 0;
+  const moneyPriorityMessage =
+    lostRevenue > 0
+      ? `Вы теряете ${formatRub(lostRevenue)} (${lostRevenueShare}% от потенциальной выручки).`
+      : earnedRevenue > 0
+        ? "Потерь в деньгах не зафиксировано. Фокус: удержать текущую конверсию."
+        : "Подключите данные, чтобы увидеть сколько денег вы уже зарабатываете и теряете.";
+  const firstScreenInsight = useMemo(() => {
+    if (!hasLiveData || incomingLeads <= 0) {
+      return "Подключите Telegram или импортируйте JSON: после этого вы сразу увидите, где теряются деньги.";
+    }
+    return `У вас ${incomingLeads} лидов → ${lostLeads} потеряно → недополучено ${formatRub(lostRevenue)}.`;
+  }, [hasLiveData, incomingLeads, lostLeads, lostRevenue]);
+  const firstScreenSteps = useMemo(
+    () => [
+      {
+        id: "connect",
+        title: "1. Подключите источник",
+        description: "Подключите Telegram или API, чтобы видеть реальные обращения.",
+        done: hasLiveData || Boolean(serviceConnection.connectedAt || serviceConnection.botToken),
+        actionLabel: "Подключить",
+        action: () => handleNavChange("Настройки")
+      },
+      {
+        id: "checkLeads",
+        title: "2. Разберите лиды",
+        description: incomingLeads > 0 ? `Сейчас в работе ${incomingLeads} обращений.` : "После подключения тут появятся первые лиды.",
+        done: incomingLeads > 0,
+        actionLabel: "Открыть лиды",
+        action: () => handleNavChange("Лиды")
+      },
+      {
+        id: "recover",
+        title: "3. Верните потери",
+        description: lostLeads > 0 ? `Уже потеряно ${lostLeads} лидов на сумму ${formatRub(lostRevenue)}.` : "Проверьте блок потерь, чтобы не упускать выручку.",
+        done: false,
+        actionLabel: "Посмотреть потери",
+        action: () => handleNavChange("Потерянные")
+      }
+    ],
+    [hasLiveData, incomingLeads, lostLeads, lostRevenue, serviceConnection.connectedAt, serviceConnection.botToken]
+  );
+  const aiRecommendationsLive = useMemo<AiRecommendation[]>(() => {
+    const uniqueLeadIds = new Set(liveLeadRecords.map((lead) => lead.id));
+    const totalLeads = uniqueLeadIds.size;
+    const lostRate = totalLeads > 0 ? lostLeads / totalLeads : 0;
+    const staleLeads = liveLeadRecords.filter(
+      (lead) =>
+        (lead.stage === "заинтересован" || lead.stage === "спросил цену" || lead.stage === "думает") &&
+        lead.lastActivityMinutes > 24 * 60
+    ).length;
+    const priceIntentLeadIds = new Set(
+      serviceEvents
+        .filter((event) => event.direction === "inbound" && hasPriceIntent(event.text))
+        .map((event) => event.leadId)
+    );
+    const priceIntentLost = liveLeadRecords.filter((lead) => lead.stage === "потерян" && priceIntentLeadIds.has(lead.id)).length;
+    const channelsWithData = analyticsChannelDataLive.filter((item) => item.incoming >= 3);
+    const sortedChannels = [...channelsWithData].sort((a, b) => b.conversion - a.conversion);
+    const bestChannel = sortedChannels[0];
+    const weakestChannel = sortedChannels[sortedChannels.length - 1];
+
+    const recommendations: AiRecommendation[] = [];
+
+    if (priceIntentLeadIds.size > 0) {
+      const priority: RecommendationPriority = priceIntentLost >= 3 || priceIntentLost >= Math.ceil(priceIntentLeadIds.size * 0.35) ? "Критично" : "Высокий";
+      recommendations.push({
+        id: "live-price-script",
+        title: "Потери после вопроса о цене",
+        description: `Лидов с запросом цены: ${priceIntentLeadIds.size}. Потеряно на этом паттерне: ${priceIntentLost}.`,
+        priority,
+        expectedImpact: "+4-9 п.п. к конверсии в запись",
+        actionLabel: "Обновить скрипт цены",
+        area: "Скрипт ответа на цену",
+        actionSteps: [
+          "В ответе на цену давайте диапазон и 1 аргумент ценности.",
+          "После цены предлагайте 2 ближайших слота сразу.",
+          "Добавьте follow-up через 2-4 часа, если клиент замолчал."
+        ]
+      });
+    }
+
+    if (staleLeads > 0) {
+      recommendations.push({
+        id: "live-follow-up",
+        title: "Лиды без повторного касания",
+        description: `${staleLeads} лидов находятся в стадиях «заинтересован/спросил цену/думает» и неактивны более 24 часов.`,
+        priority: staleLeads >= 5 ? "Критично" : "Высокий",
+        expectedImpact: `До ${formatRub(Math.round(staleLeads * 1800))} возврата выручки`,
+        actionLabel: "Запустить follow-up",
+        area: "Recovery-цепочка",
+        actionSteps: [
+          "Сегментируйте лидов по давности последней активности (24ч+).",
+          "Отправьте короткий follow-up с ограниченным по времени оффером.",
+          "Если нет ответа, переведите лид в повторную цепочку на 48 часов."
+        ]
+      });
+    }
+
+    if (averageResponse > 90) {
+      recommendations.push({
+        id: "live-sla",
+        title: "Просадка SLA первого ответа",
+        description: `Среднее время ответа ${averageResponse} сек, худшее ${worstResponse} сек. Это повышает риск потери лида в начале диалога.`,
+        priority: averageResponse > 180 ? "Критично" : "Высокий",
+        expectedImpact: "-10-20% потерь на первом касании",
+        actionLabel: "Ускорить ответ",
+        area: "Операционная скорость",
+        actionSteps: [
+          "Включите автоответ на первый входящий контакт.",
+          "Эскалируйте диалоги без ответа дольше 60 секунд.",
+          "Контролируйте SLA ежедневно в блоке аналитики."
+        ]
+      });
+    }
+
+    if (bestChannel && weakestChannel && bestChannel.channel !== weakestChannel.channel && bestChannel.conversion - weakestChannel.conversion >= 8) {
+      recommendations.push({
+        id: "live-channel-shift",
+        title: "Неравномерная эффективность каналов",
+        description: `${bestChannel.channel}: ${bestChannel.conversion}% конверсии, ${weakestChannel.channel}: ${weakestChannel.conversion}%.`,
+        priority: "Средний",
+        expectedImpact: "+2-6 п.п. общей конверсии",
+        actionLabel: "Перераспределить трафик",
+        area: "Канальная стратегия",
+        actionSteps: [
+          `Увеличьте долю лидов в ${bestChannel.channel} на 15-20%.`,
+          `Проверьте скрипты и скорость ответа в ${weakestChannel.channel}.`,
+          "Сравните конверсию каналов через 7 дней."
+        ]
+      });
+    }
+
+    if (lostRate >= 0.3) {
+      recommendations.push({
+        id: "live-funnel-fix",
+        title: "Высокая доля потерь воронки",
+        description: `Потеряно ${lostLeads} из ${totalLeads} лидов (${Math.round(lostRate * 100)}%). Требуется приоритизация этапов до записи.`,
+        priority: lostRate >= 0.45 ? "Критично" : "Высокий",
+        expectedImpact: `До ${formatRub(Math.round(lostRevenueSnapshot.estimatedRevenue * 0.25))} сохраненной выручки`,
+        actionLabel: "Оптимизировать воронку",
+        area: "Воронка лидов",
+        actionSteps: [
+          "Сократите путь от интереса к предложению слота.",
+          "Для стадии «думает» добавьте автоматическое повторное касание.",
+          "Ежедневно разбирайте топ-3 причины потери."
+        ]
+      });
+    }
+
+    const weighted = recommendations
+      .map((item) => ({
+        ...item,
+        weight: item.priority === "Критично" ? 3 : item.priority === "Высокий" ? 2 : 1
+      }))
+      .sort((a, b) => b.weight - a.weight)
+      .slice(0, 6)
+      .map(({ weight, ...item }) => item);
+
+    if (weighted.length > 0) return weighted;
+    return [
+      {
+        id: "live-bootstrap",
+        title: "Недостаточно данных для точных рекомендаций",
+        description: "Подключите Telegram или импортируйте события, чтобы AI сформировал приоритеты по конверсии и потерям.",
+        priority: "Средний",
+        expectedImpact: "После подключения появятся персональные рекомендации",
+        actionLabel: "Подключить источник",
+        area: "Онбординг данных",
+        actionSteps: [
+          "Перейдите в Настройки и добавьте Telegram Bot Token.",
+          "Запустите синхронизацию или импортируйте JSON событий.",
+          "Откройте Аналитику после первой загрузки лидов."
+        ]
+      }
+    ];
+  }, [
+    liveLeadRecords,
+    lostLeads,
+    serviceEvents,
+    analyticsChannelDataLive,
+    averageResponse,
+    worstResponse,
+    lostRevenueSnapshot.estimatedRevenue
+  ]);
+
+  const aiPriorityActionsLive = useMemo(
+    () =>
+      aiRecommendationsLive.slice(0, 3).map((item) => ({
+        title: item.title,
+        detail: item.actionSteps[0] || item.description,
+        action: item.actionLabel
+      })),
+    [aiRecommendationsLive]
+  );
+
   const selectedSitesTemplate = sitesTemplates.find((item) => item.id === sitesTemplateId) ?? sitesTemplates[0];
   const enabledSitesSectionsCount = Object.values(sitesSections).filter(Boolean).length;
   const orderedSitesSectionLibrary = sitesSectionOrder
@@ -1964,7 +2468,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
   );
   const overviewLeadDays = analyticsTrendDataLive.map((item) => item.day);
   const overviewFunnel = [
-    { label: "Входящие обращения", value: incomingLeads, width: 100, color: "bg-cyan-500" },
+    { label: "Входящие обращения", value: incomingLeads, width: incomingLeads > 0 ? 100 : 0, color: "bg-cyan-500" },
     {
       label: "Квалифицировано",
       value: qualifiedLeads,
@@ -2003,6 +2507,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
 
   const selectedConversation =
     filteredConversations.find((item) => item.id === selectedConversationId) ?? filteredConversations[0] ?? null;
+  const selectedConversationLead = selectedConversation ? liveLeadRecords.find((item) => item.id === selectedConversation.id) ?? null : null;
 
   const statusCounts = useMemo(
     () =>
@@ -2081,10 +2586,12 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
     switch (status) {
       case "новый":
         return "bg-cyan-50 text-cyan-700 border-cyan-200";
-      case "квалифицирован":
+      case "заинтересован":
         return "bg-indigo-50 text-indigo-700 border-indigo-200";
-      case "ожидает записи":
+      case "спросил цену":
         return "bg-amber-50 text-amber-700 border-amber-200";
+      case "думает":
+        return "bg-blue-50 text-blue-700 border-blue-200";
       case "записан":
         return "bg-emerald-50 text-emerald-700 border-emerald-200";
       case "потерян":
@@ -2098,16 +2605,16 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
     switch (stage) {
       case "новый":
         return "bg-cyan-50 text-cyan-700 border-cyan-200";
-      case "квалифицирован":
+      case "заинтересован":
         return "bg-indigo-50 text-indigo-700 border-indigo-200";
-      case "ожидает записи":
+      case "спросил цену":
         return "bg-amber-50 text-amber-700 border-amber-200";
+      case "думает":
+        return "bg-blue-50 text-blue-700 border-blue-200";
       case "записан":
         return "bg-emerald-50 text-emerald-700 border-emerald-200";
       case "потерян":
         return "bg-rose-50 text-rose-700 border-rose-200";
-      default:
-        return "bg-violet-50 text-violet-700 border-violet-200";
     }
   }
 
@@ -2676,6 +3183,73 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
   }, [telegramProfiles]);
 
   useEffect(() => {
+    saveTelegramErrorLogs(telegramErrorLogs);
+  }, [telegramErrorLogs]);
+
+  useEffect(() => {
+    saveNewUserOnboardingState(newUserOnboarding);
+  }, [newUserOnboarding]);
+
+  useEffect(() => {
+    setNewUserOnboarding((prev) => {
+      if (prev.steps.firstLaunch) return prev;
+      return {
+        ...prev,
+        steps: { ...prev.steps, firstLaunch: true }
+      };
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!serviceConnection.botToken.trim()) return;
+    setNewUserOnboarding((prev) => {
+      if (prev.steps.telegramConnected) return prev;
+      return {
+        ...prev,
+        steps: { ...prev.steps, telegramConnected: true }
+      };
+    });
+  }, [serviceConnection.botToken]);
+
+  useEffect(() => {
+    if (serviceEvents.length === 0) return;
+    setNewUserOnboarding((prev) => {
+      if (prev.steps.firstLead) return prev;
+      return {
+        ...prev,
+        steps: { ...prev.steps, firstLead: true }
+      };
+    });
+  }, [serviceEvents.length]);
+
+  useEffect(() => {
+    if (!hasLiveData || (activeNav !== "Обзор" && activeNav !== "Аналитика")) return;
+    setNewUserOnboarding((prev) => {
+      if (prev.steps.valueShown) return prev;
+      return {
+        ...prev,
+        steps: { ...prev.steps, valueShown: true }
+      };
+    });
+  }, [activeNav, hasLiveData]);
+
+  useEffect(() => {
+    setNewUserOnboarding((prev) => {
+      if (prev.completedAt) return prev;
+      const done =
+        prev.steps.firstLaunch &&
+        prev.steps.telegramConnected &&
+        prev.steps.firstLead &&
+        prev.steps.valueShown;
+      if (!done) return prev;
+      return {
+        ...prev,
+        completedAt: new Date().toISOString()
+      };
+    });
+  }, [newUserOnboarding.steps.firstLaunch, newUserOnboarding.steps.telegramConnected, newUserOnboarding.steps.firstLead, newUserOnboarding.steps.valueShown]);
+
+  useEffect(() => {
     saveBusinessBrief(businessBrief);
   }, [businessBrief]);
 
@@ -2729,6 +3303,11 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
   }, [selectedConversationId]);
 
   useEffect(() => {
+    setDialogAnalysis(null);
+    setDialogAnalysisError(null);
+  }, [selectedConversationId]);
+
+  useEffect(() => {
     if (standaloneSites && activeNav !== "CFlow Sites") {
       setActiveNav("CFlow Sites");
     }
@@ -2737,11 +3316,243 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
   const selectedCheckoutPlan = planDefinitions.find((plan) => plan.id === checkoutPlanId) ?? null;
   const navNeedsLiveData = ["Обзор", "Аналитика", "Потерянные", "AI рекомендации"].includes(activeNav);
   const showSettingsSetupWizard = activeNav === "Настройки" && !standaloneSites && !subscription.onboardingCompleted;
+  const onboardingProgressCount = [
+    newUserOnboarding.steps.firstLaunch,
+    newUserOnboarding.steps.telegramConnected,
+    newUserOnboarding.steps.firstLead,
+    newUserOnboarding.steps.valueShown
+  ].filter(Boolean).length;
+  const showNewUserOnboardingCard =
+    !standaloneSites &&
+    !newUserOnboarding.dismissed &&
+    !newUserOnboarding.completedAt;
   const currentSettingsQuestion = SETTINGS_QUESTIONS[settingsQuestionIndex];
   const answeredSettingsQuestions = SETTINGS_QUESTIONS.filter((item) => settingsBusinessAnswers[item.id]?.trim()).length;
 
   function triggerNotice(message: string): void {
     setUiNotice(message);
+  }
+
+  function dismissNewUserOnboarding(): void {
+    setNewUserOnboarding((prev) => ({ ...prev, dismissed: true }));
+  }
+
+  function pushTelegramError(scope: TelegramErrorLogEntry["scope"], message: string, details?: string): void {
+    const next: TelegramErrorLogEntry = {
+      id: `tglog-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+      at: new Date().toISOString(),
+      scope,
+      message,
+      details: details?.slice(0, 500)
+    };
+    setTelegramErrorLogs((prev) => [next, ...prev].slice(0, 100));
+  }
+
+  function isRetryableHttpStatus(status: number): boolean {
+    return status === 408 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
+  }
+
+  async function fetchJsonWithRetry(
+    scope: TelegramErrorLogEntry["scope"],
+    url: string,
+    options: RequestInit,
+    attempts = 3,
+    timeoutMs = 10000
+  ): Promise<Response> {
+    let lastError: Error | null = null;
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      let timer: number | null = null;
+      try {
+        const controller = new AbortController();
+        timer = window.setTimeout(() => controller.abort(), timeoutMs);
+        const response = await fetch(url, { ...options, signal: controller.signal });
+        if (!isRetryableHttpStatus(response.status) || attempt === attempts) {
+          return response;
+        }
+        pushTelegramError(scope, `retry_http_${response.status}`, `url=${url}; attempt=${attempt}`);
+      } catch (error: any) {
+        lastError = error instanceof Error ? error : new Error(String(error?.message || error));
+        const reason = error?.name === "AbortError" ? "retry_timeout" : "retry_network_error";
+        pushTelegramError(scope, reason, `url=${url}; attempt=${attempt}; error=${lastError.message}`);
+        if (attempt === attempts) throw lastError;
+      } finally {
+        if (timer !== null) window.clearTimeout(timer);
+      }
+      const delay = 250 * 2 ** (attempt - 1);
+      await new Promise((resolve) => window.setTimeout(resolve, delay));
+    }
+    throw lastError ?? new Error("retry_failed");
+  }
+
+  async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs = 10000): Promise<Response> {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, { ...options, signal: controller.signal });
+    } finally {
+      window.clearTimeout(timer);
+    }
+  }
+
+  function handleLeadStageTransition(lead: LeadRecord, targetStage?: LeadStage): void {
+    const nextStage = targetStage || nextLeadStage(lead.stage);
+    if (!nextStage) {
+      triggerNotice(`Для лида ${lead.name} стадия уже финальная.`);
+      return;
+    }
+    const now = new Date().toISOString();
+    const textByStage: Record<LeadStage, string> = {
+      новый: "Лид создан в воронке.",
+      заинтересован: "Лид проявил интерес и продолжил диалог.",
+      "спросил цену": "Клиент запросил цену и условия.",
+      думает: "Клиент думает, запущен follow-up.",
+      записан: "Запись подтверждена.",
+      потерян: "Лид потерян."
+    };
+    const bookingByStage: Record<LeadStage, BookingState> = {
+      новый: "не начата",
+      заинтересован: "в процессе",
+      "спросил цену": "в процессе",
+      думает: "в процессе",
+      записан: "подтверждена",
+      потерян: "отменена"
+    };
+
+    setServiceEvents((prev) => [
+      {
+        id: `stage-${lead.id}-${Date.now().toString(36)}`,
+        leadId: lead.id,
+        clientName: lead.name,
+        channel: lead.channel,
+        direction: "outbound",
+        text: textByStage[nextStage],
+        timestamp: now,
+        status: nextStage,
+        stage: nextStage,
+        bookingState: bookingByStage[nextStage]
+      },
+      ...prev
+    ]);
+    triggerNotice(`Лид ${lead.name}: ${lead.stage} → ${nextStage}`);
+  }
+
+  function localDialogLossAnalysis(conversation: InboxConversation): DialogLossAnalysis {
+    const text = `${conversation.summary}\n${conversation.timeline.map((item) => item.text).join("\n")}`.toLowerCase();
+    const priceIdx = conversation.timeline.findIndex((item) => item.role === "client" && hasPriceIntent(item.text));
+    const pauseIdx = conversation.timeline.findIndex(
+      (item) => item.role === "client" && /(подума|позже|потом|сравню|напишу позже|не сейчас)/i.test(item.text || "")
+    );
+    const lastClientIdx = [...conversation.timeline]
+      .map((item, index) => ({ item, index }))
+      .reverse()
+      .find((entry) => entry.item.role === "client")?.index;
+    const askedPrice = hasPriceIntent(text);
+    const thinkingCue = /(подума|позже|потом|сравню|напишу позже|не сейчас)/i.test(text);
+    const noResponseAfterOffer =
+      conversation.timeline.length >= 2 &&
+      /слот|время|запис/i.test(conversation.timeline[conversation.timeline.length - 1]?.text || "");
+
+    if (askedPrice) {
+      return {
+        lostAtStage: "спросил цену",
+        reason: "Лид запросил цену, но не получил короткий диапазон + ценность + мягкий переход к выбору слота.",
+        improvedReply:
+          "Стоимость обычно 3 500–5 500 ₽, зависит от задачи. Следующий шаг: предложить вам 2 ближайших слота, чтобы зафиксировать точную цену?",
+        confidence: 0.78,
+        lostAtMessageIndex: priceIdx >= 0 ? priceIdx : lastClientIdx,
+        lostAtMessageText:
+          priceIdx >= 0
+            ? conversation.timeline[priceIdx]?.text?.slice(0, 220)
+            : typeof lastClientIdx === "number"
+              ? conversation.timeline[lastClientIdx]?.text?.slice(0, 220)
+              : undefined,
+        mode: "fallback"
+      };
+    }
+    if (thinkingCue || noResponseAfterOffer) {
+      return {
+        lostAtStage: "думает",
+        reason: "Клиент ушел в паузу без дедлайна и без понятного follow-up действия.",
+        improvedReply:
+          "Понимаю, что нужно время сравнить. Следующий шаг: закрепить за вами 2 окна на сегодня до 20:00, чтобы вы спокойно выбрали?",
+        confidence: 0.72,
+        lostAtMessageIndex: pauseIdx >= 0 ? pauseIdx : lastClientIdx,
+        lostAtMessageText:
+          pauseIdx >= 0
+            ? conversation.timeline[pauseIdx]?.text?.slice(0, 220)
+            : typeof lastClientIdx === "number"
+              ? conversation.timeline[lastClientIdx]?.text?.slice(0, 220)
+              : undefined,
+        mode: "fallback"
+      };
+    }
+    return {
+      lostAtStage: "заинтересован",
+      reason: "Интерес был, но не хватило квалификации и четкого CTA к записи.",
+      improvedReply:
+        "Чтобы предложить лучший вариант, уточню 2 детали и сразу предложу время. Следующий шаг: какая услуга нужна и когда вам удобно?",
+      confidence: 0.66,
+      lostAtMessageIndex: lastClientIdx,
+      lostAtMessageText: typeof lastClientIdx === "number" ? conversation.timeline[lastClientIdx]?.text?.slice(0, 220) : undefined,
+      mode: "fallback"
+    };
+  }
+
+  async function analyzeSelectedDialog(): Promise<void> {
+    if (!selectedConversation || selectedConversation.status !== "потерян") {
+      setDialogAnalysisError("AI-анализ доступен для лидов со статусом «потерян».");
+      return;
+    }
+    setDialogAnalysisLoading(true);
+    setDialogAnalysisError(null);
+    try {
+      const response = await fetchWithTimeout("/api/openrouter/dialog-analysis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          conversation: {
+            id: selectedConversation.id,
+            client: selectedConversation.client,
+            status: selectedConversation.status,
+            summary: selectedConversation.summary,
+            intent: selectedConversation.intent,
+            timeline: selectedConversation.timeline
+          }
+        })
+      });
+      const data = (await response.json()) as Partial<DialogLossAnalysis> & { error?: string };
+      if (!response.ok) throw new Error(data.error || "dialog_analysis_failed");
+      const fallback = localDialogLossAnalysis(selectedConversation);
+      setDialogAnalysis({
+        lostAtStage:
+          data.lostAtStage === "новый" ||
+          data.lostAtStage === "заинтересован" ||
+          data.lostAtStage === "спросил цену" ||
+          data.lostAtStage === "думает" ||
+          data.lostAtStage === "записан" ||
+          data.lostAtStage === "потерян"
+            ? data.lostAtStage
+            : fallback.lostAtStage,
+        reason: typeof data.reason === "string" && data.reason.trim() ? data.reason.trim() : fallback.reason,
+        improvedReply:
+          typeof data.improvedReply === "string" && data.improvedReply.trim() ? data.improvedReply.trim() : fallback.improvedReply,
+        confidence: typeof data.confidence === "number" ? data.confidence : fallback.confidence,
+        lostAtMessageIndex:
+          typeof data.lostAtMessageIndex === "number" && Number.isInteger(data.lostAtMessageIndex) && data.lostAtMessageIndex >= 0
+            ? data.lostAtMessageIndex
+            : fallback.lostAtMessageIndex,
+        lostAtMessageText:
+          typeof data.lostAtMessageText === "string" && data.lostAtMessageText.trim()
+            ? data.lostAtMessageText.trim().slice(0, 220)
+            : fallback.lostAtMessageText,
+        mode: data.mode === "openrouter" ? "openrouter" : "fallback"
+      });
+    } catch {
+      setDialogAnalysis(localDialogLossAnalysis(selectedConversation));
+      setDialogAnalysisError("OpenRouter недоступен, показан локальный AI-анализ.");
+    } finally {
+      setDialogAnalysisLoading(false);
+    }
   }
 
   async function importServiceEvents(file?: File): Promise<void> {
@@ -2765,17 +3576,22 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
     }
     setServiceSyncLoading(true);
     try {
-      const response = await fetch(serviceConnection.endpoint, {
+      const response = await fetchWithTimeout(serviceConnection.endpoint, {
         headers: serviceConnection.token ? { Authorization: `Bearer ${serviceConnection.token}` } : undefined
       });
       if (!response.ok) throw new Error("HTTP error");
-      const data = (await response.json()) as unknown;
+      const data = (await response.json().catch(() => null)) as unknown;
+      if (data === null) throw new Error("invalid_json");
       const events = parseServiceEvents(data);
       setServiceEvents(events);
       setServiceConnection((prev) => ({ ...prev, connectedAt: new Date().toISOString() }));
       triggerNotice(`Синхронизация завершена. Событий: ${events.length}.`);
-    } catch {
-      triggerNotice("Синхронизация не удалась. Используйте импорт JSON или проверьте endpoint/CORS.");
+    } catch (error: any) {
+      if (error?.name === "AbortError") {
+        triggerNotice("Сервис не ответил вовремя. Проверьте endpoint и повторите синхронизацию.");
+      } else {
+        triggerNotice("Синхронизация не удалась. Используйте импорт JSON или проверьте endpoint/CORS.");
+      }
     } finally {
       setServiceSyncLoading(false);
     }
@@ -2948,11 +3764,12 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
   async function syncTelegramBotEvents(): Promise<void> {
     if (!serviceConnection.botToken.trim()) {
       triggerNotice("Укажите Bot Token для Telegram.");
+      pushTelegramError("sync-flow", "bot_token_missing", "Bot token is empty in settings.");
       return;
     }
     setServiceSyncLoading(true);
     try {
-      const updatesResp = await fetch("/api/telegram/get-updates", {
+      const updatesResp = await fetchJsonWithRetry("get-updates", "/api/telegram/get-updates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -2973,6 +3790,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
         error?: string;
       };
       if (!updatesResp.ok) {
+        pushTelegramError("get-updates", "get_updates_failed", `status=${updatesResp.status}; error=${updatesData.error || "unknown"}`);
         throw new Error(updatesData.error || "Telegram sync failed");
       }
 
@@ -3011,8 +3829,8 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
           direction: "inbound",
           text: message.text,
           timestamp,
-          status: "новый",
-          stage: "новый",
+          status: hasPriceIntent(message.text) ? "спросил цену" : "новый",
+          stage: hasPriceIntent(message.text) ? "спросил цену" : "новый",
           bookingState: "не начата"
         });
 
@@ -3084,7 +3902,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
             }
 
             if (replyText) {
-              const sendResp = await fetch("/api/telegram/send-message", {
+              const sendResp = await fetchJsonWithRetry("send-message", "/api/telegram/send-message", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -3095,6 +3913,11 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
               });
               if (!sendResp.ok) {
                 const sendErr = (await sendResp.json().catch(() => ({}))) as { error?: string };
+                pushTelegramError(
+                  "send-message",
+                  "send_message_failed",
+                  `status=${sendResp.status}; leadId=${leadId}; error=${sendErr.error || "unknown"}`
+                );
                 throw new Error(sendErr.error || `Telegram send status ${sendResp.status}`);
               }
               inboundEvents.push({
@@ -3105,14 +3928,19 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                 direction: "outbound",
                 text: replyText,
                 timestamp: new Date().toISOString(),
-                status: "квалифицирован",
-                stage: "квалифицирован",
+                status: "заинтересован",
+                stage: "заинтересован",
                 bookingState: "в процессе"
               });
               autoRepliesCount += 1;
             }
-          } catch {
+          } catch (error: any) {
             replyErrorsCount += 1;
+            pushTelegramError(
+              "sync-flow",
+              "auto_reply_failed",
+              `leadId=${leadId}; updateId=${update.update_id}; error=${error?.message || "unknown"}`
+            );
             // Keep sync resilient even if one reply fails.
           }
         }
@@ -3137,6 +3965,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
         `Telegram синхронизирован. Новых событий: ${inboundEvents.length}.${extraInfo}${errorsInfo}`
       );
     } catch (error: any) {
+      pushTelegramError("sync-flow", "sync_failed", error?.message || "Ошибка синхронизации Telegram.");
       triggerNotice(error?.message || "Ошибка синхронизации Telegram.");
     } finally {
       setServiceSyncLoading(false);
@@ -3164,7 +3993,6 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
     }));
     setCheckoutPlanId(null);
     setCheckoutState("idle");
-    setOnboardingStep(1);
     triggerNotice("Пробный период активирован на 7 дней.");
     handleNavChange("Настройки");
   }
@@ -3172,10 +4000,6 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
   function openCheckout(planId: PlanDefinition["id"]): void {
     setCheckoutPlanId(planId);
     setCheckoutState("idle");
-    setCheckoutCardholder("Иван Петров");
-    setCheckoutCardNumber("4242 4242 4242 4242");
-    setCheckoutExpiry("12/29");
-    setCheckoutCvv("123");
     handleNavChange("Настройки");
   }
 
@@ -3191,7 +4015,6 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
         trialStartDate: null,
         onboardingCompleted: false
       }));
-      setOnboardingStep(1);
       triggerNotice("Оплата прошла успешно. Запустите онбординг.");
     }, 1300);
   }
@@ -3201,13 +4024,15 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
       question: item.question,
       answer: settingsBusinessAnswers[item.id] || ""
     })).filter((item) => item.answer.trim().length > 0);
+    const businessType = (settingsBusinessAnswers.q1 || serviceConnection.serviceName || "бизнес").trim();
+    const mainGoal = (settingsBusinessAnswers.q10 || "рост конверсии").trim();
     setSubscription((prev) => ({
       ...prev,
       onboardingCompleted: true,
       onboardingData: {
-        businessType: onboardingBusinessType,
-        channels: settingsChannels.length > 0 ? settingsChannels : onboardingChannels,
-        goals: onboardingGoals,
+        businessType,
+        channels: settingsChannels.length > 0 ? settingsChannels : ["Telegram"],
+        goals: [mainGoal],
         profileSummary: summaryOverride || settingsSummary || prev.onboardingData?.profileSummary || "",
         businessAnswers: answered
       }
@@ -3267,7 +4092,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
         question: item.question,
         answer: settingsBusinessAnswers[item.id] || ""
       }));
-      const response = await fetch("/api/openrouter/business-summary", {
+      const response = await fetchWithTimeout("/api/openrouter/business-summary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -3299,41 +4124,53 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
 
   return (
     <div
-      className={`app-shell min-h-screen text-slate-900 ${
+      className={`app-shell studio-ui premium-ui mobile-ux ${standaloneSites ? "premium-sites" : "premium-business"} min-h-screen text-slate-900 ${
         standaloneSites
           ? "bg-[radial-gradient(70%_80%_at_10%_10%,rgba(56,189,248,0.18),transparent_60%),radial-gradient(50%_60%_at_90%_0%,rgba(59,130,246,0.2),transparent_60%),#020617]"
-          : "bg-gradient-to-b from-slate-100 via-slate-50 to-slate-100"
+          : "bg-[radial-gradient(80%_80%_at_10%_0%,rgba(20,99,255,0.2),transparent_55%),radial-gradient(70%_80%_at_90%_0%,rgba(14,165,233,0.18),transparent_60%),#090909]"
       }`}
     >
       <div className="flex min-h-screen">
         {!standaloneSites ? (
-        <aside className="hidden w-[260px] shrink-0 border-r border-slate-200 bg-white px-4 py-5 lg:block">
+        <aside className="hidden w-[260px] shrink-0 border-r border-slate-800 bg-slate-950/90 px-4 py-5 lg:block">
           <div className="mb-8 px-2">
             <p className="text-lg font-extrabold tracking-tight">
-              <BrandWordmark />
+              <BrandWordmark cClass="text-cyan-300" flowClass="text-slate-100" />
             </p>
-            <p className="mt-1 text-xs text-slate-500">AI Client Operations</p>
+            <p className="mt-1 text-xs text-slate-400">AI Client Operations</p>
           </div>
 
-          <nav className="space-y-1">
-            {navItems.map((item) => (
-              <button
-                key={item}
-                onClick={() => handleNavChange(item)}
-                className={`w-full rounded-xl px-3 py-2 text-left text-sm font-semibold transition ${
-                  activeNav === item
-                    ? "bg-slate-900 text-white"
-                    : "text-slate-700 hover:bg-slate-100"
-                }`}
-              >
-                {item}
-              </button>
+          <nav className="space-y-4">
+            {sidebarNavGroups.map((group) => (
+              <div key={group.title}>
+                <p className="mb-1.5 px-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">{group.title}</p>
+                <div className="space-y-1">
+                  {group.items.map((item) => (
+                    <button
+                      key={item}
+                      onClick={() => handleNavChange(item)}
+                      className={`sidebar-nav-button group relative w-full rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition ${
+                        activeNav === item
+                          ? "bg-cyan-400 text-slate-950 shadow-[0_10px_24px_rgba(34,211,238,0.28)]"
+                          : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                      }`}
+                    >
+                      <span
+                        className={`absolute left-1.5 top-1/2 h-5 w-1 -translate-y-1/2 rounded-full transition ${
+                          activeNav === item ? "bg-slate-950/85" : "bg-transparent group-hover:bg-cyan-300/70"
+                        }`}
+                      />
+                      <span className="pl-2">{NAV_LABELS[item]}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
             ))}
           </nav>
 
-          <div className="mt-8 rounded-2xl border border-cyan-200 bg-cyan-50 p-3">
-            <p className="text-xs font-bold uppercase tracking-[0.12em] text-cyan-700">Текущий план</p>
-            <p className="mt-1 text-sm font-semibold text-slate-900">{currentPlanLabel}</p>
+          <div className="mt-8 rounded-2xl border border-cyan-500/40 bg-slate-900 p-3">
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-cyan-300">Текущий план</p>
+            <p className="mt-1 text-sm font-semibold text-slate-100">{currentPlanLabel}</p>
           </div>
         </aside>
         ) : null}
@@ -3341,15 +4178,15 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
         <div className="flex min-w-0 flex-1 flex-col">
           <header
             className={`sticky top-0 z-30 px-3 py-3 backdrop-blur md:px-6 md:py-4 ${
-              standaloneSites ? "border-b border-blue-900/50 bg-slate-950/90" : "border-b border-slate-200/90 bg-white/95"
+              standaloneSites ? "border-b border-blue-900/50 bg-slate-950/90" : "border-b border-slate-800/80 bg-slate-950/80"
             }`}
           >
             <div className="flex items-center justify-between gap-4">
               <div>
-                <h1 className={`text-lg font-extrabold tracking-tight sm:text-xl ${standaloneSites ? "text-white" : ""}`}>
-                  {standaloneSites ? "CFlow Sites" : activeNav}
+                <h1 className={`text-lg font-extrabold tracking-tight sm:text-xl ${standaloneSites ? "text-white" : "text-white"}`}>
+                  {standaloneSites ? "CFlow Sites" : NAV_LABELS[activeNav]}
                 </h1>
-                <p className={`text-xs sm:text-sm ${standaloneSites ? "text-slate-300" : "text-slate-500"}`}>
+                <p className={`text-xs sm:text-sm ${standaloneSites ? "text-slate-300" : "text-slate-300"}`}>
                   {standaloneSites ? "Конструктор сайтов для бизнеса: шаблон, контент, публикация" : "Рабочая панель управления потоком обращений"}
                 </p>
               </div>
@@ -3373,11 +4210,11 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                   <>
                     <button
                       onClick={() => triggerNotice("Период: последние 30 дней")}
-                      className="hidden rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 sm:block"
+                      className="hidden rounded-full border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200 sm:block"
                     >
                       Последние 30 дней
                     </button>
-                    <div className="h-8 w-8 rounded-full bg-slate-900 shadow-sm sm:h-9 sm:w-9" />
+                    <div className="h-8 w-8 rounded-full bg-gradient-to-br from-cyan-300 to-blue-500 shadow-sm shadow-cyan-500/40 sm:h-9 sm:w-9" />
                   </>
                 )}
               </div>
@@ -3386,15 +4223,15 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
             {!standaloneSites ? (
             <div className="-mx-1 mt-3 overflow-x-auto pb-1 lg:hidden">
               <div className="flex min-w-max gap-2 px-1">
-                {navItems.map((item) => (
+                {mobileSecondaryNav.map((item) => (
                   <button
                     key={`mobile-${item}`}
                     onClick={() => handleNavChange(item)}
-                    className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                      activeNav === item ? "bg-slate-900 text-white" : "border border-slate-300 bg-white text-slate-700"
+                    className={`mobile-secondary-chip rounded-full px-3.5 py-2 text-xs font-semibold transition ${
+                      activeNav === item ? "bg-cyan-400 text-slate-950" : "border border-slate-700 bg-slate-900 text-slate-200 hover:border-cyan-500/60"
                     }`}
                   >
-                    {item}
+                    {NAV_LABELS[item]}
                   </button>
                 ))}
               </div>
@@ -3402,12 +4239,120 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
             ) : null}
           </header>
 
-          <main className={`flex-1 overflow-auto px-3 py-4 pb-24 sm:px-4 sm:py-6 md:px-6 lg:pb-6 ${standaloneSites ? "text-slate-100" : ""}`}>
+          <main className={`premium-main flex-1 overflow-auto px-4 py-5 pb-32 sm:px-4 sm:py-6 md:px-6 lg:pb-6 ${standaloneSites ? "text-slate-100" : ""}`}>
             <div className={`mx-auto w-full ${standaloneSites ? "max-w-[1320px]" : "max-w-[1440px]"}`}>
             {uiNotice ? (
-              <div className="mb-3 rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm font-semibold text-cyan-900">
+              <div className="ui-feedback-toast mb-3 rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm font-semibold text-cyan-900">
                 {uiNotice}
               </div>
+            ) : null}
+            {!standaloneSites ? (
+              <section className="mobile-priority-strip mb-4 rounded-2xl border border-cyan-300/40 bg-slate-950/80 p-3 shadow-sm lg:hidden">
+                <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-cyan-300">Главное сейчас</p>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => handleNavChange("Потерянные")}
+                    className="mobile-priority-card rounded-xl border border-rose-300/45 bg-rose-500/10 p-3 text-left"
+                  >
+                    <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-rose-200">Потери</p>
+                    <p className="mt-1 text-lg font-extrabold text-white">{formatRub(lostRevenue)}</p>
+                    <p className="mt-1 text-xs text-rose-100/85">Нажмите, чтобы вернуть деньги</p>
+                  </button>
+                  <button
+                    onClick={() => handleNavChange("Лиды")}
+                    className="mobile-priority-card rounded-xl border border-cyan-300/45 bg-cyan-500/10 p-3 text-left"
+                  >
+                    <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-cyan-200">Лиды</p>
+                    <p className="mt-1 text-lg font-extrabold text-white">{incomingLeads}</p>
+                    <p className="mt-1 text-xs text-cyan-100/90">Открыть работу с лидами</p>
+                  </button>
+                </div>
+              </section>
+            ) : null}
+            {showNewUserOnboardingCard ? (
+              <section className="mb-4 rounded-3xl border border-indigo-200 bg-indigo-50 p-5 shadow-sm">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.12em] text-indigo-700">Onboarding</p>
+                    <h2 className="mt-1 text-lg font-extrabold tracking-tight text-slate-900">Быстрый запуск CFlow</h2>
+                    <p className="mt-1 text-sm text-slate-700">Пройдите 4 шага: подключение Telegram, первый лид и проверка ценности.</p>
+                  </div>
+                  <button
+                    onClick={dismissNewUserOnboarding}
+                    className="rounded-xl border border-indigo-300 bg-white px-3 py-2 text-xs font-semibold text-indigo-700"
+                  >
+                    Скрыть
+                  </button>
+                </div>
+
+                <div className="mt-3 grid gap-2 md:grid-cols-2">
+                  {[
+                    {
+                      key: "firstLaunch",
+                      title: "1. Первый запуск",
+                      done: newUserOnboarding.steps.firstLaunch,
+                      note: "Приложение открыто и готово к настройке."
+                    },
+                    {
+                      key: "telegramConnected",
+                      title: "2. Подключение Telegram",
+                      done: newUserOnboarding.steps.telegramConnected,
+                      note: "Добавьте Bot Token и синхронизируйте сообщения."
+                    },
+                    {
+                      key: "firstLead",
+                      title: "3. Первый лид",
+                      done: newUserOnboarding.steps.firstLead,
+                      note: "Импортируйте JSON или подтяните входящие из Telegram."
+                    },
+                    {
+                      key: "valueShown",
+                      title: "4. Показ ценности",
+                      done: newUserOnboarding.steps.valueShown,
+                      note: "Откройте Обзор/Аналитику и посмотрите конверсию и потери."
+                    }
+                  ].map((step) => (
+                    <div
+                      key={step.key}
+                      className={`rounded-xl border p-3 text-sm ${
+                        step.done ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-indigo-200 bg-white text-slate-700"
+                      }`}
+                    >
+                      <p className="font-semibold">[{step.done ? "DONE" : "TODO"}] {step.title}</p>
+                      <p className="mt-1 text-xs">{step.note}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  <div className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-slate-700">
+                    Прогресс: {onboardingProgressCount} / 4
+                  </div>
+                  {!newUserOnboarding.steps.telegramConnected ? (
+                    <button
+                      onClick={() => handleNavChange("Настройки")}
+                      className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+                    >
+                      Подключить Telegram
+                    </button>
+                  ) : !newUserOnboarding.steps.firstLead ? (
+                    <button
+                      onClick={() => void syncTelegramBotEvents()}
+                      disabled={serviceSyncLoading}
+                      className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                    >
+                      {serviceSyncLoading ? "Синхронизация..." : "Получить первый лид"}
+                    </button>
+                  ) : !newUserOnboarding.steps.valueShown ? (
+                    <button
+                      onClick={() => handleNavChange("Аналитика")}
+                      className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+                    >
+                      Показать ценность
+                    </button>
+                  ) : null}
+                </div>
+              </section>
             ) : null}
             {!hasLiveData && navNeedsLiveData ? (
               <section className="rounded-3xl border border-cyan-200 bg-cyan-50 p-6 shadow-sm">
@@ -3480,8 +4425,8 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                 <section className={`${mobileInboxView === "detail" ? "hidden xl:block" : "block"} rounded-3xl border border-slate-200 bg-white p-4 shadow-sm`}>
                   <div className="mb-3 flex items-center justify-between">
                     <div>
-                      <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">AI Inbox</p>
-                      <p className="text-sm text-slate-600">Входящие обращения и лиды в одном окне</p>
+                      <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Все сообщения</p>
+                      <p className="text-sm text-slate-600">Здесь видно, кто написал и что делать дальше</p>
                     </div>
                     <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-xs font-semibold text-cyan-700">
                       {filteredConversations.length} диалогов
@@ -3522,10 +4467,10 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                           <p className={`mt-2 text-sm ${selected ? "text-slate-200" : "text-slate-700"}`}>{item.summary}</p>
                           <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
                             <span className={`rounded-full px-2 py-0.5 ${selected ? "bg-white/10 text-white" : "bg-white text-slate-600"}`}>
-                              Lead score: {item.score}
+                              Приоритет лида: {item.score}
                             </span>
                             <span className={`rounded-full px-2 py-0.5 ${selected ? "bg-white/10 text-white" : "bg-white text-slate-600"}`}>
-                              Вероятность покупки: {item.purchaseProbability}%
+                              Шанс покупки: {item.purchaseProbability}%
                             </span>
                           </div>
                         </button>
@@ -3606,6 +4551,41 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                           <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Заметки</p>
                           <p className="mt-1 text-sm text-slate-700">{selectedConversation.notes}</p>
                         </div>
+                        {selectedConversation.status === "потерян" ? (
+                          <div className="rounded-xl border border-rose-200 bg-white p-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <p className="text-xs font-bold uppercase tracking-[0.12em] text-rose-700">AI-анализ потери лида</p>
+                              <button
+                                onClick={() => void analyzeSelectedDialog()}
+                                disabled={dialogAnalysisLoading}
+                                className="rounded-lg border border-rose-300 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 disabled:opacity-60"
+                              >
+                                {dialogAnalysisLoading ? "Анализ..." : "Запустить анализ"}
+                              </button>
+                            </div>
+                            {dialogAnalysis ? (
+                              <div className="mt-2 space-y-1 text-sm text-slate-700">
+                                <p><span className="font-semibold">Потеря на этапе:</span> {dialogAnalysis.lostAtStage}</p>
+                                {typeof dialogAnalysis.lostAtMessageIndex === "number" ? (
+                                  <p>
+                                    <span className="font-semibold">Где потерян:</span> сообщение #{dialogAnalysis.lostAtMessageIndex + 1}
+                                    {dialogAnalysis.lostAtMessageText ? ` — "${dialogAnalysis.lostAtMessageText}"` : ""}
+                                  </p>
+                                ) : null}
+                                <p><span className="font-semibold">Причина:</span> {dialogAnalysis.reason}</p>
+                                <p><span className="font-semibold">Улучшенный ответ:</span> {dialogAnalysis.improvedReply}</p>
+                                <p className="text-xs text-slate-500">
+                                  Уверенность: {Math.round(dialogAnalysis.confidence * 100)}% • Режим: {dialogAnalysis.mode === "openrouter" ? "openrouter" : "fallback"}
+                                </p>
+                              </div>
+                            ) : (
+                              <p className="mt-2 text-xs text-slate-600">
+                                Нажмите «Запустить анализ», чтобы получить этап потери, причину и улучшенный ответ менеджера.
+                              </p>
+                            )}
+                            {dialogAnalysisError ? <p className="mt-2 text-xs font-semibold text-amber-700">{dialogAnalysisError}</p> : null}
+                          </div>
+                        ) : null}
                       </div>
 
                       <div className="mt-3 flex flex-col gap-2 sm:flex-row">
@@ -3616,10 +4596,16 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                           Отправить follow-up
                         </button>
                         <button
-                          onClick={() => triggerNotice("Лид передан менеджеру.")}
-                          className="w-full flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-500"
+                          onClick={() => {
+                            if (!selectedConversationLead) return;
+                            handleLeadStageTransition(selectedConversationLead);
+                          }}
+                          disabled={!selectedConversationLead || !nextLeadStage(selectedConversationLead.stage)}
+                          className="w-full flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-500 disabled:opacity-60"
                         >
-                          Передать менеджеру
+                          {selectedConversationLead && nextLeadStage(selectedConversationLead.stage)
+                            ? `Перевести: ${nextLeadStage(selectedConversationLead.stage)}`
+                            : "Финальная стадия"}
                         </button>
                       </div>
                     </div>
@@ -3635,7 +4621,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                 <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Lead Operations</p>
+                      <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Работа с клиентами</p>
                       <h2 className="mt-1 text-xl font-extrabold tracking-tight text-slate-900">Управление лидами</h2>
                       <p className="mt-1 text-sm text-slate-600">
                         Все входящие обращения в едином операционном представлении: этапы, выручка, активность и быстрые действия.
@@ -3813,10 +4799,11 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                               Написать повторно
                             </button>
                             <button
-                              onClick={() => triggerNotice(`Лид передан менеджеру: ${lead.name}`)}
-                              className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-500"
+                              onClick={() => handleLeadStageTransition(lead)}
+                              disabled={!nextLeadStage(lead.stage)}
+                              className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-500 disabled:opacity-60"
                             >
-                              Передать менеджеру
+                              {nextLeadStage(lead.stage) ? `Перевести: ${nextLeadStage(lead.stage)}` : "Финальная стадия"}
                             </button>
                           </div>
                         </div>
@@ -3829,7 +4816,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                             <th className="px-4 py-3">Лид</th>
                             <th className="px-4 py-3">Этап</th>
                             <th className="px-4 py-3">Канал</th>
-                            <th className="px-4 py-3">Lead score</th>
+                            <th className="px-4 py-3">Приоритет</th>
                             <th className="px-4 py-3">Оценка выручки</th>
                             <th className="px-4 py-3">Последняя активность</th>
                             <th className="px-4 py-3">Состояние записи</th>
@@ -3880,10 +4867,11 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                                     Написать повторно
                                   </button>
                                   <button
-                                    onClick={() => triggerNotice(`Лид передан менеджеру: ${lead.name}`)}
-                                    className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-slate-500"
+                                    onClick={() => handleLeadStageTransition(lead)}
+                                    disabled={!nextLeadStage(lead.stage)}
+                                    className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-slate-500 disabled:opacity-60"
                                   >
-                                    Передать менеджеру
+                                    {nextLeadStage(lead.stage) ? `Перевести: ${nextLeadStage(lead.stage)}` : "Финальная стадия"}
                                   </button>
                                 </div>
                               </td>
@@ -3902,7 +4890,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                   <section className="overflow-x-auto pb-1">
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
                       {boardLeads.map((column) => (
-                        <div key={column.stage} className="rounded-3xl border border-slate-200 bg-white p-3 shadow-sm">
+                        <div key={column.stage} className="signature-panel rounded-3xl border border-slate-200 bg-white p-3 shadow-sm">
                           <div className="mb-3 flex items-center justify-between">
                             <p className="text-xs font-bold uppercase tracking-[0.1em] text-slate-500">{column.stage}</p>
                             <span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${leadStageBadgeClass(column.stage)}`}>
@@ -3911,7 +4899,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                           </div>
                           <div className="space-y-2">
                             {column.items.map((lead) => (
-                              <div key={lead.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                              <div key={lead.id} className="signature-tile rounded-2xl border border-slate-200 bg-slate-50 p-3">
                                 <p className="font-semibold text-slate-900">{lead.name}</p>
                                 <p className="mt-0.5 text-xs text-slate-500">{lead.business}</p>
                                 <div className="mt-2 flex items-center justify-between text-xs text-slate-600">
@@ -3925,6 +4913,13 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                                   className="mt-3 w-full rounded-lg bg-slate-900 px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-slate-700"
                                 >
                                   Написать повторно
+                                </button>
+                                <button
+                                  onClick={() => handleLeadStageTransition(lead)}
+                                  disabled={!nextLeadStage(lead.stage)}
+                                  className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-slate-500 disabled:opacity-60"
+                                >
+                                  {nextLeadStage(lead.stage) ? `Перевести: ${nextLeadStage(lead.stage)}` : "Финальная стадия"}
                                 </button>
                               </div>
                             ))}
@@ -3957,19 +4952,41 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                 ) : null}
                 <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                   {analyticsKpisLive.map((kpi) => (
-                    <div key={kpi.label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                      <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">{kpi.label}</p>
-                      <p className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900">{kpi.value}</p>
+                    <div key={kpi.label} className={`metric-card metric-tone-${kpi.tone} rounded-2xl border border-slate-200 bg-white p-5 shadow-sm`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="metric-label text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                          {kpi.label}
+                          {"hint" in kpi && kpi.hint ? (
+                            <span
+                              title={kpi.hint}
+                              className="ml-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 bg-white text-[10px] font-bold text-slate-500"
+                            >
+                              ?
+                            </span>
+                          ) : null}
+                        </p>
+                        <span className={`metric-trend metric-trend-${kpi.direction}`}>
+                          {kpi.direction === "up" ? "↗" : kpi.direction === "down" ? "↘" : "→"} {kpi.trend}
+                        </span>
+                      </div>
+                      <p key={`${kpi.label}-${kpi.value}`} className="metric-value mt-3 text-3xl font-extrabold tracking-tight text-slate-900">
+                        {kpi.value}
+                      </p>
+                      <div className="mt-3">
+                        <div className="metric-bar">
+                          <div className="metric-bar-fill" style={{ width: `${Math.max(0, Math.min(100, kpi.strength))}%` }} />
+                        </div>
+                      </div>
                       <p className="mt-2 text-sm text-slate-600">{kpi.note}</p>
                     </div>
                   ))}
                 </section>
 
                 <section className="grid gap-4 xl:grid-cols-3">
-                  <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
+                  <div className="signature-panel rounded-3xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
                     <div className="mb-4">
-                      <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Динамика лидов</p>
-                      <h3 className="mt-1 text-lg font-bold tracking-tight text-slate-900">Входящие и доведенные до записи</h3>
+                      <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Обращения по дням</p>
+                      <h3 className="mt-1 text-lg font-bold tracking-tight text-slate-900">Сколько написали и сколько купили</h3>
                     </div>
                     <div className="h-64 sm:h-72">
                       <ResponsiveContainer width="100%" height="100%">
@@ -3982,7 +4999,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                           <Line
                             type="monotone"
                             dataKey="incoming"
-                            name="Входящие"
+                            name="Написали"
                             stroke={analyticsPalette.incoming}
                             strokeWidth={3}
                             dot={{ r: 3 }}
@@ -3992,7 +5009,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                           <Line
                             type="monotone"
                             dataKey="booked"
-                            name="Доведено до записи"
+                            name="Купили / записались"
                             stroke={analyticsPalette.booked}
                             strokeWidth={3}
                             dot={{ r: 3 }}
@@ -4004,9 +5021,9 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                     </div>
                   </div>
 
-                  <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                    <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Конверсия</p>
-                    <h3 className="mt-1 text-lg font-bold tracking-tight text-slate-900">Booked vs Lost</h3>
+                  <div className="signature-panel rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Сколько купили</p>
+                    <h3 className="mt-1 text-lg font-bold tracking-tight text-slate-900">Купили vs ушли</h3>
                     <div className="mt-3 h-56">
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
@@ -4033,11 +5050,11 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                       </ResponsiveContainer>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
-                      <div className="rounded-xl bg-slate-50 p-3">
+                      <div className="signature-tile rounded-xl bg-slate-50 p-3">
                         <p className="text-xs uppercase tracking-[0.08em] text-slate-500">Записано</p>
                         <p className="mt-1 text-xl font-bold text-slate-900">{conversionBookedPercent}%</p>
                       </div>
-                      <div className="rounded-xl bg-slate-50 p-3">
+                      <div className="signature-tile rounded-xl bg-slate-50 p-3">
                         <p className="text-xs uppercase tracking-[0.08em] text-slate-500">Потеряно</p>
                         <p className="mt-1 text-xl font-bold text-slate-900">{conversionLostPercent}%</p>
                       </div>
@@ -4046,9 +5063,9 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                 </section>
 
                 <section className="grid gap-4 xl:grid-cols-3">
-                  <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
-                    <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Воронка лидов</p>
-                    <h3 className="mt-1 text-lg font-bold tracking-tight text-slate-900">Переход по этапам обработки</h3>
+                  <div className="signature-panel rounded-3xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
+                    <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Путь клиента</p>
+                    <h3 className="mt-1 text-lg font-bold tracking-tight text-slate-900">Где клиент “застревает”</h3>
                     <div className="mt-3 h-64 sm:h-72">
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={analyticsFunnelDataLive} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
@@ -4063,10 +5080,14 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                   </div>
 
                   <div className="space-y-4">
-                    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div className="signature-panel rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
                       <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Время ответа</p>
-                      <p className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900">{averageResponse} сек</p>
-                      <p className="mt-1 text-sm text-slate-600">Худшее значение недели: {worstResponse} сек</p>
+                      <p className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900">
+                        {averageResponse > 0 ? `${averageResponse} сек` : "—"}
+                      </p>
+                      <p className="mt-1 text-sm text-slate-600">
+                        {averageResponse > 0 ? `Худшее значение недели: ${worstResponse} сек` : "Нет данных responseSeconds"}
+                      </p>
                       <div className="mt-3 h-24">
                         <ResponsiveContainer width="100%" height="100%">
                           <LineChart data={analyticsResponseTrendLive}>
@@ -4122,7 +5143,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
 
                       <div className="mt-3 space-y-2">
                         {lostRevenueSnapshot.reasons.slice(0, 3).map((item) => (
-                          <div key={item.reason} className="rounded-xl border border-rose-200 bg-white p-2.5 text-xs text-slate-700">
+                          <div key={item.reason} className="signature-tile rounded-xl border border-rose-200 bg-white p-2.5 text-xs text-slate-700">
                             <p className="font-semibold">{item.reason}</p>
                             <p>{item.count} лидов • {formatRub(item.revenue)}</p>
                           </div>
@@ -4138,9 +5159,9 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                 </section>
 
                 <section className="grid gap-4 xl:grid-cols-3">
-                  <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
-                    <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Эффективность каналов</p>
-                    <h3 className="mt-1 text-lg font-bold tracking-tight text-slate-900">Сравнение по Telegram, WhatsApp, Instagram и сайту</h3>
+                  <div className="signature-panel rounded-3xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
+                    <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Каналы продаж</p>
+                    <h3 className="mt-1 text-lg font-bold tracking-tight text-slate-900">Откуда приходит больше покупок</h3>
                     <div className="mt-3 h-64 sm:h-72">
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={analyticsChannelDataLive} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
@@ -4149,24 +5170,24 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                           <YAxis tick={{ fill: "#64748b", fontSize: 12 }} axisLine={false} tickLine={false} />
                           <Tooltip contentStyle={chartTooltipStyle} />
                           <Legend iconType="circle" />
-                          <Bar dataKey="qualified" name="Квалифицировано" fill={analyticsPalette.qualified} radius={[8, 8, 0, 0]} animationDuration={1050} />
-                          <Bar dataKey="booked" name="Доведено до записи" fill={analyticsPalette.booked} radius={[8, 8, 0, 0]} animationDuration={1200} />
+                          <Bar dataKey="qualified" name="Поняли запрос" fill={analyticsPalette.qualified} radius={[8, 8, 0, 0]} animationDuration={1050} />
+                          <Bar dataKey="booked" name="Купили / записались" fill={analyticsPalette.booked} radius={[8, 8, 0, 0]} animationDuration={1200} />
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
                   </div>
 
-                  <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                    <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">AI Insights</p>
-                    <h3 className="mt-1 text-lg font-bold tracking-tight text-slate-900">Рекомендации по росту конверсии</h3>
+                  <div className="signature-panel rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Что улучшить прямо сейчас</p>
+                    <h3 className="mt-1 text-lg font-bold tracking-tight text-slate-900">Понятные шаги для роста продаж</h3>
                     <div className="mt-3 space-y-2">
                       {analyticsInsightsLive.map((insight) => (
-                        <div key={insight} className="rounded-xl border border-cyan-100 bg-cyan-50 p-3 text-sm text-slate-700">
+                        <div key={insight} className="insight-chip rounded-xl border border-cyan-100 bg-cyan-50 p-3 text-sm text-slate-700">
                           {insight}
                         </div>
                       ))}
                     </div>
-                    <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+                    <div className="signature-tile mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
                       Последнее обновление аналитики:{" "}
                       {serviceConnection.connectedAt
                         ? new Date(serviceConnection.connectedAt).toLocaleString("ru-RU")
@@ -4194,22 +5215,22 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                 ) : (
                   <>
                 <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="signature-tile rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                     <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Активные рекомендации</p>
-                    <p className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900">{aiRecommendationsFeed.length}</p>
+                    <p className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900">{aiRecommendationsLive.length}</p>
                     <p className="mt-1 text-sm text-slate-600">Сформированы по вашим текущим данным</p>
                   </div>
-                  <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="signature-tile rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                     <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Лиды для recovery</p>
                     <p className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900">{lostLeads}</p>
                     <p className="mt-1 text-sm text-slate-600">Требуют повторного касания</p>
                   </div>
-                  <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="signature-tile rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                     <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Потенциал роста</p>
                     <p className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900">+{Math.max(1, Math.round(conversionPercent * 0.2))} п.п.</p>
                     <p className="mt-1 text-sm text-slate-600">Оценка прироста конверсии</p>
                   </div>
-                  <div className="rounded-2xl border border-cyan-200 bg-cyan-50 p-4 shadow-sm">
+                  <div className="signature-tile rounded-2xl border border-cyan-200 bg-cyan-50 p-4 shadow-sm">
                     <p className="text-xs font-bold uppercase tracking-[0.12em] text-cyan-700">Потенциальный эффект</p>
                     <p className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900">{formatRub(Math.round(lostRevenueSnapshot.estimatedRevenue * 0.35))}</p>
                     <p className="mt-1 text-sm text-slate-700">Потенциальный возврат выручки</p>
@@ -4217,7 +5238,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                 </section>
 
                 <section className="grid gap-4 xl:grid-cols-3">
-                  <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
+                  <div className="signature-panel rounded-3xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
                     <div className="mb-4 flex items-center justify-between">
                       <div>
                         <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Главная лента</p>
@@ -4225,8 +5246,8 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                       </div>
                     </div>
                     <div className="space-y-3">
-                      {aiRecommendationsFeed.map((item) => (
-                        <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      {aiRecommendationsLive.map((item) => (
+                        <div key={item.id} className="signature-tile rounded-2xl border border-slate-200 bg-slate-50 p-4">
                           <div className="flex flex-wrap items-start justify-between gap-2">
                             <div>
                               <p className="font-semibold text-slate-900">{item.title}</p>
@@ -4248,17 +5269,23 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                               {item.actionLabel}
                             </button>
                           </div>
+                          <div className="signature-tile mt-3 space-y-1 rounded-xl border border-slate-200 bg-white p-3">
+                            <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">Конкретные действия</p>
+                            {item.actionSteps.map((step) => (
+                              <p key={`${item.id}-${step}`} className="text-xs text-slate-700">• {step}</p>
+                            ))}
+                          </div>
                         </div>
                       ))}
                     </div>
                   </div>
 
-                  <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="signature-panel rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
                     <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Приоритетные действия</p>
                     <h3 className="mt-1 text-lg font-bold tracking-tight text-slate-900">Что сделать в первую очередь</h3>
                     <div className="mt-3 space-y-2.5">
-                      {aiPriorityActions.map((action) => (
-                        <div key={action.title} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                      {aiPriorityActionsLive.map((action) => (
+                        <div key={action.title} className="signature-tile rounded-xl border border-slate-200 bg-slate-50 p-3">
                           <p className="text-sm font-semibold text-slate-900">{action.title}</p>
                           <p className="mt-1 text-xs text-slate-600">{action.detail}</p>
                           <button
@@ -4271,7 +5298,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                       ))}
                     </div>
                     {aiActionMessage ? (
-                      <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-700">
+                      <div className="ui-feedback-toast mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-700">
                         {aiActionMessage}
                       </div>
                     ) : null}
@@ -4279,12 +5306,12 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                 </section>
 
                 <section className="grid gap-4 xl:grid-cols-2">
-                  <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="signature-panel rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
                     <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Before / After</p>
                     <h3 className="mt-1 text-lg font-bold tracking-tight text-slate-900">Примеры улучшения диалогов</h3>
                     <div className="mt-3 space-y-3">
                       {aiBeforeAfterExamples.map((item) => (
-                        <div key={item.context} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <div key={item.context} className="signature-tile rounded-2xl border border-slate-200 bg-slate-50 p-4">
                           <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">{item.context}</p>
                           <div className="mt-2 grid gap-2 md:grid-cols-2">
                             <div className="rounded-xl border border-rose-200 bg-rose-50 p-3">
@@ -4302,12 +5329,12 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                   </div>
 
                   <div className="space-y-4">
-                    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div className="signature-panel rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
                       <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Рекомендованные ответы</p>
                       <h3 className="mt-1 text-lg font-bold tracking-tight text-slate-900">Готовые формулировки ответов</h3>
                       <div className="mt-3 space-y-2.5">
                         {aiRewrittenReplies.map((reply) => (
-                          <div key={reply.scenario} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                          <div key={reply.scenario} className="signature-tile rounded-xl border border-slate-200 bg-slate-50 p-3">
                             <p className="text-xs font-semibold text-slate-500">{reply.scenario}</p>
                             <p className="mt-1 text-sm text-slate-700">{reply.reply}</p>
                             <button
@@ -4321,12 +5348,12 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                       </div>
                     </div>
 
-                    <div className="rounded-3xl border border-cyan-200 bg-cyan-50 p-5 shadow-sm">
+                    <div className="signature-panel rounded-3xl border border-cyan-200 bg-cyan-50 p-5 shadow-sm">
                       <p className="text-xs font-bold uppercase tracking-[0.12em] text-cyan-700">Оценка эффекта</p>
                       <h3 className="mt-1 text-lg font-bold tracking-tight text-slate-900">Оценка эффекта после внедрения</h3>
                       <div className="mt-3 space-y-2">
                         {aiImpactEstimation.map((item) => (
-                          <div key={item.metric} className="rounded-xl border border-cyan-200 bg-white p-3">
+                          <div key={item.metric} className="signature-tile rounded-xl border border-cyan-200 bg-white p-3">
                             <p className="text-xs font-semibold text-slate-500">{item.metric}</p>
                             <div className="mt-1 flex items-center justify-between gap-2 text-sm">
                               <span className="text-slate-700">{item.current}</span>
@@ -5607,15 +6634,6 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                               ))}
                             </div>
 
-                            {checkoutPlanId && checkoutPlanId !== "trial" ? (
-                              <div className="mt-4 grid gap-3 md:grid-cols-2">
-                                <input value={checkoutCardholder} onChange={(e) => setCheckoutCardholder(e.target.value)} placeholder="Имя держателя" className="rounded-xl border border-slate-600 bg-slate-800 px-3 py-2.5 text-sm text-slate-100" />
-                                <input value={checkoutCardNumber} onChange={(e) => setCheckoutCardNumber(e.target.value)} placeholder="Номер карты" className="rounded-xl border border-slate-600 bg-slate-800 px-3 py-2.5 text-sm text-slate-100" />
-                                <input value={checkoutExpiry} onChange={(e) => setCheckoutExpiry(e.target.value)} placeholder="Срок" className="rounded-xl border border-slate-600 bg-slate-800 px-3 py-2.5 text-sm text-slate-100" />
-                                <input value={checkoutCvv} onChange={(e) => setCheckoutCvv(e.target.value)} placeholder="CVV" className="rounded-xl border border-slate-600 bg-slate-800 px-3 py-2.5 text-sm text-slate-100" />
-                              </div>
-                            ) : null}
-
                             <div className="mt-4 flex flex-wrap gap-2">
                               <button
                                 onClick={() => setSettingsSetupStep(3)}
@@ -5654,7 +6672,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                   <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Источник данных</p>
                   <h2 className="mt-1 text-xl font-extrabold tracking-tight text-slate-900">Подключить свой сервис</h2>
                   <p className="mt-2 text-sm text-slate-600">
-                    Личный кабинет считает метрики только по вашим событиям сообщений. Поддерживается синхронизация через endpoint и импорт JSON.
+                    Чтобы цифры были реальными, подключите источник сообщений: API или JSON-файл.
                   </p>
                   <div className="mt-4 grid gap-3 md:grid-cols-2">
                     <label>
@@ -5667,14 +6685,14 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                       />
                     </label>
                     <label>
-                      <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Endpoint событий</span>
+                      <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Ссылка на API с сообщениями</span>
                       <input
                         value={serviceConnection.endpoint}
                         onChange={(event) => setServiceConnection((prev) => ({ ...prev, endpoint: event.target.value }))}
                         placeholder="https://your-service.com/events"
                         className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
                       />
-                      <span className="mt-1 block text-[11px] text-slate-500">Нужен API URL, который возвращает JSON-события, а не ссылка на Telegram-канал.</span>
+                      <span className="mt-1 block text-[11px] text-slate-500">Вставьте ссылку на API, который отдает сообщения в формате JSON.</span>
                     </label>
                     <label className="md:col-span-2">
                       <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">API Token (опционально)</span>
@@ -5752,6 +6770,29 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                       <span> • Последняя синхронизация: {new Date(serviceConnection.connectedAt).toLocaleString("ru-RU")}</span>
                     ) : (
                       <span> • Синхронизация ещё не выполнялась</span>
+                    )}
+                  </div>
+                  <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-bold uppercase tracking-[0.08em] text-rose-700">Лог ошибок Telegram</p>
+                      <button
+                        onClick={() => setTelegramErrorLogs([])}
+                        className="rounded-lg border border-rose-300 bg-white px-2.5 py-1 text-xs font-semibold text-rose-700"
+                      >
+                        Очистить
+                      </button>
+                    </div>
+                    {telegramErrorLogs.length === 0 ? (
+                      <p className="mt-2 text-xs text-rose-700/80">Ошибок не зафиксировано.</p>
+                    ) : (
+                      <div className="mt-2 max-h-36 space-y-1 overflow-y-auto pr-1 text-xs text-rose-900">
+                        {telegramErrorLogs.slice(0, 8).map((log) => (
+                          <p key={log.id}>
+                            [{new Date(log.at).toLocaleString("ru-RU")}] {log.scope}: {log.message}
+                            {log.details ? ` (${log.details})` : ""}
+                          </p>
+                        ))}
+                      </div>
                     )}
                   </div>
                 </section>
@@ -5833,40 +6874,6 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                     <h3 className="mt-1 text-lg font-bold tracking-tight text-slate-900">
                       Оплата тарифа {selectedCheckoutPlan.title} • {selectedCheckoutPlan.priceLabel}
                     </h3>
-                    <div className="mt-3 grid gap-3 md:grid-cols-2">
-                      <label>
-                        <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Имя держателя</span>
-                        <input
-                          value={checkoutCardholder}
-                          onChange={(e) => setCheckoutCardholder(e.target.value)}
-                          className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
-                        />
-                      </label>
-                      <label>
-                        <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Номер карты</span>
-                        <input
-                          value={checkoutCardNumber}
-                          onChange={(e) => setCheckoutCardNumber(e.target.value)}
-                          className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
-                        />
-                      </label>
-                      <label>
-                        <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Срок</span>
-                        <input
-                          value={checkoutExpiry}
-                          onChange={(e) => setCheckoutExpiry(e.target.value)}
-                          className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
-                        />
-                      </label>
-                      <label>
-                        <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">CVV</span>
-                        <input
-                          value={checkoutCvv}
-                          onChange={(e) => setCheckoutCvv(e.target.value)}
-                          className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
-                        />
-                      </label>
-                    </div>
                     <div className="mt-4 flex flex-col gap-2 sm:flex-row">
                       <button
                         onClick={processFakePayment}
@@ -5877,97 +6884,16 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                       </button>
                       {checkoutState === "success" ? (
                         <button
-                          onClick={() => setOnboardingStep(1)}
+                          onClick={() => {
+                            setSubscription((prev) => ({ ...prev, onboardingCompleted: false }));
+                            resetSettingsSetup();
+                          }}
                           className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 sm:w-auto"
                         >
-                          Запустить онбординг
+                          Открыть мастер настройки
                         </button>
                       ) : null}
                     </div>
-                  </section>
-                ) : null}
-
-                {(subscription.subscriptionStatus !== "none" || checkoutState === "success") && !subscription.onboardingCompleted ? (
-                  <section className="rounded-3xl border border-cyan-200 bg-cyan-50 p-5 shadow-sm">
-                    <p className="text-xs font-bold uppercase tracking-[0.12em] text-cyan-700">Онбординг</p>
-                    <h3 className="mt-1 text-lg font-bold tracking-tight text-slate-900">Запуск AI-системы CFlow</h3>
-                    <p className="mt-1 text-sm text-slate-700">Шаг {onboardingStep} из 3</p>
-
-                    {onboardingStep === 1 ? (
-                      <div className="mt-3">
-                        <p className="text-sm font-semibold text-slate-800">Выберите тип бизнеса</p>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {["салон красоты", "барбершоп", "клиника", "локальный сервис", "эксперт / консультант"].map((type) => (
-                            <button
-                              key={type}
-                              onClick={() => setOnboardingBusinessType(type)}
-                              className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
-                                onboardingBusinessType === type ? "bg-slate-900 text-white" : "border border-slate-300 bg-white text-slate-700"
-                              }`}
-                            >
-                              {type}
-                            </button>
-                          ))}
-                        </div>
-                        <button onClick={() => setOnboardingStep(2)} className="mt-3 w-full rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white sm:w-auto">
-                          Далее
-                        </button>
-                      </div>
-                    ) : null}
-
-                    {onboardingStep === 2 ? (
-                      <div className="mt-3">
-                        <p className="text-sm font-semibold text-slate-800">Подключаемые каналы</p>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {["Telegram", "WhatsApp", "Instagram", "Website"].map((channel) => (
-                            <button
-                              key={channel}
-                              onClick={() => setOnboardingChannels((prev) => toggleChoice(prev, channel))}
-                              className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
-                                onboardingChannels.includes(channel) ? "bg-slate-900 text-white" : "border border-slate-300 bg-white text-slate-700"
-                              }`}
-                            >
-                              {channel}
-                            </button>
-                          ))}
-                        </div>
-                        <div className="mt-3 flex gap-2">
-                          <button onClick={() => setOnboardingStep(1)} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
-                            Назад
-                          </button>
-                          <button onClick={() => setOnboardingStep(3)} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
-                            Далее
-                          </button>
-                        </div>
-                      </div>
-                    ) : null}
-
-                    {onboardingStep === 3 ? (
-                      <div className="mt-3">
-                        <p className="text-sm font-semibold text-slate-800">Бизнес-цели</p>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {["быстрее отвечать", "автоматизировать запись", "видеть аналитику", "возвращать потерянных клиентов", "снизить ручную нагрузку"].map((goal) => (
-                            <button
-                              key={goal}
-                              onClick={() => setOnboardingGoals((prev) => toggleChoice(prev, goal))}
-                              className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
-                                onboardingGoals.includes(goal) ? "bg-slate-900 text-white" : "border border-slate-300 bg-white text-slate-700"
-                              }`}
-                            >
-                              {goal}
-                            </button>
-                          ))}
-                        </div>
-                        <div className="mt-3 flex gap-2">
-                          <button onClick={() => setOnboardingStep(2)} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
-                            Назад
-                          </button>
-                          <button onClick={() => finishOnboarding()} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white">
-                            Завершить запуск
-                          </button>
-                        </div>
-                      </div>
-                    ) : null}
                   </section>
                 ) : null}
                   </>
@@ -6009,18 +6935,120 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                   </div>
                 ) : null}
 
-                <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                <section className="first-screen-hero rounded-3xl border border-cyan-200 p-6 shadow-sm">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-[0.12em] text-cyan-300">Первые шаги</p>
+                      <h2 className="mt-1 text-2xl font-extrabold tracking-tight text-white">Что сделать прямо сейчас</h2>
+                      <p className="mt-2 text-sm text-cyan-100">Пройдите 3 шага, чтобы быстро получить выручку из текущих обращений.</p>
+                    </div>
+                    <button
+                      onClick={() => handleNavChange("Лиды")}
+                      className="rounded-xl border border-cyan-300/60 bg-cyan-400/90 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-cyan-300"
+                    >
+                      Начать с лидов
+                    </button>
+                  </div>
+
+                  <div className="first-screen-wow mt-4 rounded-2xl border border-rose-300/40 bg-rose-500/10 p-4">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-rose-200">Вау-момент</p>
+                    <p className="mt-1 text-lg font-extrabold text-white">{firstScreenInsight}</p>
+                    <p className="mt-1 text-xs text-rose-100/90">Это ключевая ценность CFlow: показывать, где вы теряете деньги, и что сделать дальше.</p>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 md:grid-cols-3">
+                    {firstScreenSteps.map((step) => (
+                      <div key={step.id} className="first-screen-step rounded-2xl border border-slate-700/70 bg-slate-900/65 p-4">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-semibold text-slate-100">{step.title}</p>
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                              step.done ? "bg-emerald-400/20 text-emerald-200" : "bg-amber-400/20 text-amber-200"
+                            }`}
+                          >
+                            {step.done ? "Готово" : "Нужно сделать"}
+                          </span>
+                        </div>
+                        <p className="mt-2 text-xs text-slate-300">{step.description}</p>
+                        <button
+                          onClick={step.action}
+                          className="mt-3 w-full rounded-xl border border-slate-600 bg-slate-800 px-3 py-2 text-sm font-semibold text-white hover:border-cyan-400 hover:bg-slate-700"
+                        >
+                          {step.actionLabel}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+
+                <section className="premium-money-panel rounded-3xl border border-rose-200 bg-gradient-to-br from-rose-100 via-white to-rose-50 p-6 shadow-sm">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-[0.12em] text-rose-700">Деньги сейчас</p>
+                      <h2 className="mt-1 text-2xl font-extrabold tracking-tight text-slate-900">Где вы теряете выручку</h2>
+                      <p className="mt-2 text-sm font-semibold text-rose-800">{moneyPriorityMessage}</p>
+                    </div>
+                    <button
+                      onClick={() => handleNavChange("Потерянные")}
+                      className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700"
+                    >
+                      Посмотреть потери
+                    </button>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 md:grid-cols-3">
+                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                      <p className="text-xs font-bold uppercase tracking-[0.1em] text-emerald-700">Заработано</p>
+                      <p className="mt-2 text-3xl font-extrabold tracking-tight text-emerald-900">{formatRub(earnedRevenue)}</p>
+                      <p className="mt-1 text-xs text-emerald-800">Клиенты, которые уже купили</p>
+                    </div>
+                    <div className="rounded-2xl border border-rose-300 bg-rose-100 p-4">
+                      <p className="text-xs font-bold uppercase tracking-[0.1em] text-rose-700">Потеряно</p>
+                      <p className="mt-2 text-4xl font-extrabold tracking-tight text-rose-900">{formatRub(lostRevenue)}</p>
+                      <p className="mt-1 text-xs font-semibold text-rose-800">Деньги, которые ушли вместе с потерянными лидами</p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-300 bg-white p-4">
+                      <p className="text-xs font-bold uppercase tracking-[0.1em] text-slate-600">Можно было заработать</p>
+                      <p className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900">{formatRub(potentialRevenue)}</p>
+                      <p className="mt-1 text-xs text-slate-600">Заработано + потеряно</p>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="mobile-kpi-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   {kpis.map((kpi) => (
-                    <div key={kpi.label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                      <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">{kpi.label}</p>
-                      <p className="mt-2 text-3xl font-extrabold text-slate-900">{kpi.value}</p>
+                    <div key={kpi.label} className={`metric-card metric-tone-${kpi.tone} rounded-2xl border border-slate-200 bg-white p-5 shadow-sm`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="metric-label text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                          {kpi.label}
+                          {"hint" in kpi && kpi.hint ? (
+                            <span
+                              title={kpi.hint}
+                              className="ml-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 bg-white text-[10px] font-bold text-slate-500"
+                            >
+                              ?
+                            </span>
+                          ) : null}
+                        </p>
+                        <span className={`metric-trend metric-trend-${kpi.direction}`}>
+                          {kpi.direction === "up" ? "↗" : kpi.direction === "down" ? "↘" : "→"} {kpi.trend}
+                        </span>
+                      </div>
+                      <p key={`${kpi.label}-${kpi.value}`} className="metric-value mt-3 text-3xl font-extrabold text-slate-900">
+                        {kpi.value}
+                      </p>
+                      <div className="mt-3">
+                        <div className="metric-bar">
+                          <div className="metric-bar-fill" style={{ width: `${Math.max(0, Math.min(100, kpi.strength))}%` }} />
+                        </div>
+                      </div>
                       <p className="mt-2 text-sm text-slate-600">{kpi.note}</p>
                     </div>
                   ))}
                 </section>
 
                 <section className="grid gap-4 xl:grid-cols-3">
-                  <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
+                  <div className="signature-panel rounded-3xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
                     <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Лиды по дням</p>
                     <svg viewBox="0 0 100 100" className="mt-4 h-48 w-full text-cyan-600" aria-hidden="true">
                       <polyline
@@ -6039,7 +7067,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                     </div>
                   </div>
 
-                  <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="signature-panel rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
                     <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Воронка лидов</p>
                     <div className="mt-4 space-y-4">
                       {overviewFunnel.map((step) => (
@@ -6058,7 +7086,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                 </section>
 
                 <section className="grid gap-4 xl:grid-cols-3">
-                  <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
+                  <div className="signature-panel rounded-3xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
                     <div className="flex items-center justify-between">
                       <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Последние диалоги</p>
                       <button
@@ -6069,16 +7097,22 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                       </button>
                     </div>
                     <div className="mt-4 space-y-3">
-                      {recentConversationsLive.map((c) => (
-                        <div key={`${c.client}-${c.time}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                          <div className="flex items-center justify-between">
-                            <p className="font-semibold text-slate-900">{c.client}</p>
-                            <span className="text-xs text-slate-500">{c.time}</span>
+                      {recentConversationsLive.length > 0 ? (
+                        recentConversationsLive.map((c) => (
+                          <div key={`${c.client}-${c.time}`} className="signature-tile rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                            <div className="flex items-center justify-between">
+                              <p className="font-semibold text-slate-900">{c.client}</p>
+                              <span className="text-xs text-slate-500">{c.time}</span>
+                            </div>
+                            <p className="mt-1 text-xs text-slate-500">{c.channel} • {c.status}</p>
+                            <p className="mt-2 text-sm text-slate-700">{c.summary}</p>
                           </div>
-                          <p className="mt-1 text-xs text-slate-500">{c.channel} • {c.status}</p>
-                          <p className="mt-2 text-sm text-slate-700">{c.summary}</p>
+                        ))
+                      ) : (
+                        <div className="signature-tile rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                          Диалоги появятся после первой синхронизации или импорта событий.
                         </div>
-                      ))}
+                      )}
                     </div>
                   </div>
 
@@ -6134,16 +7168,16 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                       </div>
                     </div>
 
-                    <div className="rounded-3xl border border-cyan-200 bg-cyan-50 p-5 shadow-sm">
+                    <div className="signature-panel rounded-3xl border border-cyan-200 bg-cyan-50 p-5 shadow-sm">
                       <p className="text-xs font-bold uppercase tracking-[0.12em] text-cyan-700">CFlow Sites</p>
                       <h3 className="mt-1 text-lg font-bold tracking-tight text-slate-900">Сайт за 5 минут + автоворонка лидов</h3>
                       <p className="mt-2 text-sm text-slate-700">
                         Клиент выбирает шаблон, заполняет данные бизнеса, получает AI-переписанный сайт и сразу передает лиды в CFlow.
                       </p>
                       <div className="mt-3 grid gap-2">
-                        <div className="rounded-xl border border-cyan-200 bg-white px-3 py-2 text-xs text-slate-700">1. Шаблон + данные бизнеса</div>
-                        <div className="rounded-xl border border-cyan-200 bg-white px-3 py-2 text-xs text-slate-700">2. AI генерирует контент и структуру</div>
-                        <div className="rounded-xl border border-cyan-200 bg-white px-3 py-2 text-xs text-slate-700">3. Публикация и обработка входящих в AI Inbox</div>
+                        <div className="signature-tile rounded-xl border border-cyan-200 bg-white px-3 py-2 text-xs text-slate-700">1. Шаблон + данные бизнеса</div>
+                        <div className="signature-tile rounded-xl border border-cyan-200 bg-white px-3 py-2 text-xs text-slate-700">2. AI генерирует контент и структуру</div>
+                        <div className="signature-tile rounded-xl border border-cyan-200 bg-white px-3 py-2 text-xs text-slate-700">3. Публикация и обработка входящих в AI Inbox</div>
                       </div>
                       <div className="mt-3 flex flex-col items-start justify-between gap-2 text-xs text-slate-700 sm:flex-row sm:items-center">
                         <span>Фиксированная цена: <span className="font-semibold text-slate-900">3 500 ₽</span></span>
@@ -6209,17 +7243,17 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
             </div>
           ) : null}
 
-          <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/95 px-2 py-2 backdrop-blur lg:hidden">
-            <div className="grid grid-cols-5 gap-1">
+          <nav className="mobile-bottom-nav fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/95 px-2 py-2 backdrop-blur lg:hidden">
+            <div className="grid grid-cols-5 gap-2">
               {mobilePrimaryNav.map((item) => (
-                <button
-                  key={`bottom-${item}`}
-                  onClick={() => handleNavChange(item)}
-                  className={`rounded-xl px-1 py-2 text-[11px] font-semibold leading-tight transition ${
-                    activeNav === item ? "bg-slate-900 text-white" : "text-slate-700"
-                  }`}
-                >
-                  {item}
+                  <button
+                    key={`bottom-${item}`}
+                    onClick={() => handleNavChange(item)}
+                    className={`mobile-primary-nav-button rounded-xl px-2 py-2.5 text-[12px] font-semibold leading-tight transition ${
+                      activeNav === item ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                  {MOBILE_NAV_LABELS[item]}
                 </button>
               ))}
             </div>
