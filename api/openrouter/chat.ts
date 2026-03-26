@@ -21,6 +21,7 @@ import type { WebsiteBrief } from "../../lib/sites/websiteBuilderTypes";
 import { isValidCodePayloadShape, isValidWebsiteBriefShape } from "../../lib/sites/websiteBuilderValidation.js";
 
 type ApiMessage = { role: "user" | "assistant" | "system"; content: unknown };
+type ChatMessage = { role: "user" | "assistant" | "system"; content: string };
 
 function extractUserText(content: unknown) {
   if (typeof content === "string") return content;
@@ -29,6 +30,11 @@ function extractUserText(content: unknown) {
     return textPart?.text || "";
   }
   return "";
+}
+
+function normalizeChatRole(role: unknown): ChatMessage["role"] {
+  if (role === "user" || role === "assistant" || role === "system") return role;
+  return "assistant";
 }
 
 function pickNextStep(context: string) {
@@ -454,11 +460,19 @@ export default async function handler(req: any, res: any) {
       return;
     }
 
+    const chatMessages: ChatMessage[] = [
+      { role: "system", content: SALES_SYSTEM_PROMPT },
+      ...messages.map((m) => ({
+        role: normalizeChatRole(m.role),
+        content: extractUserText(m.content)
+      }))
+    ];
+
     const chat = await openRouterWithRetry({
       apiKey,
       referer,
       model: modelChat,
-      messages: [{ role: "system", content: SALES_SYSTEM_PROMPT }, ...messages.map((m) => ({ role: m.role === "user" ? "user" : "assistant", content: extractUserText(m.content) }))],
+      messages: chatMessages,
       temperature: 0.25,
       maxTokens: 120,
       timeoutMs: 9000,

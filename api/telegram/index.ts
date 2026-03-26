@@ -27,26 +27,21 @@ async function fetchTelegramWithRetry(url: string, init: RequestInit, attempts =
       if (!RETRYABLE_STATUSES.has(response.status) || attempt === attempts) {
         return response;
       }
-      console.warn("[telegram/get-updates] retry_status", { status: response.status, attempt });
+      console.warn("[telegram/index] retry_status", { status: response.status, attempt });
     } catch (error: any) {
       lastError = error;
       const logTag = error?.name === "AbortError" ? "retry_timeout" : "retry_network_error";
-      console.warn(`[telegram/get-updates] ${logTag}`, { attempt, message: error?.message || "unknown_error" });
+      console.warn(`[telegram/index] ${logTag}`, { attempt, message: error?.message || "unknown_error" });
       if (attempt === attempts) throw error;
     } finally {
       clearTimeout(timer);
     }
     await wait(250 * 2 ** (attempt - 1));
   }
-  throw lastError || new Error("telegram_get_updates_failed");
+  throw lastError || new Error("telegram_request_failed");
 }
 
-export default async function handler(req: any, res: any) {
-  if (req.method !== "POST") {
-    res.status(405).json({ error: "Method not allowed" });
-    return;
-  }
-
+async function handleGetUpdates(req: any, res: any) {
   const botToken = req.body?.botToken || process.env.TELEGRAM_BOT_TOKEN;
   if (!botToken) {
     res.status(400).json({ error: "Telegram bot token is missing" });
@@ -67,7 +62,7 @@ export default async function handler(req: any, res: any) {
 
     const data = await response.json().catch(() => ({}));
     if (!response.ok || data?.ok !== true) {
-      console.error("[telegram/get-updates] api_error", { status: response.status, error: data?.description || "unknown_error" });
+      console.error("[telegram/index] get_updates_api_error", { status: response.status, error: data?.description || "unknown_error" });
       res.status(400).json({ error: data?.description || "Telegram getUpdates failed" });
       return;
     }
@@ -75,7 +70,58 @@ export default async function handler(req: any, res: any) {
     const updates: TelegramUpdate[] = Array.isArray(data.result) ? data.result : [];
     res.status(200).json({ updates });
   } catch (error: any) {
-    console.error("[telegram/get-updates] handler_error", { message: error?.message || "unknown_error" });
+    console.error("[telegram/index] get_updates_handler_error", { message: error?.message || "unknown_error" });
     res.status(500).json({ error: error?.message || "Telegram getUpdates error" });
   }
 }
+
+async function handleSendMessage(req: any, res: any) {
+  const botToken = req.body?.botToken || process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = req.body?.chatId;
+  const text = req.body?.text;
+  if (!botToken || !chatId || !text) {
+    res.status(400).json({ error: "botToken, chatId and text are required" });
+    return;
+  }
+
+  try {
+    const response = await fetchTelegramWithRetry(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        disable_web_page_preview: true
+      })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data?.ok !== true) {
+      console.error("[telegram/index] send_message_api_error", {
+        status: response.status,
+        chatId: String(chatId),
+        error: data?.description || "unknown_error"
+      });
+      res.status(400).json({ error: data?.description || "Telegram sendMessage failed" });
+      return;
+    }
+    res.status(200).json({ ok: true, result: data.result });
+  } catch (error: any) {
+    console.error("[telegram/index] send_message_handler_error", { message: error?.message || "unknown_error", chatId: String(chatId) });
+    res.status(500).json({ error: error?.message || "Telegram sendMessage error" });
+  }
+}
+
+export default async function handler(req: any, res: any) {
+  if (req.method !== "POST") {
+    res.status(405).json({ error: "Method not allowed" });
+    return;
+  }
+
+  const action = String(req.body?.action || "").toLowerCase();
+  if (action === "send-message") {
+    await handleSendMessage(req, res);
+    return;
+  }
+  await handleGetUpdates(req, res);
+}
+

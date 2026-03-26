@@ -3769,10 +3769,11 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
     }
     setServiceSyncLoading(true);
     try {
-      const updatesResp = await fetchJsonWithRetry("get-updates", "/api/telegram/get-updates", {
+      const updatesResp = await fetchJsonWithRetry("get-updates", "/api/telegram", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          action: "get-updates",
           botToken: serviceConnection.botToken.trim(),
           offset: telegramOffset > 0 ? telegramOffset + 1 : 0
         })
@@ -3902,10 +3903,11 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
             }
 
             if (replyText) {
-              const sendResp = await fetchJsonWithRetry("send-message", "/api/telegram/send-message", {
+              const sendResp = await fetchJsonWithRetry("send-message", "/api/telegram", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
+                  action: "send-message",
                   botToken: serviceConnection.botToken.trim(),
                   chatId: message.chat.id,
                   text: replyText

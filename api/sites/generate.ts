@@ -117,9 +117,26 @@ async function readRequestBody(req: any): Promise<Record<string, unknown>> {
     }
   }
   try {
-    const chunks: Buffer[] = [];
-    for await (const chunk of req) chunks.push(Buffer.from(chunk));
-    const raw = Buffer.concat(chunks).toString("utf8").trim();
+    const chunks: Uint8Array[] = [];
+    const encoder = new TextEncoder();
+    const decoder = new TextDecoder();
+    for await (const chunk of req) {
+      if (chunk instanceof Uint8Array) {
+        chunks.push(chunk);
+      } else if (typeof chunk === "string") {
+        chunks.push(encoder.encode(chunk));
+      } else {
+        chunks.push(encoder.encode(String(chunk ?? "")));
+      }
+    }
+    const total = chunks.reduce((sum, part) => sum + part.length, 0);
+    const merged = new Uint8Array(total);
+    let offset = 0;
+    for (const part of chunks) {
+      merged.set(part, offset);
+      offset += part.length;
+    }
+    const raw = decoder.decode(merged).trim();
     if (!raw) return {};
     return JSON.parse(raw) as Record<string, unknown>;
   } catch {
