@@ -1,5 +1,5 @@
-import { executeFollowUpJob } from "./engine";
-import { authErrorPayload, requireRequestContext } from "../_auth/session";
+import { executeFollowUpJob } from "./engine.js";
+import { authErrorPayload, requireRequestContext } from "../_auth/session.js";
 
 function asString(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;

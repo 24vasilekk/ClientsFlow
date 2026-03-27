@@ -1,5 +1,5 @@
-import { readJsonSafe, supabaseRestOrThrow } from "../_db/supabase";
-import { getStripePriceIdForPlan } from "./plans";
+import { readJsonSafe, supabaseRestOrThrow } from "../_db/supabase.js";
+import { getStripePriceIdForPlan } from "./plans.js";
 
 type AnyRecord = Record<string, any>;
 type SubscriptionStatus = "active" | "trial" | "past_due" | "canceled";

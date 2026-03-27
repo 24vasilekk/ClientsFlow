@@ -17,9 +17,9 @@ import {
   improveCodePrompt,
   getWebsitePromptPack
 } from "../../lib/sites/websiteBuilderPrompts.js";
-import type { WebsiteBrief } from "../../lib/sites/websiteBuilderTypes";
+import type { WebsiteBrief } from "../../lib/sites/websiteBuilderTypes.js";
 import { isValidCodePayloadShape, isValidWebsiteBriefShape } from "../../lib/sites/websiteBuilderValidation.js";
-import { authErrorPayload, requireRequestContext } from "../_auth/session";
+import { authErrorPayload, requireRequestContext } from "../_auth/session.js";
 
 type ApiMessage = { role: "user" | "assistant" | "system"; content: unknown };
 type ChatMessage = { role: "user" | "assistant" | "system"; content: string };

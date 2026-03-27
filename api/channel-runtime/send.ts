@@ -1,6 +1,6 @@
-import { readJsonSafe, safeSupabaseCall } from "../_db/supabase";
-import { markConnectionSync, resolveChannelCapabilities, validateConnectionById } from "../channel-connections/manager";
-import { checkWorkspaceLimit, trackUsage } from "../billing/service";
+import { readJsonSafe, safeSupabaseCall } from "../_db/supabase.js";
+import { markConnectionSync, resolveChannelCapabilities, validateConnectionById } from "../channel-connections/manager.js";
+import { checkWorkspaceLimit, trackUsage } from "../billing/service.js";
 
 type AnyRecord = Record<string, any>;
 

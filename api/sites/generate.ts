@@ -21,8 +21,8 @@ import type {
   WebsiteBuilderRequest,
   WebsiteGenerationModels,
   WebsiteGenerationProfile
-} from "../../lib/sites/websiteBuilderTypes";
-import { authErrorPayload, requireRequestContext } from "../_auth/session";
+} from "../../lib/sites/websiteBuilderTypes.js";
+import { authErrorPayload, requireRequestContext } from "../_auth/session.js";
 
 type AgentProfile = WebsiteGenerationProfile;
 

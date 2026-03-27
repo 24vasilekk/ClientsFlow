@@ -1,6 +1,6 @@
-import { readJsonSafe, supabaseRestOrThrow } from "../_db/supabase";
-import { listConnections } from "../channel-connections/manager";
-import { getBillingSummary } from "../billing/service";
+import { readJsonSafe, supabaseRestOrThrow } from "../_db/supabase.js";
+import { listConnections } from "../channel-connections/manager.js";
+import { getBillingSummary } from "../billing/service.js";
 
 type AnyRecord = Record<string, any>;
 

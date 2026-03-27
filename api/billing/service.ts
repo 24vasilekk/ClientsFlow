@@ -1,6 +1,6 @@
-import { readJsonSafe, safeSupabaseCall, supabaseRestOrThrow } from "../_db/supabase";
-import { createSubscription, updatePlan as providerUpdatePlan, cancelSubscription as providerCancelSubscription } from "./provider";
-import { getStripePriceIdForPlan } from "./plans";
+import { readJsonSafe, safeSupabaseCall, supabaseRestOrThrow } from "../_db/supabase.js";
+import { createSubscription, updatePlan as providerUpdatePlan, cancelSubscription as providerCancelSubscription } from "./provider.js";
+import { getStripePriceIdForPlan } from "./plans.js";
 
 type AnyRecord = Record<string, any>;
 type BillingMetric = "leads" | "messages" | "channels";

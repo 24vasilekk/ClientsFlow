@@ -1,9 +1,9 @@
 declare const process: { env: Record<string, string | undefined> };
 
-import { runAiDecision } from "../ai/pipeline";
-import type { AiHistoryItem } from "../ai/types";
-import { resolveChannelCapabilities } from "../channel-connections/manager";
-import { authErrorPayload, requireRequestContext } from "../_auth/session";
+import { runAiDecision } from "../ai/pipeline.js";
+import type { AiHistoryItem } from "../ai/types.js";
+import { resolveChannelCapabilities } from "../channel-connections/manager.js";
+import { authErrorPayload, requireRequestContext } from "../_auth/session.js";
 
 function asString(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;

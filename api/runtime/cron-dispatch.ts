@@ -1,7 +1,7 @@
-import { readJsonSafe, safeSupabaseCall } from "../_db/supabase";
-import { dispatchDueFollowUps } from "../followup/engine";
-import { dispatchPendingCrmHandoffs } from "../crm/handoffEngine";
-import { isInternalDispatchRequest } from "../_runtime/internal";
+import { readJsonSafe, safeSupabaseCall } from "../_db/supabase.js";
+import { dispatchDueFollowUps } from "../followup/engine.js";
+import { dispatchPendingCrmHandoffs } from "../crm/handoffEngine.js";
+import { isInternalDispatchRequest } from "../_runtime/internal.js";
 
 type AnyRecord = Record<string, any>;
 

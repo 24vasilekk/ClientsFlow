@@ -1,7 +1,7 @@
-import { runAiDecision } from "./pipeline";
-import type { AiDecisionInput, AiHistoryItem } from "./types";
-import { resolveChannelCapabilities } from "../channel-connections/manager";
-import { authErrorPayload, requireRequestContext } from "../_auth/session";
+import { runAiDecision } from "./pipeline.js";
+import type { AiDecisionInput, AiHistoryItem } from "./types.js";
+import { resolveChannelCapabilities } from "../channel-connections/manager.js";
+import { authErrorPayload, requireRequestContext } from "../_auth/session.js";
 
 type AnyRecord = Record<string, any>;
 

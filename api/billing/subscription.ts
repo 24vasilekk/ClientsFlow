@@ -1,6 +1,6 @@
-import { ensureWorkspaceAccess, workspaceAccessErrorPayload } from "../_auth/workspace";
-import { authErrorPayload, requireRequestContext } from "../_auth/session";
-import { billingCancelSubscription, billingCreateSubscription, billingUpdatePlan, getBillingSummary } from "./service";
+import { ensureWorkspaceAccess, workspaceAccessErrorPayload } from "../_auth/workspace.js";
+import { authErrorPayload, requireRequestContext } from "../_auth/session.js";
+import { billingCancelSubscription, billingCreateSubscription, billingUpdatePlan, getBillingSummary } from "./service.js";
 
 type AnyRecord = Record<string, any>;
 

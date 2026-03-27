@@ -1,5 +1,5 @@
-import { getPublishedSite } from "../../lib/sites/store";
-import { authErrorPayload, requireRequestContext } from "../_auth/session";
+import { getPublishedSite } from "../../lib/sites/store.js";
+import { authErrorPayload, requireRequestContext } from "../_auth/session.js";
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "GET") {

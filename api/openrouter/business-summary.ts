@@ -1,5 +1,5 @@
 declare const process: { env: Record<string, string | undefined> };
-import { authErrorPayload, requireRequestContext } from "../_auth/session";
+import { authErrorPayload, requireRequestContext } from "../_auth/session.js";
 
 const SYSTEM_PROMPT =
   "Ты product strategist для сервисного бизнеса. " +

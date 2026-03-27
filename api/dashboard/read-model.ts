@@ -1,6 +1,6 @@
-import { loadDashboardReadModel } from "./readModelQueries";
-import { ensureWorkspaceAccess, workspaceAccessErrorPayload } from "../_auth/workspace";
-import { authErrorPayload, requireRequestContext } from "../_auth/session";
+import { loadDashboardReadModel } from "./readModelQueries.js";
+import { ensureWorkspaceAccess, workspaceAccessErrorPayload } from "../_auth/workspace.js";
+import { authErrorPayload, requireRequestContext } from "../_auth/session.js";
 
 function asString(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;

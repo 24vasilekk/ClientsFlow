@@ -1,5 +1,5 @@
-import { readJsonSafe, safeSupabaseCall } from "../_db/supabase";
-import { checkWorkspaceLimit } from "../billing/service";
+import { readJsonSafe, safeSupabaseCall } from "../_db/supabase.js";
+import { checkWorkspaceLimit } from "../billing/service.js";
 
 declare const process: { env: Record<string, string | undefined> };
 

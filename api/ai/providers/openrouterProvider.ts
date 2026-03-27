@@ -1,6 +1,6 @@
 declare const process: { env: Record<string, string | undefined> };
 
-import type { AiDecisionInput, AiDecisionProvider, AiDecisionResult, AiDecisionOutput } from "../types";
+import type { AiDecisionInput, AiDecisionProvider, AiDecisionResult, AiDecisionOutput } from "../types.js";
 
 const RETRYABLE_STATUS = new Set([408, 409, 425, 429, 500, 502, 503, 504]);
 

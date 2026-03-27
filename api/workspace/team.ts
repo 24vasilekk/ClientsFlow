@@ -1,5 +1,5 @@
-import { authErrorPayload, requireRequestContext } from "../_auth/session";
-import { readJsonSafe, supabaseRestOrThrow } from "../_db/supabase";
+import { authErrorPayload, requireRequestContext } from "../_auth/session.js";
+import { readJsonSafe, supabaseRestOrThrow } from "../_db/supabase.js";
 
 declare const process: { env: Record<string, string | undefined> };
 

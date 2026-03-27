@@ -1,14 +1,14 @@
-import { readJsonSafe, supabaseRestOrThrow } from "../_db/supabase";
-import { extractExternalEventId, normalizeIncomingEvent } from "./_normalizers";
-import { syncFollowUpOnInbound } from "../followup/engine";
-import { enqueueCrmHandoff, executeCrmHandoff } from "../crm/handoffEngine";
-import { runAiDecision } from "../ai/pipeline";
-import { ensureWorkspaceAccess, workspaceAccessErrorPayload } from "../_auth/workspace";
-import { sendOutboundThroughRuntime } from "../channel-runtime/send";
-import { resolveChannelCapabilities } from "../channel-connections/manager";
-import { authErrorPayload, requireRequestContext } from "../_auth/session";
-import { isInternalDispatchRequest } from "../_runtime/internal";
-import { checkWorkspaceLimit, trackUsage } from "../billing/service";
+import { readJsonSafe, supabaseRestOrThrow } from "../_db/supabase.js";
+import { extractExternalEventId, normalizeIncomingEvent } from "./_normalizers.js";
+import { syncFollowUpOnInbound } from "../followup/engine.js";
+import { enqueueCrmHandoff, executeCrmHandoff } from "../crm/handoffEngine.js";
+import { runAiDecision } from "../ai/pipeline.js";
+import { ensureWorkspaceAccess, workspaceAccessErrorPayload } from "../_auth/workspace.js";
+import { sendOutboundThroughRuntime } from "../channel-runtime/send.js";
+import { resolveChannelCapabilities } from "../channel-connections/manager.js";
+import { authErrorPayload, requireRequestContext } from "../_auth/session.js";
+import { isInternalDispatchRequest } from "../_runtime/internal.js";
+import { checkWorkspaceLimit, trackUsage } from "../billing/service.js";
 
 declare const process: { env: Record<string, string | undefined> };
 

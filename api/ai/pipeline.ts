@@ -1,9 +1,9 @@
 declare const process: { env: Record<string, string | undefined> };
 
-import { safeSupabaseCall } from "../_db/supabase";
-import { createFallbackProvider } from "./providers/fallbackProvider";
-import { createOpenRouterProvider } from "./providers/openrouterProvider";
-import type { AiDecisionInput, AiDecisionOutput, AiDecisionProvider } from "./types";
+import { safeSupabaseCall } from "../_db/supabase.js";
+import { createFallbackProvider } from "./providers/fallbackProvider.js";
+import { createOpenRouterProvider } from "./providers/openrouterProvider.js";
+import type { AiDecisionInput, AiDecisionOutput, AiDecisionProvider } from "./types.js";
 
 function nowIso(): string {
   return new Date().toISOString();

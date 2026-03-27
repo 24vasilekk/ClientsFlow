@@ -1,9 +1,9 @@
-import { readJsonSafe, safeSupabaseCall } from "../_db/supabase";
-import { connectConnection, markConnectionSync, upsertConnection } from "../channel-connections/manager";
-import { ensureWorkspaceAccess, workspaceAccessErrorPayload } from "../_auth/workspace";
-import { authErrorPayload, requireRequestContext } from "../_auth/session";
-import { buildInternalAuthHeaders } from "../_runtime/internal";
-import { checkWorkspaceLimit, trackUsage } from "../billing/service";
+import { readJsonSafe, safeSupabaseCall } from "../_db/supabase.js";
+import { connectConnection, markConnectionSync, upsertConnection } from "../channel-connections/manager.js";
+import { ensureWorkspaceAccess, workspaceAccessErrorPayload } from "../_auth/workspace.js";
+import { authErrorPayload, requireRequestContext } from "../_auth/session.js";
+import { buildInternalAuthHeaders } from "../_runtime/internal.js";
+import { checkWorkspaceLimit, trackUsage } from "../billing/service.js";
 
 declare const process: { env: Record<string, string | undefined> };
 

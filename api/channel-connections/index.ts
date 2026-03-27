@@ -4,9 +4,9 @@ import {
   listConnections,
   reconnectConnection,
   validateConnectionById
-} from "./manager";
-import { ensureWorkspaceAccess, workspaceAccessErrorPayload } from "../_auth/workspace";
-import { authErrorPayload, requireRequestContext } from "../_auth/session";
+} from "./manager.js";
+import { ensureWorkspaceAccess, workspaceAccessErrorPayload } from "../_auth/workspace.js";
+import { authErrorPayload, requireRequestContext } from "../_auth/session.js";
 
 type AnyRecord = Record<string, any>;
 type WorkspaceRole = "owner" | "admin" | "member";

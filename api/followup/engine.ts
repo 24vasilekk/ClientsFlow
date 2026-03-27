@@ -1,7 +1,7 @@
-import { readJsonSafe, supabaseRestOrThrow } from "../_db/supabase";
-import { resolveFollowUpProvider } from "./provider";
-import { sendOutboundThroughRuntime } from "../channel-runtime/send";
-import { checkWorkspaceLimit, trackUsage } from "../billing/service";
+import { readJsonSafe, supabaseRestOrThrow } from "../_db/supabase.js";
+import { resolveFollowUpProvider } from "./provider.js";
+import { sendOutboundThroughRuntime } from "../channel-runtime/send.js";
+import { checkWorkspaceLimit, trackUsage } from "../billing/service.js";
 
 type AnyRecord = Record<string, any>;
 

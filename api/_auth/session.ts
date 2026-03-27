@@ -1,4 +1,4 @@
-import { readJsonSafe, supabaseRestOrThrow } from "../_db/supabase";
+import { readJsonSafe, supabaseRestOrThrow } from "../_db/supabase.js";
 
 declare const process: { env: Record<string, string | undefined> };
 

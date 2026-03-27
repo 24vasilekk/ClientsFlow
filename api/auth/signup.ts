@@ -1,5 +1,5 @@
-import { readJsonSafe } from "../_db/supabase";
-import { callSupabaseAuth } from "./_supabaseAuth";
+import { readJsonSafe } from "../_db/supabase.js";
+import { callSupabaseAuth } from "./_supabaseAuth.js";
 
 function asString(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;

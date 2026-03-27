@@ -1,9 +1,9 @@
-import { readJsonSafe, safeSupabaseCall } from "../_db/supabase";
-import { dispatchPendingCrmHandoffs } from "../crm/handoffEngine";
-import { runRecoveryForWorkspace, startManualFollowUp } from "../followup/engine";
-import { ensureWorkspaceAccess, workspaceAccessErrorPayload } from "../_auth/workspace";
-import { authErrorPayload, requireRequestContext } from "../_auth/session";
-import { enqueueDeferredInternalCall, isDeferredDispatchEnabled } from "../_runtime/internal";
+import { readJsonSafe, safeSupabaseCall } from "../_db/supabase.js";
+import { dispatchPendingCrmHandoffs } from "../crm/handoffEngine.js";
+import { runRecoveryForWorkspace, startManualFollowUp } from "../followup/engine.js";
+import { ensureWorkspaceAccess, workspaceAccessErrorPayload } from "../_auth/workspace.js";
+import { authErrorPayload, requireRequestContext } from "../_auth/session.js";
+import { enqueueDeferredInternalCall, isDeferredDispatchEnabled } from "../_runtime/internal.js";
 
 type AnyRecord = Record<string, any>;
 

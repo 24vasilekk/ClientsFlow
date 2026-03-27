@@ -1,4 +1,4 @@
-import { readJsonSafe, safeSupabaseCall } from "../_db/supabase";
+import { readJsonSafe, safeSupabaseCall } from "../_db/supabase.js";
 
 type WorkspaceRole = "owner" | "admin" | "member";
 

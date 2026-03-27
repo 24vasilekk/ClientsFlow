@@ -1,5 +1,5 @@
-import { readJsonSafe, supabaseRestOrThrow } from "../_db/supabase";
-import { trackUsage } from "../billing/service";
+import { readJsonSafe, supabaseRestOrThrow } from "../_db/supabase.js";
+import { trackUsage } from "../billing/service.js";
 
 type AnyRecord = Record<string, any>;
 

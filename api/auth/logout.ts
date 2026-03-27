@@ -1,6 +1,6 @@
-import { readJsonSafe } from "../_db/supabase";
-import { callSupabaseAuth } from "./_supabaseAuth";
-import { requireAuthenticatedRequest, authErrorPayload } from "../_auth/session";
+import { readJsonSafe } from "../_db/supabase.js";
+import { callSupabaseAuth } from "./_supabaseAuth.js";
+import { requireAuthenticatedRequest, authErrorPayload } from "../_auth/session.js";
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {

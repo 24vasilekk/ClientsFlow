@@ -1,4 +1,4 @@
-import type { AiDecisionInput, AiDecisionProvider, AiDecisionResult, AiHistoryItem, AiDecisionOutput } from "../types";
+import type { AiDecisionInput, AiDecisionProvider, AiDecisionResult, AiHistoryItem, AiDecisionOutput } from "../types.js";
 
 function clampConfidence(value: number): number {
   if (!Number.isFinite(value)) return 0.55;

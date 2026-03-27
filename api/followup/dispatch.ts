@@ -1,6 +1,6 @@
-import { dispatchDueFollowUps } from "./engine";
-import { authErrorPayload, requireRequestContext } from "../_auth/session";
-import { isInternalDispatchRequest } from "../_runtime/internal";
+import { dispatchDueFollowUps } from "./engine.js";
+import { authErrorPayload, requireRequestContext } from "../_auth/session.js";
+import { isInternalDispatchRequest } from "../_runtime/internal.js";
 
 function asString(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;

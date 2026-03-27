@@ -1,8 +1,8 @@
 declare const process: { env: Record<string, string | undefined> };
-import { connectConnection, disableConnection, markConnectionSync, reconnectConnection, validateConnectionById } from "../channel-connections/manager";
-import { ensureWorkspaceAccess, workspaceAccessErrorPayload } from "../_auth/workspace";
-import { authErrorPayload, requireRequestContext } from "../_auth/session";
-import { checkWorkspaceLimit, trackUsage } from "../billing/service";
+import { connectConnection, disableConnection, markConnectionSync, reconnectConnection, validateConnectionById } from "../channel-connections/manager.js";
+import { ensureWorkspaceAccess, workspaceAccessErrorPayload } from "../_auth/workspace.js";
+import { authErrorPayload, requireRequestContext } from "../_auth/session.js";
+import { checkWorkspaceLimit, trackUsage } from "../billing/service.js";
 type WorkspaceRole = "owner" | "admin" | "member";
 
 type TelegramUpdate = {

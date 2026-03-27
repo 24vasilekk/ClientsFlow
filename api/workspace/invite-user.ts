@@ -1,5 +1,5 @@
-import { authErrorPayload, requireRequestContext } from "../_auth/session";
-import teamHandler from "./team";
+import { authErrorPayload, requireRequestContext } from "../_auth/session.js";
+import teamHandler from "./team.js";
 
 function buildTraceId(req: any): string {
   return String(req?.headers?.["x-trace-id"] || req?.body?.traceId || `trace_workspace_invite_${Date.now().toString(36)}`);

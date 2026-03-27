@@ -1,7 +1,7 @@
-import { readJsonSafe, supabaseRestOrThrow } from "../_db/supabase";
-import { ensureWorkspaceAccess, workspaceAccessErrorPayload } from "../_auth/workspace";
-import { listConnections } from "../channel-connections/manager";
-import { authErrorPayload, requireRequestContext } from "../_auth/session";
+import { readJsonSafe, supabaseRestOrThrow } from "../_db/supabase.js";
+import { ensureWorkspaceAccess, workspaceAccessErrorPayload } from "../_auth/workspace.js";
+import { listConnections } from "../channel-connections/manager.js";
+import { authErrorPayload, requireRequestContext } from "../_auth/session.js";
 
 type AnyRecord = Record<string, any>;
 

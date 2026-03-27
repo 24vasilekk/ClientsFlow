@@ -1,7 +1,7 @@
 declare const process: { env: Record<string, string | undefined> };
 
-import { createPublishedSite, type PublishedSitePayload } from "../../lib/sites/store";
-import { authErrorPayload, requireRequestContext } from "../_auth/session";
+import { createPublishedSite, type PublishedSitePayload } from "../../lib/sites/store.js";
+import { authErrorPayload, requireRequestContext } from "../_auth/session.js";
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {

@@ -1,5 +1,5 @@
-import { authErrorPayload, requireAuthenticatedRequest } from "../_auth/session";
-import { readJsonSafe, supabaseRestOrThrow } from "../_db/supabase";
+import { authErrorPayload, requireAuthenticatedRequest } from "../_auth/session.js";
+import { readJsonSafe, supabaseRestOrThrow } from "../_db/supabase.js";
 
 type AnyRecord = Record<string, any>;
 

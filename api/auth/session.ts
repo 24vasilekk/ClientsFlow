@@ -1,4 +1,4 @@
-import { authErrorPayload, requireRequestContext } from "../_auth/session";
+import { authErrorPayload, requireRequestContext } from "../_auth/session.js";
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "GET") {

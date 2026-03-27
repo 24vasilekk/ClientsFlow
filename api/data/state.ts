@@ -1,8 +1,8 @@
-import { readJsonSafe, safeSupabaseCall } from "../_db/supabase";
-import { listConnections } from "../channel-connections/manager";
-import { ensureWorkspaceAccess, workspaceAccessErrorPayload } from "../_auth/workspace";
-import { authErrorPayload, requireRequestContext } from "../_auth/session";
-import { checkWorkspaceLimit } from "../billing/service";
+import { readJsonSafe, safeSupabaseCall } from "../_db/supabase.js";
+import { listConnections } from "../channel-connections/manager.js";
+import { ensureWorkspaceAccess, workspaceAccessErrorPayload } from "../_auth/workspace.js";
+import { authErrorPayload, requireRequestContext } from "../_auth/session.js";
+import { checkWorkspaceLimit } from "../billing/service.js";
 
 type AnyRecord = Record<string, any>;
 
