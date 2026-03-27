@@ -1,8 +1,18 @@
 import { getPublishedSite } from "../../lib/sites/store";
+import { authErrorPayload, requireRequestContext } from "../_auth/session";
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "GET") {
     res.status(405).json({ error: "Method not allowed" });
+    return;
+  }
+
+  const traceId = String(req.headers?.["x-trace-id"] || req.query?.traceId || `trace_sites_get_${Date.now().toString(36)}`);
+  try {
+    await requireRequestContext(req, "api/sites/get");
+  } catch (error: any) {
+    const failure = authErrorPayload(error, traceId);
+    res.status(failure.status).json(failure.body);
     return;
   }
 
@@ -22,4 +32,3 @@ export default async function handler(req: any, res: any) {
     res.status(500).json({ error: error?.message || "Fetch failed" });
   }
 }
-

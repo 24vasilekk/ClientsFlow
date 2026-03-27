@@ -1,4 +1,5 @@
 declare const process: { env: Record<string, string | undefined> };
+import { authErrorPayload, requireRequestContext } from "../_auth/session";
 
 const SYSTEM_PROMPT =
   "Ты продуктовый аналитик внедрения ClientsFlow для сервисных бизнесов. " +
@@ -11,6 +12,15 @@ const SYSTEM_PROMPT =
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
+    return;
+  }
+
+  const traceId = String(req.headers?.["x-trace-id"] || req.body?.traceId || `trace_business_brief_${Date.now().toString(36)}`);
+  try {
+    await requireRequestContext(req, "api/openrouter/business-brief");
+  } catch (error: any) {
+    const failure = authErrorPayload(error, traceId);
+    res.status(failure.status).json(failure.body);
     return;
   }
 

@@ -1,4 +1,5 @@
 declare const process: { env: Record<string, string | undefined> };
+import { authErrorPayload, requireRequestContext } from "../_auth/session";
 
 const SYSTEM_PROMPT =
   "Ты senior web designer и frontend developer. " +
@@ -8,6 +9,15 @@ const SYSTEM_PROMPT =
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
+    return;
+  }
+
+  const traceId = String(req.headers?.["x-trace-id"] || req.body?.traceId || `trace_sites_copy_${Date.now().toString(36)}`);
+  try {
+    await requireRequestContext(req, "api/openrouter/sites-copy");
+  } catch (error: any) {
+    const failure = authErrorPayload(error, traceId);
+    res.status(failure.status).json(failure.body);
     return;
   }
 

@@ -19,6 +19,7 @@ import {
 } from "../../lib/sites/websiteBuilderPrompts.js";
 import type { WebsiteBrief } from "../../lib/sites/websiteBuilderTypes";
 import { isValidCodePayloadShape, isValidWebsiteBriefShape } from "../../lib/sites/websiteBuilderValidation.js";
+import { authErrorPayload, requireRequestContext } from "../_auth/session";
 
 type ApiMessage = { role: "user" | "assistant" | "system"; content: unknown };
 type ChatMessage = { role: "user" | "assistant" | "system"; content: string };
@@ -214,6 +215,15 @@ function humanizeWebsiteError(raw: string) {
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed", mode: "mock" });
+    return;
+  }
+
+  const traceId = String(req.headers?.["x-trace-id"] || req.body?.traceId || `trace_openrouter_chat_${Date.now().toString(36)}`);
+  try {
+    await requireRequestContext(req, "api/openrouter/chat");
+  } catch (error: any) {
+    const failure = authErrorPayload(error, traceId);
+    res.status(failure.status).json(failure.body);
     return;
   }
 

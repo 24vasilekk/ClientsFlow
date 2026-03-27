@@ -22,10 +22,11 @@ import type {
   WebsiteGenerationModels,
   WebsiteGenerationProfile
 } from "../../lib/sites/websiteBuilderTypes";
+import { authErrorPayload, requireRequestContext } from "../_auth/session";
 
 type AgentProfile = WebsiteGenerationProfile;
 
-export const config = { maxDuration: 60 };
+export const config = { maxDuration: 120 };
 
 type RouteErrorCode =
   | "UPSTREAM_TIMEOUT"
@@ -345,7 +346,15 @@ function successPayload(input: {
 }
 
 export default async function handler(req: any, res: any) {
+  const traceId = String(req.headers?.["x-trace-id"] || req.body?.traceId || req.query?.traceId || `trace_sites_generate_${Date.now().toString(36)}`);
   if (req.method === "GET") {
+    try {
+      await requireRequestContext(req, "api/sites/generate:get");
+    } catch (error: any) {
+      const failure = authErrorPayload(error, traceId);
+      res.status(failure.status).json(failure.body);
+      return;
+    }
     const sessionId = String(req.query?.sessionId || "").trim();
     res.status(200).json({ sessionId, history: [] });
     return;
@@ -361,6 +370,7 @@ export default async function handler(req: any, res: any) {
   let stage = "init";
 
   try {
+    await requireRequestContext(req, "api/sites/generate:post");
     const body = (await readRequestBody(req)) as WebsiteBuilderRequest;
     const sessionId = String(body.sessionId || "").trim() || `session-${Math.random().toString(36).slice(2, 10)}`;
     const round = Math.max(1, Number(body.round || 1));
@@ -548,6 +558,11 @@ export default async function handler(req: any, res: any) {
       })
     );
   } catch (error: any) {
+    if (error?.code?.startsWith?.("auth_")) {
+      const failure = authErrorPayload(error, traceId);
+      res.status(failure.status).json(failure.body);
+      return;
+    }
     const routeError =
       error instanceof RouteError
         ? error

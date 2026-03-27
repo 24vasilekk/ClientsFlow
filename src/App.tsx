@@ -3,6 +3,18 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import DashboardApp from "./DashboardApp";
 import SitesBuilderPage from "./sites/ChatSitesBuilderPage";
 import WorkbenchApp from "./WorkbenchApp";
+import {
+  AUTH_KEY,
+  WORKBENCH_AUTH_KEY,
+  clearAuthSession,
+  isAuthenticatedClient,
+  loginWithPassword,
+  logoutCurrentSession,
+  refreshSessionFromToken,
+  registerWithPassword,
+  requestPasswordReset,
+  sendMagicLink
+} from "./core/auth/context";
 
 type RoutePath = "/" | "/login" | "/dashboard" | "/pricing" | "/workbench" | "/sites" | `/s/${string}` | `/sites/preview/${string}`;
 
@@ -42,9 +54,6 @@ type WebsiteFixLogItem = {
   status: "started" | "failed" | "succeeded";
   note?: string;
 };
-
-const AUTH_KEY = "clientsflow_demo_auth_v1";
-const WORKBENCH_AUTH_KEY = "clientsflow_workbench_auth_v1";
 
 function humanizeWebsiteUiError(raw: string) {
   const text = String(raw || "").toLowerCase();
@@ -1479,17 +1488,91 @@ function LoginPage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [hint, setHint] = useState<string | null>(null);
+  const inviteToken = useMemo(() => {
+    if (typeof window === "undefined") return "";
+    const params = new URLSearchParams(window.location.search);
+    return params.get("invite") || "";
+  }, []);
 
-  const submit = (e: FormEvent) => {
+  const acceptInviteIfNeeded = async () => {
+    if (!inviteToken) return;
+    const response = await fetch("/api/workspace/accept-invite", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: inviteToken })
+    });
+    const data = (await response.json().catch(() => ({}))) as { ok?: boolean; error?: string; workspaceId?: string };
+    if (!response.ok || !data?.ok) {
+      throw new Error(data?.error || "invite_accept_failed");
+    }
+  };
+
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (email === "111" && password === "111") {
-      localStorage.setItem(AUTH_KEY, JSON.stringify({ isAuth: true, email }));
-      localStorage.setItem(WORKBENCH_AUTH_KEY, JSON.stringify({ isAuth: true, email }));
+    setLoading(true);
+    setError(null);
+    setHint(null);
+    try {
+      await loginWithPassword(email, password);
+      await acceptInviteIfNeeded();
+      await refreshSessionFromToken();
       setError(null);
       onNavigate("/dashboard");
-      return;
+    } catch (err: any) {
+      setError(err?.message || "Не удалось войти.");
+    } finally {
+      setLoading(false);
     }
-    setError("Неверный логин или пароль. Для рабочего входа используйте 111 / 111.");
+  };
+
+  const runRegister = async () => {
+    setLoading(true);
+    setError(null);
+    setHint(null);
+    try {
+      const result = await registerWithPassword(email, password);
+      if (result.requiresEmailConfirmation) {
+        setHint("Проверьте почту и подтвердите регистрацию через письмо.");
+      } else {
+        await acceptInviteIfNeeded();
+        await refreshSessionFromToken();
+        onNavigate("/dashboard");
+      }
+    } catch (err: any) {
+      setError(err?.message || "Не удалось зарегистрироваться.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const runMagicLink = async () => {
+    setLoading(true);
+    setError(null);
+    setHint(null);
+    try {
+      await sendMagicLink(email);
+      setHint("Ссылка для входа отправлена на email.");
+    } catch (err: any) {
+      setError(err?.message || "Не удалось отправить magic link.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const runResetPassword = async () => {
+    setLoading(true);
+    setError(null);
+    setHint(null);
+    try {
+      await requestPasswordReset(email);
+      setHint("Письмо для восстановления пароля отправлено.");
+    } catch (err: any) {
+      setError(err?.message || "Не удалось отправить письмо для восстановления.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -1498,8 +1581,9 @@ function LoginPage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
         <p className="text-sm font-semibold text-cyan-700">
           <BrandWordmark cClass="text-cyan-600" flowClass="text-slate-900" />
         </p>
-        <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900">Рабочий вход</h1>
-        <p className="mt-2 text-sm text-slate-600">Доступ в рабочий контур: логин `111`, пароль `111`.</p>
+        <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900">Вход в CFlow</h1>
+        <p className="mt-2 text-sm text-slate-600">Supabase Auth: email/password, magic link, восстановление пароля.</p>
+        {inviteToken ? <p className="mt-2 text-sm font-semibold text-cyan-700">У вас приглашение в команду workspace. Войдите, чтобы принять его.</p> : null}
         <label className="mt-5 block">
           <span className="mb-1 block text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Email</span>
           <input value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm" />
@@ -1508,8 +1592,37 @@ function LoginPage({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
           <span className="mb-1 block text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Пароль</span>
           <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm" />
         </label>
-        <button className="mt-5 w-full rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white">Войти</button>
+        <button disabled={loading} className="mt-5 w-full rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60">
+          {loading ? "Подождите..." : "Войти"}
+        </button>
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() => void runRegister()}
+            className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-60"
+          >
+            Зарегистрироваться
+          </button>
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() => void runMagicLink()}
+            className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-60"
+          >
+            Magic link
+          </button>
+        </div>
+        <button
+          type="button"
+          disabled={loading}
+          onClick={() => void runResetPassword()}
+          className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-60"
+        >
+          Восстановить пароль
+        </button>
         {error ? <p className="mt-3 text-sm font-semibold text-rose-600">{error}</p> : null}
+        {hint ? <p className="mt-3 text-sm font-semibold text-emerald-700">{hint}</p> : null}
         <button type="button" onClick={() => onNavigate("/")} className="mt-3 w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700">На главную</button>
       </form>
     </div>
@@ -1932,14 +2045,7 @@ function FullPreviewPage({ path, onNavigate }: { path: `/sites/preview/${string}
 }
 
 function DashboardRoute({ onNavigate }: { onNavigate: (path: RoutePath) => void }) {
-  const isAuth = useMemo(() => {
-    try {
-      const raw = localStorage.getItem(AUTH_KEY);
-      return raw ? JSON.parse(raw).isAuth === true : false;
-    } catch {
-      return false;
-    }
-  }, []);
+  const isAuth = useMemo(() => isAuthenticatedClient(), []);
   const isWorkbenchAuth = useMemo(() => {
     try {
       const raw = localStorage.getItem(WORKBENCH_AUTH_KEY);
@@ -1953,20 +2059,10 @@ function DashboardRoute({ onNavigate }: { onNavigate: (path: RoutePath) => void 
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#f7f8f6] px-4">
         <div className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">Личный кабинет в демо-режиме</h1>
-          <p className="mt-2 text-sm text-slate-600">Для входа используйте любую пару email/пароль или перейдите сразу в демо-панель.</p>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">Личный кабинет</h1>
+          <p className="mt-2 text-sm text-slate-600">Требуется авторизация через Supabase Auth.</p>
           <div className="mt-5 flex flex-col gap-2 sm:flex-row">
             <button onClick={() => onNavigate("/login")} className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white">Войти</button>
-            <button
-              onClick={() => {
-                localStorage.setItem(AUTH_KEY, JSON.stringify({ isAuth: true, email: "demo@clientsflow.ai" }));
-                onNavigate("/dashboard");
-                window.location.reload();
-              }}
-              className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700"
-            >
-              Продолжить как демо-пользователь
-            </button>
           </div>
         </div>
       </div>
@@ -1976,6 +2072,18 @@ function DashboardRoute({ onNavigate }: { onNavigate: (path: RoutePath) => void 
   return (
     <div className="relative">
       <DashboardApp onNavigate={onNavigate} />
+      <button
+        onClick={() => {
+          void logoutCurrentSession().finally(() => {
+            clearAuthSession();
+            onNavigate("/login");
+            window.location.reload();
+          });
+        }}
+        className="fixed bottom-4 left-4 z-50 rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm"
+      >
+        Logout
+      </button>
       {isWorkbenchAuth ? (
         <button
           onClick={() => onNavigate("/workbench")}
@@ -2003,7 +2111,7 @@ function WorkbenchRoute({ onNavigate }: { onNavigate: (path: RoutePath) => void 
       <div className="flex min-h-screen items-center justify-center bg-[#f7f8f6] px-4">
         <div className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">Рабочий контур закрыт</h1>
-          <p className="mt-2 text-sm text-slate-600">Перейдите во вход и авторизуйтесь с учётными данными 111 / 111.</p>
+          <p className="mt-2 text-sm text-slate-600">Перейдите во вход и авторизуйтесь через email/password или magic link.</p>
           <div className="mt-5 flex flex-col gap-2 sm:flex-row">
             <button onClick={() => onNavigate("/login")} className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white">Перейти ко входу</button>
             <button onClick={() => onNavigate("/")} className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700">На главную</button>

@@ -1,4 +1,29 @@
 {
+  "functions": {
+    "api/ingest/events.ts": { "maxDuration": 90 },
+    "api/analytics/metrics.ts": { "maxDuration": 60 },
+    "api/dashboard/read-model.ts": { "maxDuration": 60 },
+    "api/channel-connections/index.ts": { "maxDuration": 60 },
+    "api/ops/actions.ts": { "maxDuration": 90 },
+    "api/openrouter/chat.ts": { "maxDuration": 90 },
+    "api/openrouter/dialog-analysis.ts": { "maxDuration": 60 },
+    "api/openrouter/business-audit.ts": { "maxDuration": 60 },
+    "api/openrouter/business-summary.ts": { "maxDuration": 60 },
+    "api/openrouter/business-brief.ts": { "maxDuration": 60 },
+    "api/openrouter/product-chat.ts": { "maxDuration": 60 },
+    "api/openrouter/sites-copy.ts": { "maxDuration": 90 },
+    "api/sites/generate.ts": { "maxDuration": 120 },
+    "api/followup/dispatch.ts": { "maxDuration": 120 },
+    "api/followup/execute.ts": { "maxDuration": 60 },
+    "api/crm/handoff.ts": { "maxDuration": 120 },
+    "api/runtime/cron-dispatch.ts": { "maxDuration": 180 }
+  },
+  "crons": [
+    {
+      "path": "/api/runtime/cron-dispatch",
+      "schedule": "*/5 * * * *"
+    }
+  ],
   "rewrites": [
     {
       "source": "/((?!api/).*)",

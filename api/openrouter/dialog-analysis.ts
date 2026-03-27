@@ -1,4 +1,5 @@
 declare const process: { env: Record<string, string | undefined> };
+import { authErrorPayload, requireRequestContext } from "../_auth/session";
 
 type InputTimelineItem = {
   role?: string;
@@ -107,6 +108,15 @@ function heuristicAnalysis(conversation: InputConversation): AnalysisResult {
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
+    return;
+  }
+
+  const traceId = String(req.headers?.["x-trace-id"] || req.body?.traceId || `trace_dialog_analysis_${Date.now().toString(36)}`);
+  try {
+    await requireRequestContext(req, "api/openrouter/dialog-analysis");
+  } catch (error: any) {
+    const failure = authErrorPayload(error, traceId);
+    res.status(failure.status).json(failure.body);
     return;
   }
 

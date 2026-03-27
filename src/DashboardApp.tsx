@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { resolveClientUserContext } from "./core/auth/context";
 import {
   Bar,
   BarChart,
@@ -29,6 +30,8 @@ type DashboardAppProps = {
   standaloneSites?: boolean;
   onNavigate?: (path: "/" | "/login" | "/dashboard" | "/pricing" | "/workbench" | "/sites") => void;
 };
+
+type WorkspaceRole = "owner" | "admin" | "member";
 
 type SubscriptionState = {
   planId: "trial" | "basic" | "pro" | "business" | null;
@@ -103,6 +106,144 @@ type LostRevenueSnapshot = {
   topReason: string;
   reasons: Array<{ reason: string; count: number; revenue: number }>;
   actions: string[];
+};
+
+type AnalyticsTrendPoint = {
+  day: string;
+  incoming: number;
+  booked: number;
+  lost: number;
+  followUpActivated: number;
+  handoffToCrm: number;
+  responseAvgSec: number;
+};
+
+type AnalyticsPayload = {
+  range: { from: string; to: string; label: string };
+  metrics: {
+    incomingLeads: number;
+    qualified: number;
+    booked: number;
+    lost: number;
+    followUpActivated: number;
+    followUpSent: number;
+    recovered: number;
+    handoffToCrm: number;
+    handoffSuccess: number;
+    estimatedLostRevenue: number;
+    responseTimeAvgSec: number;
+    responseTimeP95Sec: number;
+    outboundMessages: number;
+  };
+  trend: AnalyticsTrendPoint[];
+  funnel: Array<{ stage: string; value: number }>;
+  channels: Array<{ channel: Channel; incoming: number; qualified: number; booked: number; lost: number; conversion: number }>;
+  conversion: number;
+  lostRevenue: LostRevenueSnapshot;
+  emptyState: boolean;
+};
+
+type DashboardReadModel = {
+  runtimeStatus?: "ok" | "degraded";
+  traceId?: string | null;
+  generatedAt: string;
+  sourceOfTruth: {
+    leads: "leads";
+    conversations: "conversations";
+    messages: "messages";
+    channels: "channel_connections";
+  };
+  leads: LeadRecord[];
+  stageCounts: Record<LeadStage, number>;
+  conversationPreviews: InboxConversation[];
+  recentMessages: Array<{
+    id: string;
+    leadId: string;
+    conversationId: string;
+    client: string;
+    channel: Channel;
+    direction: "inbound" | "outbound";
+    text: string;
+    timestamp: string;
+  }>;
+  connectedChannels: string[];
+  connectionHealth: Array<{
+    id: string;
+    channel: string;
+    status: string;
+    healthStatus: string;
+    capabilities?: {
+      supportsInbound: boolean;
+      supportsOutbound: boolean;
+      supportsAutoReply: boolean;
+      supportsFollowUp: boolean;
+      supportsCrmHandoffTrigger: boolean;
+      supportsWebhookVerification: boolean;
+      supportsHealthCheck: boolean;
+    };
+    lastSyncAt: string | null;
+    lastError: string | null;
+  }>;
+  kpiSummary: {
+    incomingLeads: number;
+    qualifiedLeads: number;
+    bookedLeads: number;
+    lostLeads: number;
+    inboundMessages: number;
+    outboundMessages: number;
+    connectedChannels: number;
+    healthyChannels: number;
+  };
+  billingSummary?: {
+    plan: {
+      id: string;
+      title: string;
+      description: string;
+      priceMonthly: number;
+      currency: string;
+      isPlaceholder: boolean;
+      limits: {
+        leads: number | null;
+        messages: number | null;
+        channels: number | null;
+      };
+    };
+    subscription: {
+      id: string;
+      status: string;
+      provider: string;
+      currentPeriodStart: string;
+      currentPeriodEnd: string;
+    };
+    usage: {
+      periodKey: string;
+      leads: number;
+      messages: number;
+      channels: number;
+      inboundMessages: number;
+      aiReplies: number;
+      followUpJobs: number;
+      crmHandoffs: number;
+    };
+    limitFlags: {
+      leadsNearLimit: boolean;
+      messagesNearLimit: boolean;
+      channelsNearLimit: boolean;
+    };
+    invoices: Array<{
+      id: string;
+      planId: string;
+      amount: number;
+      currency: string;
+      status: string;
+      createdAt: string;
+      issuedAt: string;
+      paidAt: string;
+      periodStart: string;
+      periodEnd: string;
+      provider: string;
+    }>;
+  };
 };
 
 type RecommendationPriority = "Критично" | "Высокий" | "Средний";
@@ -210,6 +351,67 @@ type ServiceConnection = {
   botToken: string;
   autoReplyEnabled: boolean;
   connectedAt: string | null;
+  crmWebhookUrl?: string;
+  crmWebhookAuthMode?: "none" | "bearer" | "header";
+  crmWebhookAuthHeader?: string;
+  crmWebhookToken?: string;
+  crmWebhookEventTypes?: string[];
+  instagramAccountId?: string;
+  instagramPageId?: string;
+  instagramAccessToken?: string;
+  instagramConnectedAt?: string | null;
+  vkGroupId?: string;
+  vkAccessToken?: string;
+  vkConnectedAt?: string | null;
+};
+
+type ChannelConnectionManagerItem = {
+  id: string;
+  channel: string;
+  channelType: string;
+  status: "connected" | "connecting" | "validating" | "needs_reauth" | "error" | "disabled";
+  healthStatus: "healthy" | "degraded" | "error" | "disabled" | "unknown";
+  accountId: string;
+  pageId: string;
+  businessId: string;
+  lastSyncAt: string | null;
+  lastHealthCheckAt: string | null;
+  lastError: string | null;
+  tokenStorage: "encrypted" | "dev_placeholder" | "plaintext";
+  sync: { inbound24h: number; outbound24h: number; lastMessageAt: string | null };
+  capabilities: {
+    supportsInbound: boolean;
+    supportsOutbound: boolean;
+    supportsAutoReply: boolean;
+    supportsFollowUp: boolean;
+    supportsCrmHandoffTrigger: boolean;
+    supportsWebhookVerification: boolean;
+    supportsHealthCheck: boolean;
+  };
+  updatedAt: string | null;
+};
+
+type WorkspaceTeamMember = {
+  id: string;
+  userId: string;
+  role: WorkspaceRole;
+  status: string;
+  joinedAt: string;
+  updatedAt: string;
+  isCurrentUser: boolean;
+};
+
+type WorkspaceInvite = {
+  id: string;
+  email: string;
+  role: WorkspaceRole;
+  status: string;
+  invitedByUserId: string;
+  expiresAt: string;
+  createdAt: string;
+  updatedAt: string;
+  inviteUrl?: string;
+  inviteToken?: string;
 };
 
 type TelegramProfile = {
@@ -787,65 +989,6 @@ const leadRecords: LeadRecord[] = [
   }
 ];
 
-const analyticsKpis = [
-  { label: "Всего входящих", value: "1 248", note: "+12% к предыдущему месяцу" },
-  { label: "Квалифицировано", value: "812", note: "65.1% от входящих" },
-  { label: "Записано", value: "436", note: "53.7% от квалифицированных" },
-  { label: "Потеряно", value: "228", note: "18.3% от входящих" },
-  { label: "Среднее время ответа", value: "27 сек", note: "На 19 сек быстрее базы" },
-  { label: "Общая конверсия", value: "34.9%", note: "+4.6 п.п. за 30 дней" }
-];
-
-const analyticsFunnelData = [
-  { stage: "Входящие", value: 1248 },
-  { stage: "Ответ получен", value: 1096 },
-  { stage: "Квалифицировано", value: 812 },
-  { stage: "Доведено до записи", value: 436 },
-  { stage: "Потеряно", value: 228 }
-];
-
-const analyticsTrendData = [
-  { day: "01 мар", incoming: 34, booked: 11 },
-  { day: "03 мар", incoming: 38, booked: 13 },
-  { day: "05 мар", incoming: 41, booked: 14 },
-  { day: "07 мар", incoming: 39, booked: 13 },
-  { day: "09 мар", incoming: 45, booked: 16 },
-  { day: "11 мар", incoming: 47, booked: 17 },
-  { day: "13 мар", incoming: 44, booked: 15 },
-  { day: "15 мар", incoming: 52, booked: 19 },
-  { day: "17 мар", incoming: 49, booked: 18 },
-  { day: "19 мар", incoming: 55, booked: 21 }
-];
-
-const analyticsConversionData = [
-  { name: "Записано", value: 436 },
-  { name: "Потеряно", value: 228 }
-];
-
-const analyticsChannelData = [
-  { channel: "Telegram", incoming: 342, qualified: 254, booked: 148, conversion: 43.3 },
-  { channel: "WhatsApp", incoming: 318, qualified: 217, booked: 124, conversion: 39.0 },
-  { channel: "Instagram", incoming: 366, qualified: 226, booked: 111, conversion: 30.3 },
-  { channel: "Website", incoming: 222, qualified: 115, booked: 53, conversion: 23.9 }
-];
-
-const analyticsResponseTrend = [
-  { period: "Пн", seconds: 31 },
-  { period: "Вт", seconds: 29 },
-  { period: "Ср", seconds: 26 },
-  { period: "Чт", seconds: 28 },
-  { period: "Пт", seconds: 24 },
-  { period: "Сб", seconds: 22 },
-  { period: "Вс", seconds: 25 }
-];
-
-const analyticsInsights = [
-  "Большая часть лидов теряется после вопроса о стоимости.",
-  "Telegram даёт больше целевых обращений, чем сайт.",
-  "Есть 12 лидов, которым стоит написать повторно.",
-  "Пик входящих обращений приходится на 17:00-20:00, увеличьте плотность слотов в это окно."
-];
-
 const aiBeforeAfterExamples = [
   {
     context: "Запрос стоимости в Instagram",
@@ -1289,104 +1432,54 @@ function saveSitesBuilderPayment(state: { paid: boolean; paidAt: string | null }
 }
 
 function loadServiceConnection(): ServiceConnection {
-  if (typeof window === "undefined") {
-    return { serviceName: "", endpoint: "", token: "", botToken: "", autoReplyEnabled: true, connectedAt: null };
-  }
-  try {
-    const raw = localStorage.getItem(SERVICE_CONNECTION_KEY);
-    if (!raw) return { serviceName: "", endpoint: "", token: "", botToken: "", autoReplyEnabled: true, connectedAt: null };
-    const parsed = JSON.parse(raw) as Partial<ServiceConnection>;
-    return {
-      serviceName: parsed.serviceName ?? "",
-      endpoint: parsed.endpoint ?? "",
-      token: parsed.token ?? "",
-      botToken: parsed.botToken ?? "",
-      autoReplyEnabled: parsed.autoReplyEnabled ?? true,
-      connectedAt: parsed.connectedAt ?? null
-    };
-  } catch {
-    return { serviceName: "", endpoint: "", token: "", botToken: "", autoReplyEnabled: true, connectedAt: null };
-  }
+  return {
+    serviceName: "",
+    endpoint: "",
+    token: "",
+    botToken: "",
+    autoReplyEnabled: true,
+    connectedAt: null,
+    crmWebhookUrl: "",
+    crmWebhookAuthMode: "bearer",
+    crmWebhookAuthHeader: "X-CRM-Auth",
+    crmWebhookToken: "",
+    crmWebhookEventTypes: ["lead.qualified"],
+    instagramAccountId: "",
+    instagramPageId: "",
+    instagramAccessToken: "",
+    instagramConnectedAt: null,
+    vkGroupId: "",
+    vkAccessToken: "",
+    vkConnectedAt: null
+  };
 }
 
 function saveServiceConnection(connection: ServiceConnection): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(SERVICE_CONNECTION_KEY, JSON.stringify(connection));
-}
-
-function loadServiceEvents(): ServiceEvent[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(SERVICE_EVENTS_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as ServiceEvent[];
-    return parseServiceEvents(parsed);
-  } catch {
-    return [];
-  }
-}
-
-function saveServiceEvents(events: ServiceEvent[]): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(SERVICE_EVENTS_KEY, JSON.stringify(events));
+  void connection;
 }
 
 function loadTelegramOffset(): number {
-  if (typeof window === "undefined") return 0;
-  const raw = localStorage.getItem(TELEGRAM_OFFSET_KEY);
-  const parsed = Number(raw ?? 0);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+  return 0;
 }
 
 function saveTelegramOffset(offset: number): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(TELEGRAM_OFFSET_KEY, String(offset));
+  void offset;
 }
 
 function loadTelegramProfiles(): Record<string, TelegramProfile> {
-  if (typeof window === "undefined") return {};
-  try {
-    const raw = localStorage.getItem(TELEGRAM_PROFILES_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as Record<string, TelegramProfile>;
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
+  return {};
 }
 
 function saveTelegramProfiles(profiles: Record<string, TelegramProfile>): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(TELEGRAM_PROFILES_KEY, JSON.stringify(profiles));
+  void profiles;
 }
 
 function loadTelegramErrorLogs(): TelegramErrorLogEntry[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(TELEGRAM_ERROR_LOGS_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as Array<Partial<TelegramErrorLogEntry>>;
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .map((item) => ({
-        id: typeof item.id === "string" ? item.id : `log-${Math.random().toString(36).slice(2)}`,
-        at: typeof item.at === "string" ? item.at : new Date().toISOString(),
-        scope:
-          item.scope === "get-updates" || item.scope === "send-message" || item.scope === "sync-flow"
-            ? item.scope
-            : "sync-flow",
-        message: typeof item.message === "string" ? item.message : "unknown_telegram_error",
-        details: typeof item.details === "string" ? item.details : undefined
-      }))
-      .slice(0, 100);
-  } catch {
-    return [];
-  }
+  return [];
 }
 
 function saveTelegramErrorLogs(logs: TelegramErrorLogEntry[]): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(TELEGRAM_ERROR_LOGS_KEY, JSON.stringify(logs.slice(0, 100)));
+  void logs;
 }
 
 function createDefaultNewUserOnboardingState(): NewUserOnboardingState {
@@ -1404,67 +1497,19 @@ function createDefaultNewUserOnboardingState(): NewUserOnboardingState {
 }
 
 function loadNewUserOnboardingState(): NewUserOnboardingState {
-  if (typeof window === "undefined") return createDefaultNewUserOnboardingState();
-  try {
-    const raw = localStorage.getItem(NEW_USER_ONBOARDING_KEY);
-    if (!raw) return createDefaultNewUserOnboardingState();
-    const parsed = JSON.parse(raw) as Partial<NewUserOnboardingState>;
-    return {
-      startedAt: typeof parsed.startedAt === "string" ? parsed.startedAt : new Date().toISOString(),
-      completedAt: typeof parsed.completedAt === "string" ? parsed.completedAt : null,
-      dismissed: parsed.dismissed === true,
-      steps: {
-        firstLaunch: parsed.steps?.firstLaunch === true,
-        telegramConnected: parsed.steps?.telegramConnected === true,
-        firstLead: parsed.steps?.firstLead === true,
-        valueShown: parsed.steps?.valueShown === true
-      }
-    };
-  } catch {
-    return createDefaultNewUserOnboardingState();
-  }
+  return createDefaultNewUserOnboardingState();
 }
 
 function saveNewUserOnboardingState(state: NewUserOnboardingState): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(NEW_USER_ONBOARDING_KEY, JSON.stringify(state));
+  void state;
 }
 
 function loadBusinessBrief(): BusinessBriefState {
-  if (typeof window === "undefined") {
-    return { started: false, completed: false, targetCount: BUSINESS_BRIEF_MIN_QUESTIONS, currentQuestion: "", answers: [], updatedAt: null };
-  }
-  try {
-    const raw = localStorage.getItem(BUSINESS_BRIEF_KEY);
-    if (!raw) {
-      return { started: false, completed: false, targetCount: BUSINESS_BRIEF_MIN_QUESTIONS, currentQuestion: "", answers: [], updatedAt: null };
-    }
-    const parsed = JSON.parse(raw) as Partial<BusinessBriefState>;
-    const answers = Array.isArray(parsed.answers)
-      ? parsed.answers
-          .filter((item) => item && typeof item.question === "string" && typeof item.answer === "string")
-          .map((item) => ({ question: item.question, answer: item.answer }))
-      : [];
-    const targetCount =
-      typeof parsed.targetCount === "number" && parsed.targetCount >= BUSINESS_BRIEF_MIN_QUESTIONS
-        ? Math.round(parsed.targetCount)
-        : BUSINESS_BRIEF_MIN_QUESTIONS;
-    return {
-      started: parsed.started ?? answers.length > 0,
-      completed: parsed.completed ?? answers.length >= targetCount,
-      targetCount,
-      currentQuestion: typeof parsed.currentQuestion === "string" ? parsed.currentQuestion : "",
-      answers,
-      updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : null
-    };
-  } catch {
-    return { started: false, completed: false, targetCount: BUSINESS_BRIEF_MIN_QUESTIONS, currentQuestion: "", answers: [], updatedAt: null };
-  }
+  return { started: false, completed: false, targetCount: BUSINESS_BRIEF_MIN_QUESTIONS, currentQuestion: "", answers: [], updatedAt: null };
 }
 
 function saveBusinessBrief(brief: BusinessBriefState): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(BUSINESS_BRIEF_KEY, JSON.stringify(brief));
+  void brief;
 }
 
 function loadBusinessTuning(): BusinessTuningState {
@@ -1481,30 +1526,11 @@ function loadBusinessTuning(): BusinessTuningState {
     updatedAt: null
   };
   if (typeof window === "undefined") return defaults;
-  try {
-    const raw = localStorage.getItem(BUSINESS_TUNING_KEY);
-    if (!raw) return defaults;
-    const parsed = JSON.parse(raw) as Partial<BusinessTuningState>;
-    return {
-      businessSummary: parsed.businessSummary ?? defaults.businessSummary,
-      targetAudience: parsed.targetAudience ?? defaults.targetAudience,
-      mainServices: parsed.mainServices ?? defaults.mainServices,
-      responseStyle: parsed.responseStyle ?? defaults.responseStyle,
-      qualificationRules: parsed.qualificationRules ?? defaults.qualificationRules,
-      escalationRules: parsed.escalationRules ?? defaults.escalationRules,
-      forbiddenWords: parsed.forbiddenWords ?? defaults.forbiddenWords,
-      workingHours: parsed.workingHours ?? defaults.workingHours,
-      cityCoverage: parsed.cityCoverage ?? defaults.cityCoverage,
-      updatedAt: parsed.updatedAt ?? defaults.updatedAt
-    };
-  } catch {
-    return defaults;
-  }
+  return defaults;
 }
 
 function saveBusinessTuning(tuning: BusinessTuningState): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(BUSINESS_TUNING_KEY, JSON.stringify(tuning));
+  void tuning;
 }
 
 function parseServiceEvents(raw: unknown): ServiceEvent[] {
@@ -1577,40 +1603,20 @@ function formatLastActivity(timestamp: string): { label: string; minutes: number
 }
 
 function loadSubscription(): SubscriptionState {
-  if (typeof window === "undefined") {
-    return { planId: null, subscriptionStatus: "none", trialStartDate: null, onboardingCompleted: false };
-  }
-
-  const raw = localStorage.getItem("clientsflow_subscription_state_v1");
-  if (!raw) {
-    return { planId: null, subscriptionStatus: "none", trialStartDate: null, onboardingCompleted: false };
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as SubscriptionState;
-    return {
-      planId: parsed.planId ?? null,
-      subscriptionStatus: parsed.subscriptionStatus ?? "none",
-      trialStartDate: parsed.trialStartDate ?? null,
-      onboardingCompleted: parsed.onboardingCompleted ?? false,
-      onboardingData: parsed.onboardingData ?? {
-        businessType: "",
-        channels: [],
-        goals: []
-      }
-    };
-  } catch {
-    return { planId: null, subscriptionStatus: "none", trialStartDate: null, onboardingCompleted: false };
-  }
+  return { planId: null, subscriptionStatus: "none", trialStartDate: null, onboardingCompleted: false };
 }
 
 function saveSubscription(next: SubscriptionState): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem("clientsflow_subscription_state_v1", JSON.stringify(next));
+  void next;
 }
 
 function formatRub(value: number): string {
   return `${new Intl.NumberFormat("ru-RU").format(value)} руб.`;
+}
+
+function formatLimitValue(value: number | null | undefined): string {
+  if (value === null || value === undefined || value <= 0) return "без лимита";
+  return new Intl.NumberFormat("ru-RU").format(value);
 }
 
 function hexToRgba(hex: string, alpha: number): string {
@@ -1714,7 +1720,6 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
   const [checkoutState, setCheckoutState] = useState<"idle" | "processing" | "success">("idle");
   const [uiNotice, setUiNotice] = useState<string | null>(null);
   const [serviceConnection, setServiceConnection] = useState<ServiceConnection>(() => loadServiceConnection());
-  const [serviceEvents, setServiceEvents] = useState<ServiceEvent[]>(() => loadServiceEvents());
   const [serviceSyncLoading, setServiceSyncLoading] = useState(false);
   const [telegramOffset, setTelegramOffset] = useState<number>(() => loadTelegramOffset());
   const [telegramProfiles, setTelegramProfiles] = useState<Record<string, TelegramProfile>>(() => loadTelegramProfiles());
@@ -1733,33 +1738,43 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
   );
   const [settingsSummary, setSettingsSummary] = useState("");
   const [settingsSummaryLoading, setSettingsSummaryLoading] = useState(false);
+  const [connectedChannels, setConnectedChannels] = useState<string[]>([]);
+  const [channelConnectionStates, setChannelConnectionStates] = useState<Record<string, "connected" | "error" | "needs_reauth" | "disabled">>({});
+  const [channelConnectionManager, setChannelConnectionManager] = useState<ChannelConnectionManagerItem[]>([]);
+  const [serverStateLoaded, setServerStateLoaded] = useState(false);
+  const [analyticsData, setAnalyticsData] = useState<AnalyticsPayload | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [dashboardReadModel, setDashboardReadModel] = useState<DashboardReadModel | null>(null);
+  const [serverDataRefreshNonce, setServerDataRefreshNonce] = useState(0);
+  const [workspaceRole, setWorkspaceRole] = useState<WorkspaceRole>("member");
+  const [workspaceTeamMembers, setWorkspaceTeamMembers] = useState<WorkspaceTeamMember[]>([]);
+  const [workspaceInvites, setWorkspaceInvites] = useState<WorkspaceInvite[]>([]);
+  const [workspaceTeamLoading, setWorkspaceTeamLoading] = useState(false);
+  const [workspaceTeamActionLoading, setWorkspaceTeamActionLoading] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<WorkspaceRole>("member");
 
-  const hasLiveData = serviceEvents.length > 0;
+  const serverIdentity = useMemo(() => {
+    if (typeof window === "undefined") {
+      return { workspaceId: "", userId: "", role: "member" as WorkspaceRole };
+    }
+    const context = resolveClientUserContext();
+    if (context?.workspaceId && context?.userId) {
+      return {
+        workspaceId: context.workspaceId,
+        userId: context.userId,
+        role: context.role || "member"
+      };
+    }
+    return { workspaceId: "", userId: "", role: "member" as WorkspaceRole };
+  }, []);
+  const hasServerIdentity = Boolean(serverIdentity.workspaceId && serverIdentity.userId);
+
+  const hasLiveData = (analyticsData?.metrics.incomingLeads ?? 0) > 0;
   const priceIntentRegex = /(цен|стоим|сколько|прайс)/i;
 
   function hasPriceIntent(text: string): boolean {
     return priceIntentRegex.test(String(text || "").toLowerCase());
-  }
-
-  function inferLeadStageFromEvents(events: ServiceEvent[]): LeadStage {
-    if (events.some((event) => event.stage === "записан" || event.status === "записан")) return "записан";
-    if (events.some((event) => event.stage === "потерян" || event.status === "потерян")) return "потерян";
-
-    const sorted = [...events].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-    const last = sorted[sorted.length - 1];
-    if (!last) return "новый";
-
-    const hasOutbound = sorted.some((event) => event.direction === "outbound");
-    const lastInbound = [...sorted].reverse().find((event) => event.direction === "inbound");
-    const askedPrice = lastInbound ? hasPriceIntent(lastInbound.text) : false;
-
-    if (askedPrice) {
-      if (last.direction === "outbound") return "спросил цену";
-      return "думает";
-    }
-    if (!hasOutbound) return "новый";
-    if (last.direction === "outbound") return "заинтересован";
-    return "думает";
   }
 
   function nextLeadStage(stage: LeadStage): LeadStage | null {
@@ -1770,154 +1785,33 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
     return null;
   }
 
-  const liveConversations = useMemo<InboxConversation[]>(() => {
-    const grouped = serviceEvents.reduce<Record<string, ServiceEvent[]>>((acc, event) => {
-      if (!acc[event.leadId]) acc[event.leadId] = [];
-      acc[event.leadId].push(event);
-      return acc;
-    }, {});
+  const liveConversations = useMemo<InboxConversation[]>(() => dashboardReadModel?.conversationPreviews || [], [dashboardReadModel]);
 
-    return Object.entries(grouped)
-      .map(([leadId, events]) => {
-        const sorted = [...events].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-        const last = sorted[sorted.length - 1];
-        const lastActivity = formatLastActivity(last.timestamp);
-        const status: LeadStatus = last.status ?? "новый";
-        const scoreMap: Record<LeadStatus, number> = {
-          новый: 45,
-          заинтересован: 72,
-          "спросил цену": 66,
-          думает: 61,
-          записан: 95,
-          потерян: 28,
-          эскалация: 82
-        };
-        const probabilityMap: Record<LeadStatus, number> = {
-          новый: 34,
-          заинтересован: 64,
-          "спросил цену": 57,
-          думает: 52,
-          записан: 96,
-          потерян: 14,
-          эскалация: 71
-        };
-        const timeline: TimelineMessage[] = sorted.map((event) => ({
-          role: event.direction === "inbound" ? "client" : event.status === "эскалация" ? "manager" : "ai",
-          text: event.text,
-          time: new Date(event.timestamp).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })
-        }));
-        const suggestedAction =
-          status === "новый"
-            ? "Уточнить задачу и предложить следующий шаг."
-            : status === "заинтересован"
-              ? "Закрепить интерес и перейти к цене/условиям."
-              : status === "спросил цену"
-                ? "Дать диапазон и предложить 2 слота."
-                : status === "думает"
-                  ? "Сделать follow-up и подтолкнуть к записи."
-                : status === "потерян"
-                  ? "Запустить recovery-касание."
-                  : status === "эскалация"
-                    ? "Передать кейс менеджеру."
-                    : "Подготовить post-visit follow-up.";
-        return {
-          id: leadId,
-          client: last.clientName,
-          channel: last.channel,
-          status,
-          summary: last.text.slice(0, 180),
-          score: scoreMap[status],
-          purchaseProbability: probabilityMap[status],
-          suggestedAction,
-          lastActivity: lastActivity.label,
-          intent: sorted.find((item) => item.direction === "inbound")?.text.slice(0, 100) || "Входящее обращение",
-          extractedFields: [
-            { label: "Lead ID", value: leadId },
-            { label: "Канал", value: last.channel },
-            { label: "Сообщений", value: String(sorted.length) }
-          ],
-          notes: last.lostReason ? `Причина потери: ${last.lostReason}` : "Данные получены из подключенного сервиса.",
-          timeline
-        };
-      })
-      .sort((a, b) => {
-        const aMin = formatLastActivity(serviceEvents.find((event) => event.leadId === a.id)?.timestamp || new Date().toISOString()).minutes;
-        const bMin = formatLastActivity(serviceEvents.find((event) => event.leadId === b.id)?.timestamp || new Date().toISOString()).minutes;
-        return aMin - bMin;
-      });
-  }, [serviceEvents]);
+  const liveLeadRecords = useMemo<LeadRecord[]>(() => dashboardReadModel?.leads || [], [dashboardReadModel]);
 
-  const liveLeadRecords = useMemo<LeadRecord[]>(() => {
-    return liveConversations.map((conv) => {
-      const related = serviceEvents.filter((event) => event.leadId === conv.id);
-      const latest = related[related.length - 1];
-      const stage: LeadStage = latest?.stage ?? inferLeadStageFromEvents(related);
-      const activity = formatLastActivity(latest?.timestamp || new Date().toISOString());
-      const estimatedRevenue = Math.round(
-        related.reduce((sum, event) => sum + (event.revenue ?? 0), 0) ||
-          (stage === "записан" ? 5000 : stage === "заинтересован" || stage === "спросил цену" || stage === "думает" ? 3500 : 0)
-      );
-      const bookingState: BookingState =
-        latest?.bookingState ??
-        (stage === "записан" ? "подтверждена" : stage === "потерян" ? "отменена" : stage === "новый" ? "не начата" : "в процессе");
-      return {
-        id: conv.id,
-        name: conv.client,
-        business: serviceConnection.serviceName || "Подключенный сервис",
-        stage,
-        channel: conv.channel,
-        score: conv.score,
-        estimatedRevenue,
-        lastActivityLabel: activity.label,
-        lastActivityMinutes: activity.minutes,
-        bookingState,
-        tags: [`${conv.channel}`, `${conv.status}`],
-        owner: conv.status === "эскалация" ? "Менеджер" : "AI"
-      };
-    });
-  }, [liveConversations, serviceEvents, serviceConnection.serviceName]);
+  const incomingLeads = analyticsData?.metrics.incomingLeads ?? 0;
+  const qualifiedLeads = analyticsData?.metrics.qualified ?? 0;
+  const bookedLeads = analyticsData?.metrics.booked ?? 0;
+  const lostLeads = analyticsData?.metrics.lost ?? 0;
+  const averageResponse = analyticsData?.metrics.responseTimeAvgSec ?? 0;
+  const worstResponse = analyticsData?.metrics.responseTimeP95Sec ?? 0;
+  const conversionPercent = analyticsData?.conversion ?? 0;
 
-  const incomingLeads = liveLeadRecords.length;
-  const qualifiedLeads = liveLeadRecords.filter(
-    (lead) => lead.stage === "заинтересован" || lead.stage === "спросил цену" || lead.stage === "думает" || lead.stage === "записан"
-  ).length;
-  const bookedLeads = liveLeadRecords.filter((lead) => lead.stage === "записан").length;
-  const lostLeads = liveLeadRecords.filter((lead) => lead.stage === "потерян").length;
-  const responseSamples = serviceEvents.map((event) => event.responseSeconds).filter((value): value is number => typeof value === "number" && value > 0);
-  const averageResponse = responseSamples.length > 0 ? Math.round(responseSamples.reduce((sum, value) => sum + value, 0) / responseSamples.length) : 0;
-  const worstResponse = responseSamples.length > 0 ? Math.max(...responseSamples) : 0;
-  const conversionPercent = incomingLeads > 0 ? Number(((bookedLeads / incomingLeads) * 100).toFixed(1)) : 0;
+  const trendSeries = analyticsData?.trend ?? [];
+  const splitIndex = Math.max(1, Math.floor(trendSeries.length / 2));
+  const prevSlice = trendSeries.slice(0, splitIndex);
+  const currSlice = trendSeries.slice(splitIndex);
 
-  const nowTs = Date.now();
-  const dayMs = 24 * 60 * 60 * 1000;
-  const startLast7 = nowTs - 7 * dayMs;
-  const startPrev7 = nowTs - 14 * dayMs;
-  const inRange = (ts: string, from: number, to: number) => {
-    const time = new Date(ts).getTime();
-    return Number.isFinite(time) && time >= from && time < to;
-  };
-  const incomingLast7 = serviceEvents.filter((event) => event.direction === "inbound" && inRange(event.timestamp, startLast7, nowTs)).length;
-  const incomingPrev7 = serviceEvents.filter((event) => event.direction === "inbound" && inRange(event.timestamp, startPrev7, startLast7)).length;
-  const bookedLast7 = serviceEvents.filter(
-    (event) => (event.status === "записан" || event.stage === "записан") && inRange(event.timestamp, startLast7, nowTs)
-  ).length;
-  const bookedPrev7 = serviceEvents.filter(
-    (event) => (event.status === "записан" || event.stage === "записан") && inRange(event.timestamp, startPrev7, startLast7)
-  ).length;
-  const lostLast7 = serviceEvents.filter(
-    (event) => (event.status === "потерян" || event.stage === "потерян") && inRange(event.timestamp, startLast7, nowTs)
-  ).length;
-  const lostPrev7 = serviceEvents.filter(
-    (event) => (event.status === "потерян" || event.stage === "потерян") && inRange(event.timestamp, startPrev7, startLast7)
-  ).length;
-  const responseLast7 = serviceEvents
-    .filter((event) => typeof event.responseSeconds === "number" && event.responseSeconds > 0 && inRange(event.timestamp, startLast7, nowTs))
-    .map((event) => event.responseSeconds as number);
-  const responsePrev7 = serviceEvents
-    .filter((event) => typeof event.responseSeconds === "number" && event.responseSeconds > 0 && inRange(event.timestamp, startPrev7, startLast7))
-    .map((event) => event.responseSeconds as number);
-  const avgRespLast7 = responseLast7.length ? Math.round(responseLast7.reduce((sum, value) => sum + value, 0) / responseLast7.length) : 0;
-  const avgRespPrev7 = responsePrev7.length ? Math.round(responsePrev7.reduce((sum, value) => sum + value, 0) / responsePrev7.length) : 0;
+  const incomingLast7 = currSlice.reduce((sum, item) => sum + Number(item.incoming || 0), 0);
+  const incomingPrev7 = prevSlice.reduce((sum, item) => sum + Number(item.incoming || 0), 0);
+  const bookedLast7 = currSlice.reduce((sum, item) => sum + Number(item.booked || 0), 0);
+  const bookedPrev7 = prevSlice.reduce((sum, item) => sum + Number(item.booked || 0), 0);
+  const lostLast7 = currSlice.reduce((sum, item) => sum + Number(item.lost || 0), 0);
+  const lostPrev7 = prevSlice.reduce((sum, item) => sum + Number(item.lost || 0), 0);
+  const avgRespLast7 =
+    currSlice.length > 0 ? Math.round(currSlice.reduce((sum, item) => sum + Number(item.responseAvgSec || 0), 0) / currSlice.length) : 0;
+  const avgRespPrev7 =
+    prevSlice.length > 0 ? Math.round(prevSlice.reduce((sum, item) => sum + Number(item.responseAvgSec || 0), 0) / prevSlice.length) : 0;
 
   function metricTrend(current: number, previous: number, positiveWhenUp = true): { label: string; direction: "up" | "down" | "flat" } {
     if (previous <= 0 && current <= 0) return { label: "без изменений", direction: "flat" };
@@ -2029,7 +1923,11 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
           ? "Pro"
           : subscription.planId === "business"
             ? "Business"
-            : "Не активирован";
+          : "Не активирован";
+
+  const billingSummary = dashboardReadModel?.billingSummary;
+  const billingPlanTitle = billingSummary?.plan?.title || "Free";
+  const billingPeriodLabel = billingSummary?.usage?.periodKey || "текущий период";
 
   const currentPlanDefinition =
     planDefinitions.find((plan) => plan.id === (subscription.planId ?? "trial")) ?? planDefinitions[0];
@@ -2084,6 +1982,30 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
       value: incomingLeads > 0 ? `${conversionPercent}%` : "—",
       note: "Доля продаж от всех обращений",
       hint: "Главный показатель: сколько из написавших дошли до покупки."
+    },
+    {
+      label: "Follow-up activated",
+      value: `${analyticsData?.metrics.followUpActivated || 0}`,
+      note: `Отправлено: ${analyticsData?.metrics.followUpSent || 0}`,
+      hint: "Сколько follow-up задач было активировано за выбранный период."
+    },
+    {
+      label: "Recovered",
+      value: `${analyticsData?.metrics.recovered || 0}`,
+      note: "Лиды, вернувшиеся после follow-up",
+      hint: "Лиды, которые ответили после follow-up."
+    },
+    {
+      label: "Handoff to CRM",
+      value: `${analyticsData?.metrics.handoffToCrm || 0}`,
+      note: `Success: ${analyticsData?.metrics.handoffSuccess || 0}`,
+      hint: "Передача квалифицированных лидов во внешнюю CRM."
+    },
+    {
+      label: "Estimated lost revenue",
+      value: formatRub(analyticsData?.metrics.estimatedLostRevenue || 0),
+      note: "Оценка недополученной выручки",
+      hint: "Сумма по потерянным лидам в выбранном периоде."
     }
   ].map((item, idx) => {
     const preset = [
@@ -2102,7 +2024,11 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
         tone: averageResponse > 90 ? "bad" : "good",
         strength: averageResponse > 0 ? Math.max(10, 100 - Math.min(100, averageResponse)) : 0
       },
-      { trend: conversionTrend.label, direction: conversionTrend.direction, tone: conversionPercent >= 30 ? "good" : "neutral", strength: Math.round(conversionPercent) }
+      { trend: conversionTrend.label, direction: conversionTrend.direction, tone: conversionPercent >= 30 ? "good" : "neutral", strength: Math.round(conversionPercent) },
+      { trend: `${analyticsData?.metrics.followUpActivated || 0} задач`, direction: "up", tone: "neutral", strength: 40 },
+      { trend: `${analyticsData?.metrics.recovered || 0} лидов`, direction: "up", tone: "good", strength: 45 },
+      { trend: `${analyticsData?.metrics.handoffSuccess || 0} успешно`, direction: "up", tone: "neutral", strength: 42 },
+      { trend: formatRub(analyticsData?.metrics.estimatedLostRevenue || 0), direction: "down", tone: "bad", strength: 55 }
     ][idx];
     const shortLabelByTitle: Record<string, string> = {
       "Сколько написали": "Написали",
@@ -2110,150 +2036,77 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
       "Купили / записались": "Купили",
       "Ушли без покупки": "Потеряли",
       "Как быстро отвечаем": "Ответ",
-      "Сколько купили": "Конверсия"
+      "Сколько купили": "Конверсия",
+      "Follow-up activated": "Follow-up",
+      "Recovered": "Recovered",
+      "Handoff to CRM": "CRM",
+      "Estimated lost revenue": "Потери ₽"
     };
-    return { ...item, shortLabel: shortLabelByTitle[item.label] ?? item.label, ...preset };
+    return { ...item, shortLabel: shortLabelByTitle[item.label] ?? item.label, ...(preset || { trend: "—", direction: "flat", tone: "neutral", strength: 0 }) };
   });
 
   const analyticsTrendDataLive = useMemo(() => {
-    const days = Array.from({ length: 10 }).map((_, index) => {
-      const date = new Date();
-      date.setDate(date.getDate() - (9 - index));
-      const key = date.toISOString().slice(0, 10);
-      const label = date.toLocaleDateString("ru-RU", { day: "2-digit", month: "short" });
-      const dayEvents = serviceEvents.filter((event) => event.timestamp.slice(0, 10) === key);
-      const incoming = dayEvents.filter((event) => event.direction === "inbound").length;
-      const booked = dayEvents.filter((event) => event.status === "записан" || event.stage === "записан").length;
-      return { day: label, incoming, booked };
-    });
-    return days;
-  }, [serviceEvents]);
+    const trend = analyticsData?.trend || [];
+    return trend.map((item) => ({
+      day: item.day,
+      incoming: Number(item.incoming || 0),
+      booked: Number(item.booked || 0)
+    }));
+  }, [analyticsData]);
 
-  const analyticsFunnelDataLive = [
-    { stage: "Новый", value: liveLeadRecords.filter((lead) => lead.stage === "новый").length },
-    { stage: "Заинтересован", value: liveLeadRecords.filter((lead) => lead.stage === "заинтересован").length },
-    { stage: "Спросил цену", value: liveLeadRecords.filter((lead) => lead.stage === "спросил цену").length },
-    { stage: "Думает", value: liveLeadRecords.filter((lead) => lead.stage === "думает").length },
-    { stage: "Записан", value: bookedLeads },
-    { stage: "Потеряно", value: lostLeads }
-  ];
+  const analyticsFunnelDataLive = useMemo(
+    () =>
+      analyticsData?.funnel?.map((item) => ({
+        stage: item.stage,
+        value: Number(item.value || 0)
+      })) || [],
+    [analyticsData]
+  );
 
   const analyticsConversionDataLive = [
     { name: "Записано", value: bookedLeads },
     { name: "Потеряно", value: lostLeads }
   ];
 
-  const analyticsChannelDataLive = useMemo(() => {
-    const channels: Channel[] = ["Telegram", "WhatsApp", "Instagram", "Website"];
-    return channels.map((channel) => {
-      const channelLeads = liveLeadRecords.filter((lead) => lead.channel === channel);
-      const incoming = channelLeads.length;
-      const qualified = channelLeads.filter(
-        (lead) => lead.stage === "заинтересован" || lead.stage === "спросил цену" || lead.stage === "думает" || lead.stage === "записан"
-      ).length;
-      const booked = channelLeads.filter((lead) => lead.stage === "записан").length;
-      const conversion = incoming > 0 ? Number(((booked / incoming) * 100).toFixed(1)) : 0;
-      return { channel, incoming, qualified, booked, conversion };
-    });
-  }, [liveLeadRecords]);
+  const analyticsChannelDataLive = useMemo(
+    () => analyticsData?.channels || [],
+    [analyticsData]
+  );
 
   const analyticsResponseTrendLive = useMemo(() => {
-    const days = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
-    return days.map((dayLabel, index) => {
-      const values = serviceEvents
-        .filter((event) => {
-          if (typeof event.responseSeconds !== "number") return false;
-          const jsDay = new Date(event.timestamp).getDay(); // 0..6 Sun..Sat
-          const mapped = jsDay === 0 ? 6 : jsDay - 1;
-          return mapped === index;
-        })
-        .map((event) => event.responseSeconds as number);
-      const avg = values.length > 0 ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length) : 0;
-      return { period: dayLabel, seconds: avg };
-    });
-  }, [serviceEvents]);
+    const trend = analyticsData?.trend || [];
+    return trend.map((item) => ({ period: item.day, seconds: Number(item.responseAvgSec || 0) }));
+  }, [analyticsData]);
 
   const analyticsInsightsLive = [
     incomingLeads > 0
-      ? `В системе ${incomingLeads} активных лидов. Основной фокус: ускорить этап квалификации.`
-      : "Нет данных по лидам. Подключите сервис и загрузите события.",
+      ? `В периоде ${analyticsData?.range.label || "—"} зафиксировано ${incomingLeads} входящих лидов.`
+      : "За выбранный период нет входящих лидов.",
     lostLeads > 0
-      ? `Потеряно ${lostLeads} лидов. Запустите сценарий recovery для возврата части потока.`
-      : "Потерянные лиды пока не обнаружены в подключенных событиях.",
+      ? `Потеряно ${lostLeads} лидов, оценка потерь: ${formatRub(analyticsData?.metrics.estimatedLostRevenue || 0)}.`
+      : "Потерянные лиды за период не зафиксированы.",
     averageResponse > 0
-      ? `Среднее время ответа ${averageResponse} сек. Цель: удерживать ниже 60 секунд.`
-      : "Добавьте поле responseSeconds в событиях для расчёта SLA.",
-    `Наиболее конверсионный канал: ${
-      analyticsChannelDataLive.some((item) => item.incoming > 0)
-        ? [...analyticsChannelDataLive].sort((a, b) => b.conversion - a.conversion)[0]?.channel || "—"
-        : "—"
-    }.`
+      ? `Среднее время ответа ${averageResponse} сек, p95: ${worstResponse} сек.`
+      : "Нет достаточных пар inbound/outbound для расчета response time.",
+    `Follow-up активировано: ${analyticsData?.metrics.followUpActivated || 0}, recovered: ${analyticsData?.metrics.recovered || 0}, CRM handoff: ${analyticsData?.metrics.handoffToCrm || 0}.`
   ];
 
-  const lostRevenueByPeriodLive: Record<"7d" | "30d", LostRevenueSnapshot> = {
-    "7d": (() => {
-      const from = Date.now() - 7 * 24 * 60 * 60 * 1000;
-      const rangeEvents = serviceEvents.filter((event) => new Date(event.timestamp).getTime() >= from);
-      const lost = rangeEvents.filter((event) => event.status === "потерян" || event.stage === "потерян");
-      const lostLeadsCount = new Set(lost.map((item) => item.leadId)).size;
-      const estimated = lost.reduce((sum, item) => sum + (item.revenue ?? 0), 0);
-      return {
-        periodLabel: "7 дней",
-        lostLeads: lostLeadsCount,
-        estimatedRevenue: estimated,
-        topReason: lost[0]?.lostReason || "Основные потери фиксируются после первичного диалога.",
-        reasons: [
-          { reason: "После вопроса о стоимости", count: Math.round(lostLeadsCount * 0.45), revenue: Math.round(estimated * 0.45) },
-          { reason: "Нет follow-up", count: Math.round(lostLeadsCount * 0.3), revenue: Math.round(estimated * 0.3) },
-          { reason: "Долгий ответ", count: Math.max(0, lostLeadsCount - Math.round(lostLeadsCount * 0.75)), revenue: Math.round(estimated * 0.25) }
-        ],
-        actions: [
-          "Сократить задержку первого ответа и зафиксировать SLA.",
-          "Запустить повторное касание для лидов без ответа.",
-          "Переписать сценарий ответа на цену и сразу предлагать слот."
-        ]
-      };
-    })(),
-    "30d": (() => {
-      const from = Date.now() - 30 * 24 * 60 * 60 * 1000;
-      const rangeEvents = serviceEvents.filter((event) => new Date(event.timestamp).getTime() >= from);
-      const lost = rangeEvents.filter((event) => event.status === "потерян" || event.stage === "потерян");
-      const lostLeadsCount = new Set(lost.map((item) => item.leadId)).size;
-      const estimated = lost.reduce((sum, item) => sum + (item.revenue ?? 0), 0);
-      return {
-        periodLabel: "30 дней",
-        lostLeads: lostLeadsCount,
-        estimatedRevenue: estimated,
-        topReason: lost[0]?.lostReason || "Ключевая зона потерь: лиды без повторного контакта.",
-        reasons: [
-          { reason: "После вопроса о стоимости", count: Math.round(lostLeadsCount * 0.42), revenue: Math.round(estimated * 0.42) },
-          { reason: "Нет follow-up", count: Math.round(lostLeadsCount * 0.33), revenue: Math.round(estimated * 0.33) },
-          { reason: "Долгий ответ", count: Math.max(0, lostLeadsCount - Math.round(lostLeadsCount * 0.75)), revenue: Math.round(estimated * 0.25) }
-        ],
-        actions: [
-          "Пересобрать сценарии первичного ответа для быстрых квалификаций.",
-          "Автоматизировать recovery-цепочку для тихих лидов.",
-          "Внедрить ежедневный контроль потерь по каналам."
-        ]
-      };
-    })()
+  const lostRevenueSnapshot: LostRevenueSnapshot = analyticsData?.lostRevenue || {
+    periodLabel: analyticsData?.range.label || "—",
+    lostLeads: 0,
+    estimatedRevenue: 0,
+    topReason: "Нет данных",
+    reasons: [],
+    actions: []
   };
-
-  const lostRevenueSnapshot = lostRevenueByPeriodLive[lostRevenuePeriod];
-  const earnedRevenue = useMemo(
-    () =>
-      liveLeadRecords
-        .filter((lead) => lead.stage === "записан")
-        .reduce((sum, lead) => sum + lead.estimatedRevenue, 0),
-    [liveLeadRecords]
-  );
-  const lostRevenue = useMemo(
-    () =>
-      liveLeadRecords
-        .filter((lead) => lead.stage === "потерян")
-        .reduce((sum, lead) => sum + lead.estimatedRevenue, 0),
-    [liveLeadRecords]
-  );
+  const earnedRevenue = useMemo(() => {
+    if (!incomingLeads || !analyticsData?.metrics) return 0;
+    const bookedShare = incomingLeads > 0 ? bookedLeads / incomingLeads : 0;
+    const lostRevenueValue = analyticsData.metrics.estimatedLostRevenue || 0;
+    if (bookedShare <= 0) return 0;
+    return Math.max(0, Math.round((lostRevenueValue / Math.max(0.01, 1 - bookedShare)) * bookedShare));
+  }, [analyticsData, incomingLeads, bookedLeads]);
+  const lostRevenue = analyticsData?.metrics.estimatedLostRevenue || 0;
   const potentialRevenue = earnedRevenue + lostRevenue;
   const lostRevenueShare = potentialRevenue > 0 ? Math.round((lostRevenue / potentialRevenue) * 100) : 0;
   const moneyPriorityMessage =
@@ -2262,7 +2115,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
       : earnedRevenue > 0
         ? "Потерь в деньгах не зафиксировано. Фокус: удержать текущую конверсию."
         : "Подключите данные, чтобы увидеть сколько денег вы уже зарабатываете и теряете.";
-  const monthlyLostRevenue = lostRevenueByPeriodLive["30d"].estimatedRevenue;
+  const monthlyLostRevenue = lostRevenue;
   const leadLossPercent = incomingLeads > 0 ? Math.round((lostLeads / incomingLeads) * 100) : 30;
   const monthlyRecoverableRevenue = Math.round(monthlyLostRevenue * 0.4);
   const heroMoneyHeadline =
@@ -2278,11 +2131,8 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
         (lead.stage === "заинтересован" || lead.stage === "спросил цену" || lead.stage === "думает") &&
         lead.lastActivityMinutes > 24 * 60
     ).length;
-    const priceIntentLeadIds = new Set(
-      serviceEvents
-        .filter((event) => event.direction === "inbound" && hasPriceIntent(event.text))
-        .map((event) => event.leadId)
-    );
+    const recentInbound = (dashboardReadModel?.recentMessages || []).filter((event) => event.direction === "inbound");
+    const priceIntentLeadIds = new Set(recentInbound.filter((event) => hasPriceIntent(event.text)).map((event) => event.leadId));
     const priceIntentLost = liveLeadRecords.filter((lead) => lead.stage === "потерян" && priceIntentLeadIds.has(lead.id)).length;
     const channelsWithData = analyticsChannelDataLive.filter((item) => item.incoming >= 3);
     const sortedChannels = [...channelsWithData].sort((a, b) => b.conversion - a.conversion);
@@ -2406,7 +2256,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
   }, [
     liveLeadRecords,
     lostLeads,
-    serviceEvents,
+    dashboardReadModel,
     analyticsChannelDataLive,
     averageResponse,
     worstResponse,
@@ -3143,16 +2993,241 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
   }
 
   useEffect(() => {
+    if (!hasServerIdentity) {
+      setServerStateLoaded(true);
+      return;
+    }
+    let cancelled = false;
+    const loadServerState = async () => {
+      try {
+        const query = new URLSearchParams({
+          workspaceId: serverIdentity.workspaceId,
+          userId: serverIdentity.userId
+        });
+        const response = await fetch(`/api/data/state?${query.toString()}`);
+        if (!response.ok) throw new Error(`state_load_failed_${response.status}`);
+        const data = (await response.json()) as Partial<{
+          serviceConnection: ServiceConnection;
+          connectedChannels: string[];
+          channelConnectionStates: Record<string, "connected" | "error" | "needs_reauth" | "disabled">;
+          channelConnectionManager: ChannelConnectionManagerItem[];
+          telegramOffset: number;
+          telegramProfiles: Record<string, TelegramProfile>;
+          telegramErrorLogs: TelegramErrorLogEntry[];
+          newUserOnboarding: NewUserOnboardingState;
+          businessBrief: BusinessBriefState;
+          businessTuning: BusinessTuningState;
+          subscription: SubscriptionState;
+        }>;
+        if (cancelled) return;
+        if (data.serviceConnection) setServiceConnection(data.serviceConnection);
+        if (Array.isArray(data.connectedChannels)) {
+          setConnectedChannels(
+            data.connectedChannels.map((item) => {
+              if (item === "telegram") return "Telegram";
+              if (item === "instagram") return "Instagram";
+              if (item === "whatsapp") return "WhatsApp";
+              if (item === "vk") return "VK";
+              if (item === "email") return "Email";
+              return item;
+            })
+          );
+        }
+        if (data.channelConnectionStates && typeof data.channelConnectionStates === "object") {
+          setChannelConnectionStates(data.channelConnectionStates);
+        }
+        if (Array.isArray(data.channelConnectionManager)) {
+          setChannelConnectionManager(
+            data.channelConnectionManager.map((item) => ({
+              ...item,
+              capabilities: item.capabilities || {
+                supportsInbound: false,
+                supportsOutbound: false,
+                supportsAutoReply: false,
+                supportsFollowUp: false,
+                supportsCrmHandoffTrigger: false,
+                supportsWebhookVerification: false,
+                supportsHealthCheck: false
+              }
+            }))
+          );
+        }
+        if (typeof data.telegramOffset === "number") setTelegramOffset(data.telegramOffset);
+        if (data.telegramProfiles && typeof data.telegramProfiles === "object") setTelegramProfiles(data.telegramProfiles);
+        if (Array.isArray(data.telegramErrorLogs)) setTelegramErrorLogs(data.telegramErrorLogs.slice(0, 100));
+        if (data.newUserOnboarding) setNewUserOnboarding(data.newUserOnboarding);
+        if (data.businessBrief) setBusinessBrief(data.businessBrief);
+        if (data.businessTuning) setBusinessTuning(data.businessTuning);
+        if (data.subscription) setSubscription(data.subscription);
+      } catch (error: any) {
+        console.error("Failed to load server state", error?.message || error);
+      } finally {
+        if (!cancelled) setServerStateLoaded(true);
+      }
+    };
+    void loadServerState();
+    return () => {
+      cancelled = true;
+    };
+  }, [hasServerIdentity, serverIdentity.workspaceId, serverIdentity.userId]);
+
+  useEffect(() => {
+    if (!hasServerIdentity) {
+      setAnalyticsData(null);
+      setAnalyticsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    const loadAnalytics = async () => {
+      setAnalyticsLoading(true);
+      try {
+        const query = new URLSearchParams({
+          workspaceId: serverIdentity.workspaceId,
+          userId: serverIdentity.userId,
+          period: lostRevenuePeriod
+        });
+        const response = await fetch(`/api/analytics/metrics?${query.toString()}`);
+        if (!response.ok) throw new Error(`analytics_load_failed_${response.status}`);
+        const data = (await response.json()) as AnalyticsPayload;
+        if (!cancelled) setAnalyticsData(data);
+      } catch (error) {
+        if (!cancelled) {
+          setAnalyticsData(null);
+          console.error("Failed to load analytics", error);
+        }
+      } finally {
+        if (!cancelled) setAnalyticsLoading(false);
+      }
+    };
+    void loadAnalytics();
+    return () => {
+      cancelled = true;
+    };
+  }, [hasServerIdentity, serverIdentity.workspaceId, serverIdentity.userId, lostRevenuePeriod, serverDataRefreshNonce]);
+
+  useEffect(() => {
+    if (!hasServerIdentity) {
+      setDashboardReadModel(null);
+      return;
+    }
+    let cancelled = false;
+    const loadDashboardReadModel = async () => {
+      try {
+        const query = new URLSearchParams({
+          workspaceId: serverIdentity.workspaceId,
+          userId: serverIdentity.userId
+        });
+        const response = await fetch(`/api/dashboard/read-model?${query.toString()}`);
+        const data = (await response.json().catch(() => null)) as DashboardReadModel | null;
+        if (!data) throw new Error(`dashboard_read_model_invalid_payload_${response.status}`);
+        if (cancelled) return;
+        if (!response.ok && data.runtimeStatus !== "degraded") {
+          throw new Error(`dashboard_read_model_failed_${response.status}`);
+        }
+        setDashboardReadModel(data);
+        if (data.runtimeStatus === "degraded") {
+          triggerNotice(`Read model в degraded режиме. Trace: ${data.traceId || "n/a"}`);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setDashboardReadModel(null);
+          console.error("Failed to load dashboard read model", error);
+        }
+      }
+    };
+    void loadDashboardReadModel();
+    return () => {
+      cancelled = true;
+    };
+  }, [hasServerIdentity, serverIdentity.workspaceId, serverIdentity.userId, serverDataRefreshNonce]);
+
+  useEffect(() => {
+    if (!dashboardReadModel) return;
+    if (Array.isArray(dashboardReadModel.connectedChannels)) {
+      setConnectedChannels(
+        dashboardReadModel.connectedChannels.map((item) => {
+          const c = String(item).toLowerCase();
+          if (c === "telegram") return "Telegram";
+          if (c === "instagram") return "Instagram";
+          if (c === "whatsapp") return "WhatsApp";
+          if (c === "vk") return "VK";
+          if (c === "email") return "Email";
+          return item;
+        })
+      );
+    }
+    const nextStates: Record<string, "connected" | "error" | "needs_reauth" | "disabled"> = {};
+    for (const item of dashboardReadModel.connectionHealth || []) {
+      const channel = String(item.channel || "").toLowerCase();
+      const status = String(item.status || "").toLowerCase();
+      nextStates[channel] =
+        status === "needs_reauth" ? "needs_reauth" : status === "disabled" ? "disabled" : status === "error" ? "error" : "connected";
+    }
+    if (Object.keys(nextStates).length > 0) {
+      setChannelConnectionStates(nextStates);
+    }
+  }, [dashboardReadModel]);
+
+  useEffect(() => {
+    if (!serverStateLoaded || !hasServerIdentity) return;
+    if (workspaceRole === "member") return;
+    const timer = window.setTimeout(async () => {
+      try {
+        await fetch("/api/data/state", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            workspaceId: serverIdentity.workspaceId,
+            userId: serverIdentity.userId,
+            serviceConnection,
+            instagramConnection: {
+              instagramAccountId: serviceConnection.instagramAccountId || "",
+              instagramPageId: serviceConnection.instagramPageId || "",
+              accessToken: serviceConnection.instagramAccessToken || ""
+            },
+            vkConnection: {
+              groupId: serviceConnection.vkGroupId || "",
+              accessToken: serviceConnection.vkAccessToken || "",
+              status: channelConnectionStates.vk || "connected"
+            },
+            telegramOffset,
+            telegramProfiles,
+            telegramErrorLogs,
+            newUserOnboarding,
+            businessBrief,
+            businessTuning,
+            subscription
+          })
+        });
+      } catch (error: any) {
+        console.error("Failed to persist server state", error?.message || error);
+      }
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [
+    serverStateLoaded,
+    hasServerIdentity,
+    workspaceRole,
+    serverIdentity.workspaceId,
+    serverIdentity.userId,
+    serviceConnection,
+    telegramOffset,
+    telegramProfiles,
+    telegramErrorLogs,
+    newUserOnboarding,
+    businessBrief,
+    businessTuning,
+    subscription,
+    channelConnectionStates
+  ]);
+
+  useEffect(() => {
     saveSubscription(subscription);
   }, [subscription]);
 
   useEffect(() => {
     saveServiceConnection(serviceConnection);
   }, [serviceConnection]);
-
-  useEffect(() => {
-    saveServiceEvents(serviceEvents);
-  }, [serviceEvents]);
 
   useEffect(() => {
     saveTelegramOffset(telegramOffset);
@@ -3192,7 +3267,8 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
   }, [serviceConnection.botToken]);
 
   useEffect(() => {
-    if (serviceEvents.length === 0) return;
+    const hasLeadsFromReadModel = (dashboardReadModel?.kpiSummary?.incomingLeads ?? dashboardReadModel?.leads?.length ?? 0) > 0;
+    if (!hasLeadsFromReadModel) return;
     setNewUserOnboarding((prev) => {
       if (prev.steps.firstLead) return prev;
       return {
@@ -3200,7 +3276,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
         steps: { ...prev.steps, firstLead: true }
       };
     });
-  }, [serviceEvents.length]);
+  }, [dashboardReadModel]);
 
   useEffect(() => {
     if (!hasLiveData || (activeNav !== "Обзор" && activeNav !== "Аналитика")) return;
@@ -3293,7 +3369,19 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
     }
   }, [standaloneSites, activeNav]);
 
+  useEffect(() => {
+    if (!hasServerIdentity) return;
+    if (activeNav !== "Настройки") return;
+    if (!standaloneSites && !subscription.onboardingCompleted) return;
+    void loadWorkspaceTeam();
+  }, [activeNav, hasServerIdentity, standaloneSites, subscription.onboardingCompleted, serverIdentity.workspaceId]);
+
+  useEffect(() => {
+    setWorkspaceRole(serverIdentity.role || "member");
+  }, [serverIdentity.role]);
+
   const selectedCheckoutPlan = planDefinitions.find((plan) => plan.id === checkoutPlanId) ?? null;
+  const canManageWorkspace = workspaceRole === "owner" || workspaceRole === "admin";
   const navNeedsLiveData = ["Обзор", "Аналитика", "Потерянные", "AI рекомендации"].includes(activeNav);
   const showSettingsSetupWizard = activeNav === "Настройки" && !standaloneSites && !subscription.onboardingCompleted;
   const onboardingProgressCount = [
@@ -3311,6 +3399,305 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
 
   function triggerNotice(message: string): void {
     setUiNotice(message);
+  }
+
+  function parseBillingLimit(data: any, statusCode?: number): { metric: "messages" | "leads" | "channels"; used?: number; limit?: number } | null {
+    const code = String(data?.errorCode || data?.error || "");
+    if (statusCode !== 429 && !code.includes("limit_exceeded")) return null;
+    if (code.includes("messages")) {
+      return { metric: "messages", used: Number(data?.used || 0), limit: Number(data?.limit || 0) };
+    }
+    if (code.includes("leads")) {
+      return { metric: "leads", used: Number(data?.used || 0), limit: Number(data?.limit || 0) };
+    }
+    if (code.includes("channels")) {
+      return { metric: "channels", used: Number(data?.used || 0), limit: Number(data?.limit || 0) };
+    }
+    return null;
+  }
+
+  function showBillingLimitNotice(limit: { metric: "messages" | "leads" | "channels"; used?: number; limit?: number }): void {
+    const metricLabel = limit.metric === "messages" ? "сообщений" : limit.metric === "leads" ? "лидов" : "каналов";
+    const used = Number.isFinite(limit.used || NaN) ? `${limit.used}` : "—";
+    const max = Number.isFinite(limit.limit || NaN) ? `${limit.limit}` : "—";
+    triggerNotice(`Достигнут лимит ${metricLabel} (${used}/${max}). Обновите тариф для продолжения.`);
+    handleNavChange("Настройки");
+  }
+
+  async function loadWorkspaceTeam(): Promise<void> {
+    if (!hasServerIdentity) return;
+    setWorkspaceTeamLoading(true);
+    try {
+      const response = await fetch("/api/workspace/team", {
+        method: "GET",
+        headers: {
+          "x-workspace-id": serverIdentity.workspaceId
+        }
+      });
+      const data = (await response.json().catch(() => ({}))) as {
+        ok?: boolean;
+        currentUserRole?: WorkspaceRole;
+        members?: WorkspaceTeamMember[];
+        invites?: WorkspaceInvite[];
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(data?.error || `workspace_team_load_failed_${response.status}`);
+      }
+      setWorkspaceRole(data.currentUserRole || serverIdentity.role || "member");
+      setWorkspaceTeamMembers(Array.isArray(data.members) ? data.members : []);
+      setWorkspaceInvites(Array.isArray(data.invites) ? data.invites : []);
+    } catch (error: any) {
+      triggerNotice(error?.message || "Не удалось загрузить команду workspace.");
+    } finally {
+      setWorkspaceTeamLoading(false);
+    }
+  }
+
+  async function inviteWorkspaceMember(): Promise<void> {
+    const email = inviteEmail.trim().toLowerCase();
+    if (!email) {
+      triggerNotice("Введите email для приглашения.");
+      return;
+    }
+    setWorkspaceTeamActionLoading(true);
+    try {
+      const response = await fetch("/api/workspace/invite-user", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-workspace-id": serverIdentity.workspaceId
+        },
+        body: JSON.stringify({ email, role: inviteRole })
+      });
+      const data = (await response.json().catch(() => ({}))) as {
+        ok?: boolean;
+        status?: string;
+        members?: WorkspaceTeamMember[];
+        invites?: WorkspaceInvite[];
+        error?: string;
+      };
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || "invite_user_failed");
+      }
+      setWorkspaceTeamMembers(Array.isArray(data.members) ? data.members : []);
+      setWorkspaceInvites(Array.isArray(data.invites) ? data.invites : []);
+      setInviteEmail("");
+      triggerNotice(data.status === "member_added" ? "Пользователь добавлен в команду." : "Приглашение создано.");
+    } catch (error: any) {
+      triggerNotice(error?.message || "Не удалось создать приглашение.");
+    } finally {
+      setWorkspaceTeamActionLoading(false);
+    }
+  }
+
+  async function removeWorkspaceMember(targetUserId: string): Promise<void> {
+    setWorkspaceTeamActionLoading(true);
+    try {
+      const response = await fetch("/api/workspace/remove-user", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-workspace-id": serverIdentity.workspaceId
+        },
+        body: JSON.stringify({ targetUserId })
+      });
+      const data = (await response.json().catch(() => ({}))) as {
+        ok?: boolean;
+        members?: WorkspaceTeamMember[];
+        invites?: WorkspaceInvite[];
+        error?: string;
+      };
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || "remove_user_failed");
+      }
+      setWorkspaceTeamMembers(Array.isArray(data.members) ? data.members : []);
+      setWorkspaceInvites(Array.isArray(data.invites) ? data.invites : []);
+      triggerNotice("Пользователь удалён из workspace.");
+    } catch (error: any) {
+      triggerNotice(error?.message || "Не удалось удалить пользователя.");
+    } finally {
+      setWorkspaceTeamActionLoading(false);
+    }
+  }
+
+  async function changeWorkspaceMemberRole(targetUserId: string, nextRole: WorkspaceRole): Promise<void> {
+    setWorkspaceTeamActionLoading(true);
+    try {
+      const response = await fetch("/api/workspace/change-role", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-workspace-id": serverIdentity.workspaceId
+        },
+        body: JSON.stringify({ targetUserId, nextRole })
+      });
+      const data = (await response.json().catch(() => ({}))) as {
+        ok?: boolean;
+        members?: WorkspaceTeamMember[];
+        invites?: WorkspaceInvite[];
+        error?: string;
+      };
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || "change_role_failed");
+      }
+      setWorkspaceTeamMembers(Array.isArray(data.members) ? data.members : []);
+      setWorkspaceInvites(Array.isArray(data.invites) ? data.invites : []);
+      triggerNotice("Роль пользователя обновлена.");
+    } catch (error: any) {
+      triggerNotice(error?.message || "Не удалось изменить роль.");
+    } finally {
+      setWorkspaceTeamActionLoading(false);
+    }
+  }
+
+  async function callOpsAction<T = any>(action: string, payload: Record<string, unknown>): Promise<{ ok: boolean; status: string; data: T | null }> {
+    try {
+      const response = await fetch("/api/ops/actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action,
+          workspaceId: serverIdentity.workspaceId,
+          userId: serverIdentity.userId,
+          ...payload
+        })
+      });
+      const data = (await response.json().catch(() => ({}))) as any;
+      const limit = parseBillingLimit(data, response.status);
+      if (limit) {
+        showBillingLimitNotice(limit);
+        return { ok: false, status: "limit_reached", data };
+      }
+      return { ok: Boolean(data?.ok), status: String(data?.status || (response.ok ? "success" : "failed")), data };
+    } catch {
+      return { ok: false, status: "failed", data: null };
+    }
+  }
+
+  async function runFollowUpForLead(lead: { id: string; channel: string; name: string }): Promise<void> {
+    const conversationId = `conv_${(lead.channel || "").toLowerCase()}_${lead.id}`;
+    const result = await callOpsAction<{ runStatus?: string; message?: string }>("followup_start", {
+      leadId: lead.id,
+      channel: (lead.channel || "Telegram").toLowerCase(),
+      conversationId
+    });
+    const runStatus = String(result.data?.runStatus || "");
+    if (result.status === "success") {
+      triggerNotice(runStatus === "recovered" ? `Лид уже вернулся после follow-up: ${lead.name}.` : `Follow-up отправлен: ${lead.name}.`);
+      return;
+    }
+    if (result.status === "incomplete") {
+      if (runStatus === "not_supported") {
+        triggerNotice("Канал пока не поддерживается единым send runtime. Telegram работает полноценно.");
+        return;
+      }
+      if (runStatus === "claimed_by_other_worker") {
+        triggerNotice("Follow-up уже выполняется другим воркером.");
+        return;
+      }
+      if (runStatus === "canceled_client_replied") {
+        triggerNotice("Follow-up отменён: клиент уже ответил.");
+        return;
+      }
+      triggerNotice(result.data?.message || "Follow-up не запущен: недостаточно данных или канал не готов.");
+      return;
+    }
+    if (result.status === "limit_reached") {
+      return;
+    }
+    if (runStatus === "retry_scheduled") {
+      triggerNotice("Follow-up не отправлен сейчас: запланирован автоматический повтор.");
+      return;
+    }
+    triggerNotice(result.data?.message || "Follow-up завершился ошибкой.");
+  }
+
+  async function runRecoveryAction(): Promise<void> {
+    const result = await callOpsAction<{ created?: Array<{ leadId: string }>; summary?: { inserted?: number; dedupConflicts?: number } }>(
+      "recovery_run",
+      { limit: 30 }
+    );
+    if (result.status === "success") {
+      const inserted = Number(result.data?.summary?.inserted || 0);
+      const dedupConflicts = Number(result.data?.summary?.dedupConflicts || 0);
+      triggerNotice(
+        dedupConflicts > 0
+          ? `Recovery: создано задач ${inserted}, пропущено по dedup ${dedupConflicts}.`
+          : `Recovery запущен: создано задач ${inserted}.`
+      );
+      return;
+    }
+    if (result.status === "incomplete") {
+      triggerNotice("Recovery пока не запущен: нет подходящих лидов или не хватает данных.");
+      return;
+    }
+    triggerNotice("Recovery завершился ошибкой.");
+  }
+
+  async function exportLeadsCsv(): Promise<void> {
+    const result = await callOpsAction<{ csv?: string; fileName?: string; count?: number }>("export_leads", {});
+    if (result.status !== "success" || !result.data?.csv) {
+      if (result.status === "incomplete") triggerNotice("Экспорт недоступен: нет лидов для выгрузки.");
+      else triggerNotice("Экспорт завершился ошибкой.");
+      return;
+    }
+    const csv = result.data.csv;
+    const fileName = result.data.fileName || `cflow-leads-${new Date().toISOString().slice(0, 10)}.csv`;
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    const timestamp = new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date());
+    setLastExportAt(timestamp);
+    triggerNotice(`Экспорт готов: ${result.data.count || 0} лидов.`);
+  }
+
+  async function applyAiRecommendationAction(args: {
+    recommendationId: string;
+    title: string;
+    description: string;
+    actionLabel: string;
+    area: string;
+    priority?: string;
+    expectedImpact?: string;
+    actionSteps?: string[];
+  }): Promise<void> {
+    const result = await callOpsAction("ai_recommendation_apply", args);
+    if (result.status === "success") {
+      setAiActionMessage(`Рекомендация применена: ${args.actionLabel}`);
+      return;
+    }
+    if (result.status === "incomplete") {
+      setAiActionMessage("Рекомендация сохранена, но действие пока требует доработки интеграции.");
+      return;
+    }
+    setAiActionMessage("Не удалось применить рекомендацию.");
+  }
+
+  async function dispatchCrmHandoffs(): Promise<void> {
+    const result = await callOpsAction<{ count?: number; delivered?: number; retryScheduled?: number; failed?: number; message?: string }>(
+      "crm_handoff_dispatch",
+      { limit: 20 }
+    );
+    if (result.status === "success") {
+      triggerNotice(`CRM handoff доставлен: ${Number(result.data?.delivered || 0)}.`);
+      return;
+    }
+    if (result.status === "incomplete") {
+      if (Number(result.data?.retryScheduled || 0) > 0) {
+        triggerNotice(`CRM handoff в retry: ${Number(result.data?.retryScheduled || 0)}.`);
+        return;
+      }
+      triggerNotice(result.data?.message || "CRM handoff: pending задач пока нет.");
+      return;
+    }
+    triggerNotice(result.data?.message || "CRM handoff dispatch завершился ошибкой.");
   }
 
   function dismissNewUserOnboarding(): void {
@@ -3380,40 +3767,8 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
       triggerNotice(`Для лида ${lead.name} стадия уже финальная.`);
       return;
     }
-    const now = new Date().toISOString();
-    const textByStage: Record<LeadStage, string> = {
-      новый: "Лид создан в воронке.",
-      заинтересован: "Лид проявил интерес и продолжил диалог.",
-      "спросил цену": "Клиент запросил цену и условия.",
-      думает: "Клиент думает, запущен follow-up.",
-      записан: "Запись подтверждена.",
-      потерян: "Лид потерян."
-    };
-    const bookingByStage: Record<LeadStage, BookingState> = {
-      новый: "не начата",
-      заинтересован: "в процессе",
-      "спросил цену": "в процессе",
-      думает: "в процессе",
-      записан: "подтверждена",
-      потерян: "отменена"
-    };
-
-    setServiceEvents((prev) => [
-      {
-        id: `stage-${lead.id}-${Date.now().toString(36)}`,
-        leadId: lead.id,
-        clientName: lead.name,
-        channel: lead.channel,
-        direction: "outbound",
-        text: textByStage[nextStage],
-        timestamp: now,
-        status: nextStage,
-        stage: nextStage,
-        bookingState: bookingByStage[nextStage]
-      },
-      ...prev
-    ]);
-    triggerNotice(`Лид ${lead.name}: ${lead.stage} → ${nextStage}`);
+    triggerNotice(`Лид ${lead.name}: ${lead.stage} → ${nextStage}. Обновление стадии выполняется через backend/source канал.`);
+    setServerDataRefreshNonce((prev) => prev + 1);
   }
 
   function localDialogLossAnalysis(conversation: InboxConversation): DialogLossAnalysis {
@@ -3541,9 +3896,12 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
     try {
       const parsed = JSON.parse(text) as unknown;
       const events = parseServiceEvents(parsed);
-      setServiceEvents(events);
       setServiceConnection((prev) => ({ ...prev, connectedAt: new Date().toISOString() }));
-      triggerNotice(events.length > 0 ? `Импортировано событий: ${events.length}` : "Файл прочитан, но валидные события не найдены.");
+      if (events.length > 0) {
+        triggerNotice("Локальный импорт событий отключен для business-data. Используйте /api/ingest/events.");
+      } else {
+        triggerNotice("Файл прочитан, но валидные события не найдены.");
+      }
     } catch {
       triggerNotice("Не удалось прочитать JSON. Проверьте формат файла.");
     }
@@ -3563,9 +3921,9 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
       const data = (await response.json().catch(() => null)) as unknown;
       if (data === null) throw new Error("invalid_json");
       const events = parseServiceEvents(data);
-      setServiceEvents(events);
       setServiceConnection((prev) => ({ ...prev, connectedAt: new Date().toISOString() }));
-      triggerNotice(`Синхронизация завершена. Событий: ${events.length}.`);
+      setServerDataRefreshNonce((prev) => prev + 1);
+      triggerNotice(`Синхронизация завершена. Проверено событий: ${events.length}. Read-model обновляется с сервера.`);
     } catch (error: any) {
       if (error?.name === "AbortError") {
         triggerNotice("Сервис не ответил вовремя. Проверьте endpoint и повторите синхронизацию.");
@@ -3782,6 +4140,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
       let autoRepliesCount = 0;
       let replyErrorsCount = 0;
       let reachedReplyCap = false;
+      let reachedBillingLimit = false;
 
       for (const update of updates) {
         if (serviceConnection.autoReplyEnabled && autoRepliesCount >= TELEGRAM_MAX_AUTO_REPLIES_PER_SYNC) {
@@ -3889,12 +4248,20 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                 body: JSON.stringify({
                   action: "send-message",
                   botToken: serviceConnection.botToken.trim(),
+                  workspaceId: serverIdentity.workspaceId,
+                  userId: serverIdentity.userId,
                   chatId: message.chat.id,
                   text: replyText
                 })
               });
               if (!sendResp.ok) {
                 const sendErr = (await sendResp.json().catch(() => ({}))) as { error?: string };
+                const limit = parseBillingLimit(sendErr, sendResp.status);
+                if (limit) {
+                  reachedBillingLimit = true;
+                  showBillingLimitNotice(limit);
+                  break;
+                }
                 pushTelegramError(
                   "send-message",
                   "send_message_failed",
@@ -3927,24 +4294,22 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
           }
         }
         if (update.update_id > nextOffset) nextOffset = update.update_id;
+        if (reachedBillingLimit) break;
       }
 
       if (nextOffset > telegramOffset) setTelegramOffset(nextOffset);
       setTelegramProfiles(profilesNext);
       if (inboundEvents.length > 0) {
-        setServiceEvents((prev) => {
-          const dedupe = new Set(prev.map((event) => event.id));
-          const appended = inboundEvents.filter((event) => !dedupe.has(event.id));
-          return [...appended, ...prev].slice(0, 1500);
-        });
+        setServerDataRefreshNonce((prev) => prev + 1);
       }
       setServiceConnection((prev) => ({ ...prev, connectedAt: new Date().toISOString() }));
       const extraInfo = reachedReplyCap
         ? ` Ответов за цикл: ${autoRepliesCount}, остальные обработаются при следующей синхронизации.`
         : ` Ответов за цикл: ${autoRepliesCount}.`;
       const errorsInfo = replyErrorsCount > 0 ? ` Ошибок отправки: ${replyErrorsCount}.` : "";
+      const billingInfo = reachedBillingLimit ? " Достигнут тарифный лимит сообщений." : "";
       triggerNotice(
-        `Telegram синхронизирован. Новых событий: ${inboundEvents.length}.${extraInfo}${errorsInfo}`
+        `Telegram синхронизирован. Новых событий: ${inboundEvents.length}.${extraInfo}${errorsInfo}${billingInfo}`
       );
     } catch (error: any) {
       pushTelegramError("sync-flow", "sync_failed", error?.message || "Ошибка синхронизации Telegram.");
@@ -4226,6 +4591,11 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
             {uiNotice ? (
               <div className="ui-feedback-toast mb-3 rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm font-semibold text-cyan-900">
                 {uiNotice}
+              </div>
+            ) : null}
+            {dashboardReadModel?.runtimeStatus === "degraded" ? (
+              <div className="mb-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
+                Данные в режиме degraded. Часть блоков может быть неполной. Trace: {dashboardReadModel.traceId || "n/a"}
               </div>
             ) : null}
             {!standaloneSites ? (
@@ -4572,7 +4942,17 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
 
                       <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                         <button
-                          onClick={() => triggerNotice("Follow-up отправлен клиенту.")}
+                          onClick={() => {
+                            if (!selectedConversationLead) {
+                              triggerNotice("Follow-up недоступен: не выбран лид.");
+                              return;
+                            }
+                            void runFollowUpForLead({
+                              id: selectedConversationLead.id,
+                              channel: selectedConversationLead.channel,
+                              name: selectedConversationLead.name
+                            });
+                          }}
                           className="w-full flex-1 rounded-xl bg-slate-900 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700"
                         >
                           Отправить follow-up
@@ -4627,16 +5007,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                         Доска
                       </button>
                       <button
-                        onClick={() => {
-                          const timestamp = new Intl.DateTimeFormat("ru-RU", {
-                            day: "2-digit",
-                            month: "2-digit",
-                            hour: "2-digit",
-                            minute: "2-digit"
-                          }).format(new Date());
-                          setLastExportAt(timestamp);
-                          triggerNotice("Экспорт лидов подготовлен.");
-                        }}
+                        onClick={() => void exportLeadsCsv()}
                         className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-500"
                       >
                         Экспорт CSV
@@ -4775,7 +5146,13 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                           </div>
                           <div className="mt-3 flex flex-col gap-2">
                             <button
-                              onClick={() => triggerNotice(`Повторное сообщение отправлено: ${lead.name}`)}
+                              onClick={() =>
+                                void runFollowUpForLead({
+                                  id: lead.id,
+                                  channel: lead.channel,
+                                  name: lead.name
+                                })
+                              }
                               className="w-full rounded-lg bg-slate-900 px-2.5 py-2 text-xs font-semibold text-white transition hover:bg-slate-700"
                             >
                               Написать повторно
@@ -4843,7 +5220,13 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                               <td className="px-4 py-3">
                                 <div className="flex flex-col gap-1.5">
                                   <button
-                                    onClick={() => triggerNotice(`Повторное сообщение отправлено: ${lead.name}`)}
+                                    onClick={() =>
+                                      void runFollowUpForLead({
+                                        id: lead.id,
+                                        channel: lead.channel,
+                                        name: lead.name
+                                      })
+                                    }
                                     className="rounded-lg bg-slate-900 px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-slate-700"
                                   >
                                     Написать повторно
@@ -4891,7 +5274,13 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                                 <p className="mt-1 text-xs font-semibold text-slate-800">{formatRub(lead.estimatedRevenue)}</p>
                                 <p className="mt-1 text-xs text-slate-500">{lead.lastActivityLabel}</p>
                                 <button
-                                  onClick={() => triggerNotice(`Повторное сообщение отправлено: ${lead.name}`)}
+                                  onClick={() =>
+                                    void runFollowUpForLead({
+                                      id: lead.id,
+                                      channel: lead.channel,
+                                      name: lead.name
+                                    })
+                                  }
                                   className="mt-3 w-full rounded-lg bg-slate-900 px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-slate-700"
                                 >
                                   Написать повторно
@@ -5239,7 +5628,18 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                               <span className="rounded-full bg-cyan-50 px-2 py-0.5 font-semibold text-cyan-700">{item.expectedImpact}</span>
                             </div>
                             <button
-                              onClick={() => setAiActionMessage(`Действие применено: ${item.actionLabel}`)}
+                              onClick={() =>
+                                void applyAiRecommendationAction({
+                                  recommendationId: item.id,
+                                  title: item.title,
+                                  description: item.description,
+                                  actionLabel: item.actionLabel,
+                                  area: item.area,
+                                  priority: item.priority,
+                                  expectedImpact: item.expectedImpact,
+                                  actionSteps: item.actionSteps
+                                })
+                              }
                               className="w-full rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-700 sm:w-auto"
                             >
                               {item.actionLabel}
@@ -5265,7 +5665,17 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                           <p className="text-sm font-semibold text-slate-900">{action.title}</p>
                           <p className="mt-1 text-xs text-slate-600">{action.detail}</p>
                           <button
-                            onClick={() => setAiActionMessage(`Запущено: ${action.action}`)}
+                            onClick={() =>
+                              void applyAiRecommendationAction({
+                                recommendationId: `priority_${action.title}`,
+                                title: action.title,
+                                description: action.detail,
+                                actionLabel: action.action,
+                                area: "priority_actions",
+                                priority: "Высокий",
+                                actionSteps: [action.detail]
+                              })
+                            }
                             className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-500 sm:w-auto"
                           >
                             {action.action}
@@ -5314,7 +5724,17 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                             <p className="text-xs font-semibold text-slate-500">{reply.scenario}</p>
                             <p className="mt-1 text-sm text-slate-700">{reply.reply}</p>
                             <button
-                              onClick={() => setAiActionMessage("Сценарий ответа обновлен")}
+                              onClick={() =>
+                                void applyAiRecommendationAction({
+                                  recommendationId: `rewrite_${reply.scenario}`,
+                                  title: `Сценарий: ${reply.scenario}`,
+                                  description: reply.reply,
+                                  actionLabel: "Применить шаблон ответа",
+                                  area: "rewritten_replies",
+                                  priority: "Средний",
+                                  actionSteps: [reply.reply]
+                                })
+                              }
                               className="mt-2 w-full rounded-lg bg-slate-900 px-2.5 py-2 text-xs font-semibold text-white transition hover:bg-slate-700 sm:w-auto"
                             >
                               Применить
@@ -6416,7 +6836,7 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                             <div key={action} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                               <p className="text-sm text-slate-700">{action}</p>
                               <button
-                                onClick={() => triggerNotice("Recovery-сценарий запущен.")}
+                                onClick={() => void runRecoveryAction()}
                                 className="mt-2 w-full rounded-lg bg-slate-900 px-2.5 py-2 text-xs font-semibold text-white"
                               >
                                 Запустить
@@ -6645,11 +7065,156 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                 ) : (
                   <>
                 <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Команда Workspace</p>
+                      <h2 className="mt-1 text-xl font-extrabold tracking-tight text-slate-900">Доступы и роли</h2>
+                      <p className="mt-2 text-sm text-slate-600">
+                        Owner: полный доступ. Admin: каналы и лиды. Member: работа с лидами и просмотр.
+                      </p>
+                    </div>
+                    <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
+                      Ваша роль: {workspaceRole}
+                    </div>
+                  </div>
+
+                  {(workspaceRole === "owner" || workspaceRole === "admin") && (
+                    <div className="mt-4 grid gap-3 md:grid-cols-[1.6fr_1fr_auto]">
+                      <input
+                        value={inviteEmail}
+                        onChange={(event) => setInviteEmail(event.target.value)}
+                        placeholder="email сотрудника"
+                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
+                      />
+                      <select
+                        value={inviteRole}
+                        onChange={(event) => setInviteRole((event.target.value as WorkspaceRole) || "member")}
+                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
+                      >
+                        <option value="member">member</option>
+                        {workspaceRole === "owner" ? <option value="admin">admin</option> : null}
+                      </select>
+                      <button
+                        onClick={() => void inviteWorkspaceMember()}
+                        disabled={workspaceTeamActionLoading}
+                        className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+                      >
+                        Пригласить
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="mt-4 overflow-x-auto rounded-2xl border border-slate-200">
+                    <table className="min-w-[640px] w-full border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 text-left text-xs uppercase tracking-[0.08em] text-slate-500">
+                          <th className="px-3 py-2.5">Пользователь</th>
+                          <th className="px-3 py-2.5">Роль</th>
+                          <th className="px-3 py-2.5">Статус</th>
+                          <th className="px-3 py-2.5">Действия</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {workspaceTeamLoading ? (
+                          <tr>
+                            <td colSpan={4} className="px-3 py-4 text-sm text-slate-500">Загружаем команду...</td>
+                          </tr>
+                        ) : workspaceTeamMembers.length === 0 ? (
+                          <tr>
+                            <td colSpan={4} className="px-3 py-4 text-sm text-slate-500">В workspace пока один участник.</td>
+                          </tr>
+                        ) : (
+                          workspaceTeamMembers.map((member) => {
+                            const canEditRole = workspaceRole === "owner" && !member.isCurrentUser && member.role !== "owner";
+                            const canRemove =
+                              !member.isCurrentUser &&
+                              ((workspaceRole === "owner" && member.role !== "owner") || (workspaceRole === "admin" && member.role === "member"));
+                            return (
+                              <tr key={member.id} className="border-t border-slate-100 text-sm text-slate-700">
+                                <td className="px-3 py-3">
+                                  <div className="font-semibold text-slate-900">{member.userId}</div>
+                                  {member.isCurrentUser ? <div className="text-xs text-cyan-700">Это вы</div> : null}
+                                </td>
+                                <td className="px-3 py-3">
+                                  {canEditRole ? (
+                                    <select
+                                      value={member.role}
+                                      onChange={(event) => void changeWorkspaceMemberRole(member.userId, event.target.value as WorkspaceRole)}
+                                      className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs"
+                                    >
+                                      <option value="admin">admin</option>
+                                      <option value="member">member</option>
+                                    </select>
+                                  ) : (
+                                    <span className="font-semibold">{member.role}</span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-3">{member.status}</td>
+                                <td className="px-3 py-3">
+                                  {canRemove ? (
+                                    <button
+                                      onClick={() => void removeWorkspaceMember(member.userId)}
+                                      disabled={workspaceTeamActionLoading}
+                                      className="rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-xs font-semibold text-rose-700 disabled:opacity-60"
+                                    >
+                                      Удалить
+                                    </button>
+                                  ) : (
+                                    <span className="text-xs text-slate-400">—</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Ожидают принятия</p>
+                    <div className="mt-2 space-y-2">
+                      {workspaceInvites.length === 0 ? (
+                        <p className="text-sm text-slate-500">Активных приглашений нет.</p>
+                      ) : (
+                        workspaceInvites.map((invite) => (
+                          <div key={invite.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+                            <div className="text-sm text-slate-700">
+                              <span className="font-semibold text-slate-900">{invite.email}</span> • роль {invite.role}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-slate-500">до {new Date(invite.expiresAt).toLocaleDateString("ru-RU")}</span>
+                              {invite.inviteUrl ? (
+                                <button
+                                  onClick={() => {
+                                    void navigator.clipboard.writeText(invite.inviteUrl || "");
+                                    triggerNotice("Ссылка-приглашение скопирована.");
+                                  }}
+                                  className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700"
+                                >
+                                  Копировать ссылку
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </section>
+
+                <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
                   <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Источник данных</p>
                   <h2 className="mt-1 text-xl font-extrabold tracking-tight text-slate-900">Подключить свой сервис</h2>
                   <p className="mt-2 text-sm text-slate-600">
                     Чтобы цифры были реальными, подключите источник сообщений: API или JSON-файл.
                   </p>
+                  {!canManageWorkspace ? (
+                    <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                      У вас роль member: доступно только просмотр и работа с лидами. Изменение системных настроек ограничено.
+                    </p>
+                  ) : null}
+                  <fieldset disabled={!canManageWorkspace} className={!canManageWorkspace ? "opacity-60" : undefined}>
                   <div className="mt-4 grid gap-3 md:grid-cols-2">
                     <label>
                       <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Название сервиса</span>
@@ -6688,6 +7253,115 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                         className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
                       />
                     </label>
+                    <label>
+                      <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Instagram Account ID</span>
+                      <input
+                        value={serviceConnection.instagramAccountId || ""}
+                        onChange={(event) => setServiceConnection((prev) => ({ ...prev, instagramAccountId: event.target.value }))}
+                        placeholder="1784..."
+                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
+                      />
+                    </label>
+                    <label>
+                      <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Instagram Page ID</span>
+                      <input
+                        value={serviceConnection.instagramPageId || ""}
+                        onChange={(event) => setServiceConnection((prev) => ({ ...prev, instagramPageId: event.target.value }))}
+                        placeholder="1029..."
+                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
+                      />
+                    </label>
+                    <label className="md:col-span-2">
+                      <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Instagram Access Token (dev/prototype)</span>
+                      <input
+                        value={serviceConnection.instagramAccessToken || ""}
+                        onChange={(event) => setServiceConnection((prev) => ({ ...prev, instagramAccessToken: event.target.value }))}
+                        placeholder="EAAG... (не хардкодится, хранится в channel_connections)"
+                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
+                      />
+                      <span className="mt-1 block text-[11px] text-slate-500">
+                        TODO boundary: для production используйте secret manager вместо dev token в настройках подключения.
+                      </span>
+                    </label>
+                    <label>
+                      <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">VK Group ID</span>
+                      <input
+                        value={serviceConnection.vkGroupId || ""}
+                        onChange={(event) => setServiceConnection((prev) => ({ ...prev, vkGroupId: event.target.value }))}
+                        placeholder="123456"
+                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
+                      />
+                    </label>
+                    <label>
+                      <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">VK Access Token (dev/prototype)</span>
+                      <input
+                        value={serviceConnection.vkAccessToken || ""}
+                        onChange={(event) => setServiceConnection((prev) => ({ ...prev, vkAccessToken: event.target.value }))}
+                        placeholder="vk1.a...."
+                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
+                      />
+                    </label>
+                    <label className="md:col-span-2">
+                      <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">CRM Webhook URL</span>
+                      <input
+                        value={serviceConnection.crmWebhookUrl || ""}
+                        onChange={(event) => setServiceConnection((prev) => ({ ...prev, crmWebhookUrl: event.target.value }))}
+                        placeholder="https://your-crm-endpoint.com/webhook"
+                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
+                      />
+                    </label>
+                    <label>
+                      <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">CRM Auth mode</span>
+                      <select
+                        value={serviceConnection.crmWebhookAuthMode || "bearer"}
+                        onChange={(event) =>
+                          setServiceConnection((prev) => ({
+                            ...prev,
+                            crmWebhookAuthMode: event.target.value as "none" | "bearer" | "header"
+                          }))
+                        }
+                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
+                      >
+                        <option value="none">none</option>
+                        <option value="bearer">bearer</option>
+                        <option value="header">header</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">CRM Auth header</span>
+                      <input
+                        value={serviceConnection.crmWebhookAuthHeader || "X-CRM-Auth"}
+                        onChange={(event) => setServiceConnection((prev) => ({ ...prev, crmWebhookAuthHeader: event.target.value }))}
+                        placeholder="X-CRM-Auth"
+                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
+                      />
+                    </label>
+                    <label className="md:col-span-2">
+                      <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">CRM Auth token / bearer</span>
+                      <input
+                        value={serviceConnection.crmWebhookToken || ""}
+                        onChange={(event) => setServiceConnection((prev) => ({ ...prev, crmWebhookToken: event.target.value }))}
+                        placeholder="token"
+                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
+                      />
+                    </label>
+                    <label className="md:col-span-2">
+                      <span className="mb-1 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500">CRM event types (через запятую)</span>
+                      <input
+                        value={(serviceConnection.crmWebhookEventTypes || ["lead.qualified"]).join(", ")}
+                        onChange={(event) =>
+                          setServiceConnection((prev) => ({
+                            ...prev,
+                            crmWebhookEventTypes: event.target.value
+                              .split(",")
+                              .map((item) => item.trim())
+                              .filter(Boolean)
+                          }))
+                        }
+                        placeholder="lead.qualified, lead.booked"
+                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
+                      />
+                    </label>
                     <label className="md:col-span-2 flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
                       <input
                         type="checkbox"
@@ -6700,17 +7374,23 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                   <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                     <button
                       onClick={() => void syncServiceEvents()}
-                      disabled={serviceSyncLoading}
+                      disabled={serviceSyncLoading || !canManageWorkspace}
                       className="w-full rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60 sm:w-auto"
                     >
                       {serviceSyncLoading ? "Синхронизация..." : "Синхронизировать"}
                     </button>
                     <button
                       onClick={() => void syncTelegramBotEvents()}
-                      disabled={serviceSyncLoading}
+                      disabled={serviceSyncLoading || !canManageWorkspace}
                       className="w-full rounded-xl bg-cyan-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60 sm:w-auto"
                     >
                       {serviceSyncLoading ? "Синхронизация..." : "Синхронизировать Telegram"}
+                    </button>
+                    <button
+                      onClick={() => void dispatchCrmHandoffs()}
+                      className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 sm:w-auto"
+                    >
+                      CRM handoff dispatch
                     </button>
                     <button
                       onClick={() => serviceImportRef.current?.click()}
@@ -6720,9 +7400,9 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                     </button>
                     <button
                       onClick={() => {
-                        setServiceEvents([]);
                         setServiceConnection((prev) => ({ ...prev, connectedAt: null }));
-                        triggerNotice("Данные сервиса очищены.");
+                        setServerDataRefreshNonce((prev) => prev + 1);
+                        triggerNotice("Локальный bridge очищен. Бизнес-данные читаются только с сервера.");
                       }}
                       className="w-full rounded-xl border border-rose-300 bg-white px-4 py-2.5 text-sm font-semibold text-rose-700 sm:w-auto"
                     >
@@ -6739,13 +7419,71 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                       event.currentTarget.value = "";
                     }}
                   />
+                  </fieldset>
                   <div className="mt-3 rounded-2xl border border-cyan-200 bg-cyan-50 p-3 text-xs text-cyan-900">
-                    Событий в системе: <span className="font-bold">{serviceEvents.length}</span>
+                    Лидов в read-model: <span className="font-bold">{dashboardReadModel?.leads?.length ?? incomingLeads}</span>
                     <span> • Telegram offset: {telegramOffset}</span>
+                    <span> • Каналы: {connectedChannels.length > 0 ? connectedChannels.join(", ") : "не подключены"}</span>
+                    <span>
+                      {" "}
+                      • VK:{" "}
+                      {channelConnectionStates.vk === "needs_reauth"
+                        ? "needs_reauth"
+                        : channelConnectionStates.vk === "error"
+                          ? "error"
+                          : channelConnectionStates.vk === "disabled"
+                            ? "disabled"
+                            : "connected"}
+                    </span>
                     {serviceConnection.connectedAt ? (
                       <span> • Последняя синхронизация: {new Date(serviceConnection.connectedAt).toLocaleString("ru-RU")}</span>
                     ) : (
                       <span> • Синхронизация ещё не выполнялась</span>
+                    )}
+                  </div>
+                  <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-3">
+                    <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-600">Connection Health</p>
+                    {channelConnectionManager.length === 0 ? (
+                      <p className="mt-2 text-xs text-slate-500">Подключения пока не созданы.</p>
+                    ) : (
+                      <div className="mt-2 space-y-2">
+                        {channelConnectionManager.map((item) => (
+                          <div key={item.id} className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-700">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-semibold text-slate-900">
+                                {item.channel.toUpperCase()} • status: {item.status} • health: {item.healthStatus}
+                              </p>
+                              {!item.capabilities.supportsOutbound || !item.capabilities.supportsAutoReply || !item.capabilities.supportsFollowUp ? (
+                                <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-amber-700">
+                                  Partial support
+                                </span>
+                              ) : (
+                                <span className="rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-emerald-700">
+                                  Full support
+                                </span>
+                              )}
+                            </div>
+                            <p className="mt-1">
+                              sync 24h: inbound {item.sync.inbound24h} / outbound {item.sync.outbound24h}
+                              {item.sync.lastMessageAt ? ` • last message: ${new Date(item.sync.lastMessageAt).toLocaleString("ru-RU")}` : " • no messages"}
+                            </p>
+                            <p className="mt-1">
+                              capabilities: inbound {item.capabilities.supportsInbound ? "yes" : "no"} • outbound{" "}
+                              {item.capabilities.supportsOutbound ? "yes" : "no"} • auto-reply {item.capabilities.supportsAutoReply ? "yes" : "no"} • follow-up{" "}
+                              {item.capabilities.supportsFollowUp ? "yes" : "no"} • CRM handoff trigger{" "}
+                              {item.capabilities.supportsCrmHandoffTrigger ? "yes" : "no"} • webhook verification{" "}
+                              {item.capabilities.supportsWebhookVerification ? "yes" : "no"} • health check{" "}
+                              {item.capabilities.supportsHealthCheck ? "yes" : "no"}
+                            </p>
+                            <p className="mt-1">
+                              token: {item.tokenStorage} • last check:{" "}
+                              {item.lastHealthCheckAt ? new Date(item.lastHealthCheckAt).toLocaleString("ru-RU") : "—"} • last sync:{" "}
+                              {item.lastSyncAt ? new Date(item.lastSyncAt).toLocaleString("ru-RU") : "—"}
+                            </p>
+                            {item.lastError ? <p className="mt-1 rounded-lg bg-rose-50 px-2 py-1 text-rose-700">error: {item.lastError}</p> : null}
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
                   <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 p-3">
@@ -6807,6 +7545,82 @@ export default function App({ standaloneSites = false, onNavigate }: DashboardAp
                     Текущий план: <span className="font-semibold text-slate-900">{currentPlanLabel}</span>
                     {subscription.subscriptionStatus === "trial" ? ` • осталось ${trialDaysLeft} дней` : ""}
                   </p>
+                </section>
+
+                <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Billing (mock)</p>
+                  <h2 className="mt-1 text-xl font-extrabold tracking-tight text-slate-900">Лимиты и использование</h2>
+                  {billingSummary ? (
+                    <>
+                      <p className="mt-2 text-sm text-slate-700">
+                        План: <span className="font-semibold text-slate-900">{billingPlanTitle}</span> • период:{" "}
+                        <span className="font-semibold text-slate-900">{billingPeriodLabel}</span>
+                      </p>
+                      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Лиды</p>
+                          <p className="mt-1 text-lg font-extrabold text-slate-900">
+                            {billingSummary.usage.leads} / {formatLimitValue(billingSummary.plan.limits.leads)}
+                          </p>
+                          {billingSummary.limitFlags.leadsNearLimit ? <p className="mt-1 text-xs text-amber-700">Близко к лимиту</p> : null}
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Сообщения</p>
+                          <p className="mt-1 text-lg font-extrabold text-slate-900">
+                            {billingSummary.usage.messages} / {formatLimitValue(billingSummary.plan.limits.messages)}
+                          </p>
+                          {billingSummary.limitFlags.messagesNearLimit ? <p className="mt-1 text-xs text-amber-700">Близко к лимиту</p> : null}
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                          <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">Каналы</p>
+                          <p className="mt-1 text-lg font-extrabold text-slate-900">
+                            {billingSummary.usage.channels} / {formatLimitValue(billingSummary.plan.limits.channels)}
+                          </p>
+                          {billingSummary.limitFlags.channelsNearLimit ? <p className="mt-1 text-xs text-amber-700">Близко к лимиту</p> : null}
+                        </div>
+                      </div>
+                      <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-3 text-xs text-slate-700">
+                        <span className="font-semibold text-slate-900">Детальный usage за месяц:</span>{" "}
+                        входящие {billingSummary.usage.inboundMessages} • AI ответы {billingSummary.usage.aiReplies} • follow-up jobs{" "}
+                        {billingSummary.usage.followUpJobs} • CRM handoffs {billingSummary.usage.crmHandoffs}
+                      </div>
+                      <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-3">
+                        <p className="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">История платежей (mock)</p>
+                        {Array.isArray(billingSummary.invoices) && billingSummary.invoices.length > 0 ? (
+                          <div className="mt-2 overflow-x-auto">
+                            <table className="min-w-full text-left text-xs text-slate-700">
+                              <thead>
+                                <tr className="border-b border-slate-200 text-[11px] uppercase tracking-[0.08em] text-slate-500">
+                                  <th className="py-1.5 pr-3">Дата</th>
+                                  <th className="py-1.5 pr-3">Тариф</th>
+                                  <th className="py-1.5 pr-3">Сумма</th>
+                                  <th className="py-1.5 pr-3">Статус</th>
+                                  <th className="py-1.5 pr-0">Provider</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {billingSummary.invoices.slice(0, 8).map((invoice) => (
+                                  <tr key={invoice.id} className="border-b border-slate-100 last:border-none">
+                                    <td className="py-1.5 pr-3">{invoice.createdAt ? new Date(invoice.createdAt).toLocaleDateString("ru-RU") : "—"}</td>
+                                    <td className="py-1.5 pr-3">{invoice.planId}</td>
+                                    <td className="py-1.5 pr-3">
+                                      {new Intl.NumberFormat("ru-RU").format(Number(invoice.amount || 0))} {invoice.currency || "RUB"}
+                                    </td>
+                                    <td className="py-1.5 pr-3">{invoice.status}</td>
+                                    <td className="py-1.5 pr-0">{invoice.provider || "mock"}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <p className="mt-2 text-xs text-slate-500">Пока нет записей по платежам.</p>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <p className="mt-2 text-sm text-slate-600">Загружаем usage и лимиты…</p>
+                  )}
                 </section>
 
                 <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
